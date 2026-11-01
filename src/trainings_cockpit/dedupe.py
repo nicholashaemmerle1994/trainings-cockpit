@@ -49,7 +49,11 @@ def _score(row: dict[str, Any]) -> tuple[int, int, float]:
     """
     quelle = str(row.get("source") or "")
     geraet = str(row.get("device_name") or "").lower()
-    garmin = 2 if quelle == "GARMIN_CONNECT" else (1 if "garmin" in geraet else 0)
+    garmin = (
+        2
+        if quelle in {"GARMIN_CONNECT", "GARMIN_PERSONAL"}
+        else (1 if "garmin" in geraet else 0)
+    )
     felder = sum(
         1
         for key in ("average_heartrate", "max_heartrate", "total_elevation_gain", "distance")

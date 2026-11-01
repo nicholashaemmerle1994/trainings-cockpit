@@ -8,6 +8,7 @@ from typing import Any
 
 from . import db, dedupe
 from .config import Settings
+from .sources.garmin import GarminUnavailable, actor_rows, fetch_garmin
 from .sources.intervals import IntervalsClient
 
 
@@ -32,6 +33,23 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             events = client.events(oldest, events_until)
 
         n_activities = db.upsert_activities(conn, activities)
+
+        # Läufe und Schwimmen kommen direkt von Garmin – mit den Feldern aus der
+        # Originalaufzeichnung und einer Last, die an intervals kalibriert ist.
+        n_direkt = 0
+        garmin_note = ""
+        if settings.garmin_key:
+            try:
+                cache = settings.ensure_data_dir() / "garmin" / "bearer-token.json"
+                cache.parent.mkdir(parents=True, exist_ok=True)
+                dump = fetch_garmin(settings.garmin_key, oldest, today, token_cache=cache)
+                garmin_rows = actor_rows(dump)
+                n_direkt = db.upsert_activities(conn, garmin_rows, mapped=True)
+                if dump.errors:
+                    garmin_note = " garmin=" + ",".join(sorted(dump.errors))[:80]
+            except GarminUnavailable as exc:
+                garmin_note = f" garmin=aus ({str(exc)[:40]})"
+
         n_doppelt = dubletten_entfernen(conn)
         n_wellness = db.upsert_wellness(conn, wellness)
         n_events = db.upsert_events(conn, events)
@@ -44,12 +62,13 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             "intervals",
             started,
             "ok",
-            f"activities={n_activities} wellness={n_wellness} events={n_events}"
-            + (f" dubletten={n_doppelt}" if n_doppelt else ""),
+            f"activities={n_activities} direkt={n_direkt} wellness={n_wellness} events={n_events}"
+            + (f" dubletten={n_doppelt}" if n_doppelt else "")
+            + garmin_note,
         )
 
         return {
-            "activities": n_activities,
+            "activities": n_activities + n_direkt,
             "wellness": n_wellness,
             "events": n_events,
             "athlete": _pretty_name(athlete.get("name")),

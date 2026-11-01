@@ -154,11 +154,20 @@ def map_event(row: dict[str, Any]) -> dict[str, Any]:
 # ------------------------------------------------------------------ Upserts
 
 
-def upsert_activities(conn: sqlite3.Connection, rows: Iterable[dict[str, Any]]) -> int:
+def upsert_activities(
+    conn: sqlite3.Connection,
+    rows: Iterable[dict[str, Any]],
+    mapped: bool = False,
+) -> int:
+    """Aktivitäten schreiben.
+
+    `mapped=True` überspringt `map_activity` — für Quellen, die schon in der
+    Form der Tabelle kommen (Garmin Personal API).
+    """
     now = datetime.now().isoformat(timespec="seconds")
     count = 0
     for raw in rows:
-        row = map_activity(raw)
+        row = raw if mapped else map_activity(raw)
         conn.execute(
             """
             INSERT INTO activity (source, source_id, date, start_local, sport, name,
