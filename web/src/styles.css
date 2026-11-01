@@ -83,6 +83,19 @@ html {
   text-size-adjust: 100%;
 }
 
+/* Keine Balken am Rand: gescrollt wird trotzdem, nur ohne Leiste.
+   Der Inhalt sagt, dass es weitergeht — ein Balken über einer Karte
+   ist eine Störung, kein Hinweis. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 html,
 body {
   margin: 0;
