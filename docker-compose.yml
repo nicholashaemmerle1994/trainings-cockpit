@@ -1,0 +1,27 @@
+services:
+  cockpit:
+    build: .
+    image: trainings-cockpit:latest
+    ports:
+      - "${TC_PORT:-8000}:8000"
+    environment:
+      INTERVALS_API_KEY: ${INTERVALS_API_KEY:-}
+      INTERVALS_ATHLETE_ID: ${INTERVALS_ATHLETE_ID:-0}
+      GARMIN_PERSONAL_API_KEY: ${GARMIN_PERSONAL_API_KEY:-}
+      TC_DATA_DIR: /data
+      TC_WEB_DIST: /app/web/dist
+      TC_GOAL_NAME: ${TC_GOAL_NAME:-}
+      TC_GOAL_DATE: ${TC_GOAL_DATE:-}
+    volumes:
+      - ./data:/data
+    user: "${TC_UID:-1000}:${TC_GID:-1000}"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"
+      interval: 30s
+      timeout: 5s
+      retries: 3

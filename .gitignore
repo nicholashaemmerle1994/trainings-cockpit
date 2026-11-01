@@ -1,0 +1,25 @@
+# Zugangsdaten
+.env
+
+# Datenbank, Rohdaten, Screenshots — Gesundheitsdaten bleiben lokal
+data/
+
+# Python
+.venv/
+.uv-cache/
+.uv-python/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+
+# Node
+node_modules/
+web/node_modules/
+web/dist/
+.npm-cache/
+
+# macOS
+.DS_Store

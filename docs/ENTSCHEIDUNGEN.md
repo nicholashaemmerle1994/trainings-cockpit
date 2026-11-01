@@ -1,0 +1,486 @@
+# Projekt- und Entscheidungslog
+
+**Zweck:** Dieses Dokument ist die einzige Grundlage für Änderungen am Cockpit.
+Erst diskutieren und hier festhalten, dann implementieren.
+
+**Stand:** 31.10.2026
+
+---
+
+## 1. Arbeitsweise
+
+1. **Erkenntnisse** werden mit Datum und Quelle als `E-xx` ergänzt. Sie sind
+   beobachtet, nicht beschlossen.
+2. **Offene Fragen** laufen als `F-xx` mit Optionen und einer Empfehlung.
+3. Eine **Entscheidung** wird als `D-xx` festgehalten, sobald wir sie besprochen
+   haben – mit Datum, Begründung und Konsequenz.
+4. **Implementiert wird nur, was als `D-xx` entschieden ist.** Jede Änderung
+   verweist auf die Entscheidung, aus der sie stammt.
+5. Widersprüche werden nicht stillschweigend aufgelöst, sondern als neue Frage
+   aufgenommen.
+
+---
+
+## 2. Erkenntnisse
+
+### E-01 · Datenlage ist tragfähig (30.10.2026)
+
+- 283 Aktivitäten von 08.01. bis 29.10.2026, 366 Wellness-Tage, 47 Kalender-Events.
+- Quellen der Aktivitäten: OAUTH_CLIENT 137, Garmin 123, Wahoo 19, Zepp 4.
+- Wellness: HRV 365/366, Ruhepuls 366/366, Schlaf 365/366.
+- Garmin direkt: 85 Aktivitäten in 90 Tagen, FIT-Download ok, 91 Schlaf-Nächte,
+  nur 3 HRV-Nächte (Uhr wird nachts nicht getragen).
+- **Folge:** Erholung kommt von der Helio über Zepp, Aktivitäten sind breit verteilt.
+
+### E-02 · Der 21-h-Plan liegt nicht in intervals.icu (30.10.2026)
+
+- In intervals stehen 41 Workouts bis **22.11.2026**, Peak **9,5 h / 539 Load**
+  (KW 46), danach Taper auf 8,4 h.
+- Für 2027 ist dort nichts hinterlegt.
+- Der 21-h-Peak kommt aus **Bevel**. Wir kennen weder Struktur noch Verlauf.
+- **Folge:** Nicht blind übernehmen und nicht gegen einen unbekannten Plan bauen.
+
+### E-03 · Belastung beeinflusst die Tagesform nur schwach (30.10.2026)
+
+- Heute: Score **69** bei Frische **−14**, HRV **+9 %**, Ruhepuls **−3**, Schlaf **7,8 h**.
+- Die Last hat nur 15 % Gewicht, deshalb bleibt der Score trotz negativer Frische hoch.
+
+### E-04 · Datenqualität braucht Regeln (30.10.2026)
+
+- HRV **255** am 09.10. (Sentinel) verzerrte Baseline und Score; wird jetzt gefiltert.
+- Ruhepuls-Baseline **64** bei aktuellem Wert **57** – möglicher Quellenmix
+  (Zepp/Garmin) oder unterschiedliche Definition.
+- Gewicht nur an 48 von 366 Tagen; Zepp liefert kein Gewicht.
+- Schlaftiefe/REM liegen in intervals nicht als Felder vor.
+- **Folge:** Quellenpriorität und Plausibilitätsgrenzen müssen explizit entschieden werden.
+
+### E-05 · Garmin-Direktzugriff funktioniert, ist aber noch nicht im Sync (30.10.2026)
+
+- Personal API liefert Aktivitäten, FIT, Schlaf, HRV und Gewicht.
+- Die App liest Aktivitäten aktuell **nur über intervals.icu**.
+- Risiko: intervals.icu darf Garmin-Daten voraussichtlich bald nicht mehr ausliefern.
+
+### E-06 · UI-Stand (30.10.2026)
+
+- Live: **Heute**, **Trends**, **Aktivitäten**, mobil, Dark, Sync-Knopf, ein Countdown.
+- Fehlt u. a.: Wochen-/Planansicht, Check-in, Plan-vs-Ist, Schlafphasen,
+  Kraft-Details, Datenqualitäts-Hinweise, Export.
+
+### E-07 · Saison 2027 ist eng (30.10.2026)
+
+- VCM 18.04.2027 (B), IRONMAN Kärnten 13.06.2027 (A), Wörthersee 26.09.2027 (A-).
+- Nur **8 Wochen** zwischen VCM und Ironman; drei Ziele in acht Monaten.
+- Aktuell Fitness ≈ 53, 8-Wochen-Schnitt 7,6 h/Woche, stärkste Woche 11,8 h.
+
+### E-08 · Der Score war nicht nachvollziehbar (30.10.2026)
+
+- Unter „Readiness“ standen **7-Tage-Mittel** (HRV 32 ms, Ruhepuls 61), in den
+  Karten daneben der **letzte Nachtwert** (39 ms, 57) – ohne Kennzeichnung.
+- Der Score 69 war damit nicht erklärbar, obwohl beide Zahlen korrekt waren.
+- Ursache: Das Modell rechnete mit 7-Tage-Mitteln, die Anzeige zeigte sie aber
+  wie Tageswerte.
+
+### E-09 · intervals-Fachbegriffe sind für den Nutzer bedeutungslos (30.10.2026)
+
+- CTL, ATL, TSB, ACWR und „Load“ sind nicht verständlich.
+- intervals.icu wird nur als Datenschnittstelle und Kalender genutzt.
+- **Folge:** Die UI muss deutsche Begriffe und kurze Erklärungen verwenden.
+
+### E-10 · Mobile und Homeserver (30.10.2026)
+
+- Das Dashboard soll auf dem iPhone genutzt werden, idealerweise als App auf
+  dem Home-Bildschirm.
+- Ein 24/7-Homeserver ist vorhanden; dort soll es dauerhaft laufen.
+
+### E-11 · Countdowns sind ein Kernmotivator (30.10.2026)
+
+- Der Ironman-Countdown gefällt; gewünscht sind zusätzlich VCM und der
+  Halbmarathon am 21.11.2026.
+
+### E-12 · Atmung ist vorhanden, aber noch dünn (30.10.2026)
+
+- `respiration` liegt an **27 von 366 Tagen** vor, davon täglich seit 30.09.2026.
+- Ein Ausreißer am 26.10. mit **20,71** (plausibel 8–20) verzerrt Mittel und Streuung.
+- Heute 11,11 gegen einen 30-Tage-Schnitt von 13,7 – ein klarer Ausschlag nach unten.
+- **Folge:** Atmung nur bedingt gewichten (max. 5 %) und bei fehlenden Daten renormieren.
+
+### E-14 · Bevel-Logik als Referenz (30.10.2026)
+
+Bevel beschreibt seine Erholung so:
+
+- Sechs Nachtsignale: Schlafwert, HRV, Ruhepuls, Atemfrequenz, SpO₂, Temperatur.
+- HRV und Ruhepuls werden gegen den **eigenen 60-Tage-Durchschnitt** bewertet.
+- Atemfrequenz zieht leicht nach oben oder unten; niedriges SpO₂ oder erhöhte
+  Temperatur können nur nach unten ziehen.
+- **Training fließt nicht direkt ein.** Belastung wirkt über die nächste Nacht
+  (HRV, Ruhepuls, Schlaf). Heute 94 % („Excellent“).
+
+### E-15 · Drei der sechs Signale fehlen uns (30.10.2026)
+
+| Signal | Abdeckung | Anmerkung |
+|---|---|---|
+| HRV, Ruhepuls, Schlafdauer, Schlafscore | 30/30 Tage | vollständig |
+| Atemfrequenz | 27 Tage, täglich seit 30.09. | dünn, aber aktuell |
+| SpO₂ | 26/30 Tage | 99 % heute, unauffällig |
+| Temperatur | **keine Daten** | `tempRestingHR`/`tempWeight` sind nur Flags |
+| Schlafscore | 73 (Zepp) vs. 86 (Bevel) | Bevel rechnet seinen eigenen Score |
+
+### E-17 · Garmin CIRQA Smart Band als Schlafquelle (30.10.2026)
+
+- Displayloses Armband (kein Ring), **199,99 €**, bis 10 Tage Akku, Garmin Connect.
+- Laut Produktseite: fortgeschrittene Schlafanalyse, Schlafcoach, Schlafrhythmus,
+  Erkennung veränderter Atemmuster, Nickerchen, **HRV-Status**, **Hauttemperatur**,
+  Atemfrequenz, SpO₂, Ruhepuls, Body Battery, Stress.
+- Kernfunktionen ohne Abo; einzelne Coaching-Funktionen brauchen Garmin Connect+.
+- **Entscheidend:** Es ist ein Garmin-Gerät. Die Daten landen in Garmin Connect,
+  und genau dort holt unser Sync sie ab – inklusive Schlafphasen, die wir bei den
+  drei vorhandenen Garmin-Nächten schon gesehen haben.
+- **Offen:** ob die Personal API auch die Hauttemperatur ausgibt (eigener Endpunkt,
+  nicht im offiziellen Client-Wrapper). Test mit einer Nacht genügt.
+
+### E-16 · Zepp hat keine persönliche API (30.10.2026)
+
+- **Kein Selbstbedienungs-Key** wie bei Garmin. Es gibt die **Zepp Open Platform**
+  (server-seitiges OAuth, Webhooks, FIT-Dateien). Laut Partner-Dokumentation
+  liefert sie Schlaf **mit Phasen** (deep/light/REM/awake), Schlafscore und
+  nächtliche HRV – aber keine Tageszusammenfassungen wie Schritte oder RHR.
+- Zugang ist für Apps/Unternehmen gedacht, nicht für einzelne Athleten.
+- intervals.icu nutzt diesen Partnerzugang, reicht aber aktuell nur **Dauer und
+  Score** weiter – keine Phasen.
+- Daneben existieren **reverse-engineered** Zugänge (z. B. Vitalera: „Huami does
+  not publish a developer API“, Endpunkte können sich jederzeit ändern).
+  Sie brauchen Zepp-Zugangsdaten und sind für ein 24/7-System nicht tragfähig.
+- Der Zepp-Score ist zudem nicht stabil: dieselbe Nacht 84 → 73.
+
+### E-13 · Die Skala war der Grund für die Abweichung zu Bevel (30.10.2026)
+
+- Bisher galt: Baseline = **50** Punkte, +1 SD ≈ 81, −1 SD ≈ 19.
+- Ein völlig normaler Tag landete damit bei 50–60, obwohl er sich „normal“ anfühlt.
+- Mit den gewünschten Änderungen (Schlafziel 7:30, Last 10 %, Atmung 10 %,
+  30-Tage-Referenz) kommt heute **81,9** heraus – nicht 90–95.
+- Mit einer kalibrierten Skala (Baseline = 65, ±1 SD = ±20) und
+  Last 5 % / Atmung 5 % kommt heute **89,9** heraus, 30-Tage-Schnitt 75,4.
+- Bevel gab heute 100; empfunden wurden 90–95.
+
+### E-18 · Datenweg über Health Sync, Ziel Geräteunabhängigkeit (31.10.2026)
+
+- **Neu:** Health Sync schickt Garmin- **und** Apple-Health-Daten nach
+  intervals.icu. Der Schlafimport von intervals.icu ist abgeschaltet, damit
+  nicht zwei Wege dieselbe Nacht schreiben. Erster Lauf: ab 01.11.2026.
+- **Ziel des Athleten:** unabhängig von der Marke bleiben. Coros oder ein
+  anderes Gerät muss später genauso funktionieren – ohne Umbau.
+- **Folge für die Architektur:** Das Cockpit liest ausschließlich über
+  intervals.icu und kennt keine Gerätemarke. Keine gerätespezifischen
+  Sonderwege, kein Vendor-Score als Grundlage einer Kennzahl.
+- **Risiko Doppelquelle:** Liefern Garmin und Apple Health dieselbe Nacht,
+  kann ein Tag überschrieben werden. Prüfpunkt nach dem ersten Sync: ein Tag,
+  drei Werte (Geräte-App, intervals.icu, Cockpit) müssen übereinstimmen.
+- **Risiko Schlafscore:** Fällt der Zepp-Score weg, rechnet der Schlaf-Treiber
+  nur mit der Dauer. Der Code kann das schon (`metrics.py` fällt darauf
+  zurück), der Score verschiebt sich dadurch aber leicht nach unten. Zu
+  beobachten, nicht zu korrigieren, solange die Datenlage wechselt.
+
+### E-19 · felsr-Verpflegungsplaner als Referenz (31.10.2026)
+
+Quelle: <https://felsr.com/verpflegung> (Rechenkern als offenes Skript).
+
+- **Kohlenhydrate hängen an der Dauer, nicht am Gewicht.** Die Grenze sitzt in
+  der Darmwand (SGLT1 ≈ 60 g/h Glukose, GLUT5 ≈ 30 g/h Fruktose), nicht in der
+  Muskelmasse. Gewicht zählt nur für Vortag, Frühstück und danach.
+- **Bänder nach Dauer** (Gramm je Stunde): < 45 min 0 · 45–75 min 22 ·
+  75–120 min 45 · 2–3 h 60 · 3–4 h 75 · > 4 h 82. Empfohlen wird die **Mitte**
+  des Bandes, nicht das obere Ende.
+- **Deckel 90 g/h**, ab 60 g/h nur noch als Glukose-Fruktose-Mischung.
+- **Trinken nie über der Schweissrate** (Hyponatriämie), Salz erst ab ~2 h.
+- **Was wir übernehmen:** die Bänder, den Deckel, die Aufteilung
+  Getränk/Gels, Konzentration ≤ 8 %, Wasser und Salz.
+- **Was wir bewusst weglassen:** Sportart, Höhenmeter, Watt, Höhenprofil,
+  Lebensmittel-Suchbaum, Tagesplanung. Das gehört in die Trainingsplanung.
+
+### E-20 · Vor dem Sync fehlt die Nacht von heute (31.10.2026)
+
+- intervals.icu legt den Wellness-Eintrag eines Tages erst an, wenn die Daten
+  da sind. Morgens um 08:00 ist die Zeile von heute also noch leer.
+- Folge im Cockpit: Der Erholungsring fiel auf den letzten Wert zurück und
+  zeigte Zahlen, die Karten daneben zeigten „—“.
+- Zusätzlich rechnete das Schlafdefizit die fehlende Nacht als **0 h Schlaf**
+  und kam auf 7,7 h statt 0,2 h.
+- Mit dem Wechsel auf Health Sync (E-18) wird das häufiger auftreten, nicht
+  seltener.
+
+### E-21 · Ahornsirup ist die eigentliche Quelle (31.10.2026)
+
+- Der Athlet nimmt **Ahornsirup**, nicht Gels: **65,3 g Kohlenhydrate je 100 g**.
+  Mit der Dichte von rund **1,33 g/ml** sind 100 ml etwa **87 g Kohlenhydrate**
+  – vier Gels in einer Flasche.
+- Ahornsirup ist überwiegend Saccharose. Die wird im Darm in Glukose und
+  Fruktose gespalten, ungefähr 1:1 – damit sind **beide Transportwege** bedient
+  und auch 90 g/h grundsätzlich erreichbar.
+- Praktische Größe: **50 ml Shot = 66 g Sirup = 43 g Kohlenhydrate**, also rund
+  zwei Gels. Ein 25-ml-Shot entspricht einem Gel.
+- Salz rechnet die Küche in **Kochsalz**, die Literatur in **Natrium**:
+  1 g Natrium ≈ **2,54 g Salz**. Aus 600 mg Natrium je Stunde werden 1,5 g Salz.
+- Sirup ist konzentriert und zieht Wasser in den Darm – zu jedem Shot gehören
+  ein paar Schluck Wasser.
+
+### E-22 · Erster Praxistest: 73 g Kohlenhydrate für 17 km (31.10.2026)
+
+- Lauf: **17 km in 1:51** (111 min), gefahren mit **73 g Kohlenhydraten**,
+  das sind **112 g Sirup** oder **84 ml** – und es hat gut funktioniert.
+- Das sind **39,5 g/h**, also runde 40 g/h.
+- Das Modell sagte für dieselbe Einheit 35 g/h (65 g, 100 g Sirup, 75 ml).
+  Die Abweichung liegt innerhalb der ausgewiesenen Spanne (30–40 g/h), aber
+  am oberen Rand – und der Praxistest ist die bessere Quelle.
+- Ein Datenpunkt ist kein Gesetz. Er verschiebt den Faktor für „Locker“ von
+  0,75 auf 0,90; bei 2 h sind das 55 statt 45 g/h, bei 4 h 75 statt 60 g/h.
+
+### E-23 · Milliliter und Gramm sind am Sirup nicht dasselbe (31.10.2026)
+
+- Die Portion wurde in **ml** abgefragt. Wer 35 eingibt, meint aber seinen
+  gewogenen Shot: **35 g Sirup**.
+- 35 g sind bei 65,3 g Kohlenhydraten je 100 g genau **22,9 g Kohlenhydrate**.
+- 35 **ml** sind dagegen 46,6 g Sirup und damit **30,4 g Kohlenhydrate** – die
+  Zahl, die die Seite zeigte. Rechnerisch richtig, aber an der falschen Frage.
+- Rund 12 % Unterschied, und niemand sieht es der Zahl an, weil beide „35“
+  heißen.
+
+### E-24 · Der Score war zu träge (31.10.2026)
+
+- Nacht vom 31.10.: HRV **39 → 29 ms**, Ruhepuls **57 → 62**, Schlaf **7:59 → 6:36 h**,
+  Schlafscore 71. Das Cockpit gab **73** („gut erholt“) und rutschte damit in die
+  grüne Ampel. Bevel gab **51 %**, was dem Empfinden entsprach.
+- Ursache sind drei Glättungen hintereinander:
+  1. **60-Tage-Referenz.** Der Sommer mit anderem Rhythmus zog den Maßstab mit.
+     „Üblich“ lag bei 30 ms HRV und 62,8 bpm – da ist ein Wert von 29/62 normal.
+  2. **Tageswert 60 %, Wochenschnitt 40 %.** Der schlechte Tag wurde durch die
+     gute Woche halbiert.
+  3. **Gewichtetes Mittel.** Vier Teilscores zwischen 67 und 80 ergeben
+     zwangsläufig 73; kein einzelnes Signal kann den Score wirklich senken.
+- Nachgerechnet: Mit 21-Tage-Referenz, vollem Tageswert und 25 Punkten je
+  Standardabweichung ergibt dieselbe Nacht **65**. Der 26.10. (HRV 22, RHR 73)
+  fällt von 65 auf **40**.
+- **Ehrlich dazu:** Bevels 51 lässt sich aus HRV, Ruhepuls, Schlaf und Atmung
+  nicht reproduzieren. In der Durchrechnung kommt selbst die schärfste
+  Kombination nicht unter 59, ohne gute Tage zu zerstören. Bevel hat
+  Hauttemperatur und Schlafphasen, wir nicht.
+
+### E-25 · intervals.icu hat keine Schlafphasen (31.10.2026)
+
+- Geprüft im Wellness-Objekt der API (`GET /api/v1/athlete/0/wellness`) am
+  Beispieltag 31.10.: Felder sind `sleepSecs`, `sleepScore`, `sleepQuality`
+  (1–4), `avgSleepingHR` (leer), `hrv`, `hrvSDNN`, `restingHR`, `respiration`,
+  `spO2`, `steps`, `weight`, `bodyFat`.
+- In der API-Beschreibung kommen **`deepSleep`, `remSleep`, `sleepStart` und
+  `temperature` kein einziges Mal vor**; es gibt auch keinen `/sleep`-Endpunkt.
+- Das ist keine Momentaufnahme, sondern die Struktur: intervals.icu speichert
+  Schlaf nur als **Dauer, Score und grobe Qualität**. Phasen, Wachzeiten,
+  Einschlafzeit und Hauttemperatur haben dort keinen Platz.
+- Phasen entstehen schon bei der Quelle: die **Garmin Personal API** liefert
+  `deepSleepSeconds`, `remSleepSeconds`, `awakeSleepSeconds` sowie Start und
+  Ende – unser Client liest das bereits. Bei 91 abgerufenen Nächten hatten aber
+  nur 3 echte Phasen, weil die Uhr nachts nicht getragen wird.
+- **Health Sync kann die Lücke nicht schließen:** Was intervals nicht speichern
+  kann, kommt dort auch nicht an. Phasen brauchen einen direkten Weg von Garmin
+  (oder einem Gerät, das sie nach Garmin Connect schreibt).
+
+### E-26 · Bevel-Abgleich als Kalibrierquelle (31.10.2026)
+
+- Zwei gemeinsame Punkte reichen nicht zum Justieren: 30.10. lagen wir bei 93
+  (Bevel ~94), 31.10. bei 65 (Bevel 51). Auf der guten Seite stimmt es, auf der
+  schlechten nicht.
+- Bei zwei Punkten ist jede Anpassung Raten. Mit sieben Paaren lässt sich die
+  Abweichung rechnen statt schätzen.
+- Der eigene Score wird deshalb von Hand eingetragen (Feld auf „Heute“) und in
+  `wellness.readiness_vendor` gespeichert – die Spalte war unbenutzt, weil
+  intervals für diesen Athleten kein `readiness` liefert.
+- Nebenbei beobachtet: Ein Sync um 18:12 schrieb `sleepScore` als NULL, obwohl
+  intervals um 19:02 wieder 71 lieferte. Der Upsert überschreibt mit NULL; ein
+  erneuter Sync korrigiert es. `readiness_vendor` ist dagegen per COALESCE
+  geschützt, damit der eingetragene Wert einen Sync überlebt.
+- **hrvSDNN wird nicht verwendet:** an 18 von 61 Tagen fehlt der Wert, und der
+  Athlet hat dafür keine verlässliche Quelle. Ein Signal, das manchmal da ist,
+  macht den Score unvergleichbar.
+
+### E-27 · Dieselbe Einheit kommt doppelt an (31.10.2026)
+
+- Der Vault-Import schrieb 295 Einheiten. In den Wochen standen **8 davon doppelt**,
+  zusammen **124 km**, also rund 5 % des Jahres.
+- Ursache: dieselbe Aufzeichnung kommt über zwei Wege in intervals.icu — von
+  Garmin Connect und von Health Sync, gelegentlich zusätzlich von Wahoo oder
+  Zepp. Unterschiedliche IDs, gleicher Verlauf.
+- Genau das war das Risiko aus E-18 beim Umstieg. Es trifft jetzt beide Seiten:
+  den Vault und die Datenbank.
+- **Erkennung über den Verlauf, nicht über die ID:** gleiche Sportart, Start
+  innerhalb von fünf Minuten, Dauer ± 2 min, Distanz ± 400 m. Der Startzeitpunkt
+  ist der scharfe Filter: zwei Atemübungen am selben Tag um 05:47 und 22:32 sind
+  zwei Einheiten, auch wenn beide 5,5 Minuten dauern.
+- Bei Gleichstand bleibt Garmin Connect, weil die Uhr Höhenmeter und Puls selbst
+  misst. Danach entscheidet die vollständigere, dann die längere Aufzeichnung.
+- Nach der Bereinigung: 287 Einheiten, Woche 44 statt 15 nur noch 12 Einheiten
+  und 48,9 statt 69,5 Rad-Kilometer.
+
+### E-28 · Der Vault doppelte die Datenbank (31.10.2026)
+
+- Nach dem Import lagen 287 Einheiten-Notizen und 43 Wochen-Notizen im Vault —
+  1,1 MB, die es in der Cockpit-Datenbank schon gab, nur älter.
+- Für jede Zahl hätte der Vault gepflegt werden müssen; ohne Syncthing vom
+  Server aus war das nur von Hand möglich.
+- Was die Datenbank **nicht** kann: Ziele, Zielzeiten, Rennergebnisse,
+  Beschwerden, was geholfen hat, Coaching-Regeln, die Worte des Athleten.
+- Folge: Der Vault behält die Urteils-Ebene, die Zahlen bleiben im Cockpit.
+
+### E-29 · Die Oberfläche liest sich als Vorlage, nicht als Werkzeug (01.11.2026)
+
+Prüfung der drei Seiten gegen die Slop-Liste von *unslop* (Screenshots in
+`data/screens/audit-*.png`):
+
+- **Flächen:** zwei Radial-Washes im Seitenhintergrund (grün und blau); jede der
+  vier Kennzahlenkarten hat ihren eigenen Farbschein (violett, blau, orange,
+  türkis); Aktiv-Modus und Navigationszeile tragen Verlauf mit Glühen; der
+  Regler ist ein Grünverlauf; Notizkasten mit farbigem Linksbalken.
+- **Kennzahlen:** alle vier Karten haben eine Sparkline — genau das, was eine
+  Karte zur Dekoration macht. Die Zahl ist nicht mehr das Größte.
+- **Schrift:** 20 verschiedene Größen, Großbuchstaben-Labels mit weitem
+  Abstand auf jeder Seite (`VERPFLEGUNG`, `DAUER`, `WORAUS`, `GETRÄNK`,
+  `BELASTUNG` in jeder Zeile der Aktivitätenliste), Fettungen bis 700.
+- **Icons:** die Sportart-Icons tragen fünf verschiedene Farbtöne, jede Einheit
+  eine andere Farbe.
+- **Text:** Begrüßung als Überschrift („Servus, Nicholas"), Untertitel im
+  Plauderton („Was die andere App sagt – sieben Tage reichen zum Justieren").
+- **Abstände:** elf Werte außerhalb des 4-px-Rasters (18, 22, 26, 15, 11, 9, 7,
+  6, 5), Karten mit unterschiedlichem Innenabstand.
+- **Aktivitäten:** 287 Zeilen in einer Liste, 18.900 px hoch, ohne Gruppierung;
+  „BELASTUNG" wiederholt sich in jeder Zeile.
+- **Diagramm:** drei Farbtöne (grün, amber, grau) mit Flächenverläufen, zwei
+  davon konkurrieren um die Aufmerksamkeit; keine Hierarchie.
+- **Vorlagenprobe:** dunkelgrau, Mintgrün, Inter, Karten mit Schein — das könnte
+  jede Fitness-App sein. Es sagt nichts über Kärnten, Ironman oder Morgenlicht.
+
+---
+
+## 3. Entscheidungen
+
+| ID | Datum | Entscheidung | Begründung | Konsequenz |
+|---|---|---|---|---|
+| D-01 | 30.10.2026 | **Bevel wird schrittweise abgelöst** (Option B). Bevel bleibt vorerst Planungsquelle, das Cockpit liefert Analyse und Vergleich. | Kein Bruch mitten in der Saison; wir lernen erst, was Bevel macht. | Plan-vs-Ist und Vergleich werden ausgebaut, bevor eigene Pläne kommen. |
+| D-02 | 30.10.2026 | **Kernnutzen:** Erholung, Plan vs. Ist, eigene Planung, Langzeitentwicklung – plus **Wirkungsanalyse** (welche Einheiten bringen etwas, welche ersetzen). | Der Nutzer will nicht nur Zahlen, sondern Entscheidungen. | Wirkungsanalyse wird eigene Etappe (nicht Teil der UI-Klarheit). |
+| D-03 | 30.10.2026 | **„Readiness“ heißt künftig „Erholung“ (Recovery).** Der Wert beschreibt, wie gut der Körper heute erholt ist. | Der alte Begriff war mehrdeutig. | API, UI und Texte werden umbenannt. |
+| D-04 | 30.10.2026 | **Erholung nutzt Ruhepuls, HRV, Schlaf und zu einem Teil die Belastung.** Farben und Ampel bleiben. | Entspricht dem körperlichen Empfinden; die Farben funktionieren. | Modell bleibt viergeteilt, Gewichte werden sichtbar. |
+| D-05 | 30.10.2026 | **Jede Erholungsanzeige erklärt sich in einem Satz.** Tageswert, 7-Tage-Schnitt und Baseline werden getrennt ausgewiesen. | Der Score muss ohne Fachwissen nachvollziehbar sein. | Erklärungstext + drei Zahlen pro Treiber. |
+| D-06 | 30.10.2026 | **Keine intervals-Fachbegriffe in der UI.** Übersetzung: CTL = **Fitness**, ATL = **Müdigkeit**, TSB = **Frische**, ACWR = **Belastungsverhältnis**, Load = **Belastung**. | Nutzer kennt die Begriffe nicht und will sie nicht lernen. | Alle Labels und Legenden werden ersetzt, mit kurzer Erklärung. |
+| D-07 | 30.10.2026 | **Drei Countdowns:** Ironman 13.06.2027, VCM 18.04.2027, Halbmarathon 21.11.2026. | Countdown motiviert und ordnet die Saison. | Ziele werden konfigurierbar, nicht hart im Code. |
+| D-08 | 30.10.2026 | **Mobile-first für iPhone als Home-Screen-App (PWA)**, Betrieb auf dem 24/7-Homeserver per Docker. | Nutzung findet oft am Handy statt. | Manifest, Apple-Icons, Installationsanleitung, Docker-Deployment. |
+| D-09 | 30.10.2026 | **Nächste UI-Bausteine nach der Klarheit:** Morgen-Check-in, Schlafdetails, Datenqualität. | Diese drei wurden als nächste Priorität genannt. | Etappe 3. |
+| D-10 | 30.10.2026 | **Recovery-Modell:** Tageswert 60 %, 7-Tage-Schnitt 40 %. | Die letzte Nacht soll zählen, aber nicht jede Schwankung den Score kippen. | Sichtbar als „Heute / Schnitt / Baseline“. |
+| D-11 | 30.10.2026 | **Check-in + zweiter Wert „Gefühl“** (Modell und Empfinden getrennt). | Der Nutzer will beides sehen. | Etappe 3, nicht Teil der jetzigen Änderung. |
+| D-12 | 30.10.2026 | **Erholung nach Bevel-Logik (P1):** HRV 35 %, Ruhepuls 20 %, Schlaf 30 % (50 % Dauer gegen 7:30 h, 50 % Schlafscore), Atmung 5 %, SpO₂ 5 % (nur Abzug), **keine Belastung im Score**, 60-Tage-Referenz, Skala `68 + 20·z`. Temperatur fehlt und wird renormiert. | Trifft Bevel (94) und das Empfinden (90–95); Bevels Logik ist nachvollziehbar. | Belastung wirkt nur über die nächste Nacht; die UI erklärt das. |
+| D-13 | 31.10.2026 | **Der Tab „Trends“ entfällt vorerst.** Die Seite bleibt im Code liegen, wird aber nicht mehr verlinkt. | Viele Kennzahlen werden aktuell nicht gebraucht; jede zusätzliche Seite kostet Pflege. | Navigation: Heute · Verpflegung · Aktivitäten. Rückkehr ist ein Einzeiler. |
+| D-14 | 31.10.2026 | **Verpflegungsrechner mit zwei Modi:** „Locker“ (Long Run, Zone 2) und „Wettkampf“. Kohlenhydrate je Stunde aus dem Dauerband × Faktor (0,75 bzw. 1,10), Deckel 90 g/h, ab 60 g/h Warnung auf Mischung. Ausgabe: g/h, Gesamtmenge, Getränk, Gels, Wasser, Salz, Zeitplan, Drumherum. | Zwei Modi decken den Alltag ab; mehr Regler verwässern die Antwort auf „wie viel nehme ich mit“. | Eigene Seite im Cockpit, Rechnung im Backend (`fuel.py`), testbar. |
+| D-15 | 31.10.2026 | **Fehlt die Nacht von heute, zeigt das Cockpit den letzten Stand** statt „—“: Karten, Ring und Erklärung nutzen dieselbe Nacht. Im Kopf steht dann „Nacht vom 30. Oktober“. Das Schlafdefizit zählt nur vorhandene Nächte. | Ein leerer Bildschirm neben einem vollen Ring ist ein Widerspruch; eine fehlende Nacht ist keine schlaflose Nacht. | Neues Feld `as_of` in `/api/overview`, Fallback auf den letzten Wert mit Daten. |
+| D-16 | 31.10.2026 | **Der Rechner kennt zwei Quellen:** „Gels & Pulver“ (Getränk plus Gels) und **„Ahornsirup“** (Sirup-Shots plus Wasser). Bei Sirup kommen alle Kohlenhydrate aus den Shots, die Flasche trägt nur Wasser. Die Shotgröße ist einstellbar (Standard 50 ml). Ausgegeben wird Sirup in ml und g, Kohlenhydrate je Shot und **Salz je Shot in Gramm**. | Der Athlet mischt selbst; Gramm Kohlenhydrate helfen ihm nicht, Milliliter Sirup und Gramm Salz schon. | Neue Felder `syrup` und `sources`, Salz zusätzlich in Gramm. |
+| D-17 | 31.10.2026 | **Wasser steht nicht im Verpflegungsplan.** Der Athlet trinkt Wasser ohne Kohlenhydrate und nimmt den Sirup als Gel-Ersatz. Der Zeitplan enthält deshalb nur die Shots; Wasser bleibt als Menge und Hinweis stehen. Passt die gewählte Shotgröße schlecht zur Stundenmenge, schlägt die Seite eine passendere vor („Mit 25-ml-Shots passt es besser: 3 Shots à 22 g statt 1 à 43 g“). | Ein Zeitplan, in dem „Flasche 1“ zwischen den Shots steht, ist eine Anweisung, die niemand befolgt. Und eine einzelne 43-g-Portion für einen Lauf von 1:51 ist keine Lösung, sondern eine Rundung. | `_schedule` ohne Wasser, Feld `syrup.suggestion`. |
+| D-18 | 31.10.2026 | **„Locker“ wird auf Faktor 0,90 kalibriert** (vorher 0,75): 40 g/h bei 90 min, 55 bei 2 h, 75 bei 4 h. Anlass ist der erste Praxistest (E-22): 73 g in 1:51 traf 40 g/h, nicht 35. | Der eigene Lauf schlägt die Literatur, solange keine Gegenbeispiele vorliegen. | Bei 1:51 sagt der Rechner jetzt 75 g und 85 ml Sirup statt 65 g und 75 ml. Rücknahme ist eine Zahl. |
+| D-19 | 31.10.2026 | **Die Shotgröße hat eine Einheit:** Gramm (Standard) oder Milliliter, umschaltbar. Angezeigt wird immer die gewählte Einheit, gerechnet wird in Millilitern (Dichte 1,33 g/ml). Die Kohlenhydrate pro Portion stehen zusätzlich in Gramm. | Wer den Sirup wiegt, denkt in Gramm; wer ihn in eine Flasche füllt, in Millilitern. Die Einheit darf nicht geraten werden müssen. | Feld `unit`, `shot_g`, `amount`; Standard 35 g. |
+| D-20 | 31.10.2026 | **Erholung reagiert jetzt auf die Nacht:** Referenz **21 Tage** statt 60, **Tageswert zählt voll** (kein 40-%-Wochenschnitt mehr in der Rechnung), Skala `68 + 25·z` statt `68 + 20·z`. Schlaf wird nicht mehr durch das 7-Tage-Mittel gerettet. | Ein guter Monat darf eine schlechte Nacht nicht verdecken; der Score soll dem Befinden folgen. | Heute 73 → 65, 26.10. 65 → 40, gute Nächte bleiben bei 92–94. Die Lücke zu Bevel (51) bleibt und braucht Temperatur oder Check-in. |
+| D-21 | 31.10.2026 | **hrvSDNN fliegt raus.** Nur HRV (rMSSD) zählt. | Keine verlässliche Quelle, 18 von 61 Tagen leer. | Kein Schema-Umbau, keine neue Kennzahl. |
+| D-22 | 31.10.2026 | **Bevel-Abgleich im Cockpit:** Auf „Heute“ wird Bevels Score eingetragen, das Cockpit zeigt beide Zahlen und die Differenz. Nach sieben Tagen wird das Modell an den Paaren kalibriert. | Die zweite App ist der einzige verfügbare Maßstab; raten auf einen Punkt wäre schlechter. | Neue Karte auf „Heute“, `POST /api/vendor-score`, Feld `readiness_vendor`. |
+| D-23 | 31.10.2026 | **Dubletten werden automatisch erkannt und entfernt:** in `sync` vor dem Schreiben, plus `tc dedupe` für den Bestand. Kriterium ist der Verlauf (Sportart, Start ± 5 min, Dauer ± 2 min, Distanz ± 400 m), nicht die ID. | Zwei Quellen für dieselbe Einheit sind der Normalfall geworden, nicht die Ausnahme. | 8 Einheiten aus der DB entfernt (295 → 287), Vault neu geschrieben, Sync prüft bei jedem Lauf. |
+| D-24 | 31.10.2026 | **Der Vault wird schlank.** Keine Einheiten- und Wochen-Notizen mehr; er hält nur noch Ziele, Rennen, Beschwerden, Schuhe, Erkenntnisse und Coaching-Regeln. Wochenzahlen liefert `tc woche` aus der Datenbank. Kein Syncthing, keine Vault-Kopie auf dem Server. | Zwei Speicher für dieselbe Zahl laufen auseinander. Der Vault soll sagen, was wichtig ist, nicht was am Dienstag passiert ist. | 287 + 43 Dateien entfernt, `CLAUDE.md` und `start.md` umgeschrieben, `tc woche` neu. |
+| D-25 | 01.11.2026 | **Mobile-Korrekturen und Stille Signale.** (a) Atmung fällt aus Treiberliste und Erklärung, bleibt aber mit 5 % im Score. (b) Fehlt ein Wert von heute, markiert die Oberfläche ihn („gestern") und die Erklärung sagt es. (c) Sync-Knopf sitzt auf dem Handy im Kopf der Seite; Countdowns stehen dort untereinander; die Kopfzeile bekommt `env(safe-area-inset-top)`. | Der Ring war am iPhone unter der Statusleiste abgeschnitten, der Sync-Knopf nur in der Sidebar erreichbar, die Countdowns liefen aus dem Bild, und die HRV von gestern sah aus wie die von heute. | Zonen unverändert, nur Darstellung. |
+| D-26 | 01.11.2026 | **Erholung nur aus vollständigen Daten von heute.** Ein Score entsteht erst, wenn HRV, Ruhepuls, Schlaf **und** Atmung von heute vorliegen. Fehlt eines, gibt es keinen Score: „Keine Daten“, und die Erklärung nennt das fehlende Signal. Kein Teilwert, keine Renormierung, kein Wert von gestern. **D-15 und die Renormierung aus D-12 sind damit aufgehoben.** | Ein halber Wert sieht aus wie ein ganzer. Der Athlet will den Zustand von heute oder gar keine Zahl. | Rückfall auf `values[-1]` und Renormierung entfernt; `REQUIRED_SIGNALS` erzwingt alle vier. |
+| D-27 | 01.11.2026 | **Eingabefelder sind mindestens 16 px groß.** Alle Text- und Zahlenfelder bekommen `font-size: 16px`, unabhängig von der Schrift der Karte drumherum; die Felder bleiben schmal und rechtsbündig. Dazu `inputmode` (Zahlen- statt Buchstabentastatur) und `enterkeyhint="done"`: „Fertig" speichert und schließt die Tastatur. | Safari auf dem iPhone zoomt beim Fokussieren in jedes Feld unter 16 px hinein und wieder heraus erst beim Neuladen — die Seite stand dann schief, der Kopf war weg, die Tastatur schnitt den Rest ab. | Globale Regel in `styles.css` statt Einzelfeld-Flicken; `maximum-scale=1` bleibt verboten, weil es Zoom für alle abschaltet. |
+| D-28 | 01.11.2026 | **Die Oberfläche folgt `unslop`** (Damir Sokolovsky, [github.com/heydamir/unslop](https://github.com/heydamir/unslop), CC BY 4.0). Die gekürzte Fassung steht in [`UI-REGELN.md`](UI-REGELN.md) und gilt für jede künftige Oberflächenarbeit: erst prüfen, dann fünf Zeilen Richtung, dann neun Durchgänge in fester Reihenfolge. | Der Bildschirm liest sich als Vorlage: Farbschein auf jeder Karte, Sparklines statt Zahlen, Großbuchstaben-Labels, fünf Iconfarben, Begrüßung als Überschrift (E-29). Der Athlet sieht die Seite täglich und will ein Werkzeug, kein Template. | Kein Umbau ohne Richtung und Freigabe; die alte Optik wird über die neun Durchgänge ersetzt, Abschnitte und Reihenfolge bleiben. Nennung des Urhebers bleibt in jeder Kopie. |
+| D-29 | 01.11.2026 | **Richtung B+ ist umgesetzt.** Kühle Tinten-Rampe (#08090f, #11141c, #1a1e28), ein Akzent Wörthersee-Teal (#3f9e8f), Farbe sonst nur als Befund. Instrument Serif für Titel und Countdown-Zahlen, Plex Sans für Text, Plex Mono für alles Zählbare. Fünf Charakter-Momente: die Uhr als Instrument mit Zonenring und Referenzmarke auf den 21-Tage-Schnitt, Skalen in den Treiberzeilen, Laststreifen der sieben Tage, Tagesstriche unter dem Diagramm, Aktivitäten als Tabelle. | Ohne die fünf Momente war die kühle Fassung (B) sauber, aber beliebig; die Serif und die Instrumente geben dem Trainingsbuch eine eigene Stimme, ohne in Slop zurückzufallen. | Schriften selbst gehostet (5 × woff2, 97 kB), recharts entfernt: Bündel 638 → 251 kB. Kennzahlen ohne Sparkline, Großbuchstaben-Labels ersetzt, Abstände auf dem 4-px-Raster, Verpflegung zweispaltig, Aktivitätenliste lädt in 40er-Schritten nach. |
+
+---
+
+## 4. Abgeleitete Anforderungen
+
+| ID | Aus | Anforderung | Akzeptanz | Status |
+|---|---|---|---|---|
+| A-01 | D-03, D-05 | Erholungskarte zeigt Score, Klartext-Erklärung und je Treiber **heute / Schnitt / üblich**. | 39 ms / 32 / 29 ist sichtbar; ein Satz erklärt den Score. | ✅ |
+| A-02 | D-06 | Keine CTL/ATL/TSB/ACWR-Begriffe in der UI; deutsche Labels mit Kurzerklärung. | Kein sichtbarer Fachbegriff; „Fitness“, „Müdigkeit“, „Frische“, „Belastungsverhältnis“. | ✅ |
+| A-03 | D-07 | Drei Countdowns, mobil scrollbar. | Ironman, VCM, HM mit Tagen; Ziele konfigurierbar. | ✅ |
+| A-04 | D-08 | PWA-Manifest, Apple-Touch-Icon, Installationshinweis. | „Zum Home-Bildschirm“ funktioniert auf dem iPhone. | ✅ |
+| A-05 | D-08 | Docker-Deployment für den Homeserver dokumentiert. | `docker compose up -d` und Backup-Anleitung. | ✅ Doku (auf dem Server ungetestet) |
+| A-06 | D-10 | Modell nutzt Tageswert und 7-Tage-Schnitt, Erklärung nennt beides. | Score reagiert auf die letzte Nacht, bleibt aber stabil. | ✅ |
+| A-07 | D-09 | Morgen-Check-in (Energie, Muskeln, Stress) und Abend-RPE. | Etappe 3. | ⏳ |
+| A-08 | D-09 | Schlafdetails (Phasen, Konsistenz), soweit Daten vorhanden. | Etappe 3. | ⏳ |
+| A-09 | D-09 | Datenqualität sichtbar (Abdeckung, Alter, Ausreißer). | Etappe 3. | ⏳ |
+| A-10 | D-02 | Wirkungsanalyse: welche Einheiten bringen etwas, welche ersetzen. | Etappe 4. | ⏳ |
+| A-11 | D-01 | Bevel-Plan importieren und Plan vs. Ist vergleichen. | Etappe 4. | ⏳ |
+| A-12 | D-12 | Erholung nutzt HRV, Ruhepuls, Schlaf, Atmung, SpO₂; Temperatur wird ergänzt, sobald Daten da sind. | Treiber zeigen heute / Schnitt / üblich. | ✅ |
+| A-13 | D-12 | Keine Belastung im Erholungswert; ein Hinweis erklärt den Zusammenhang. | „Belastung fließt nicht direkt in die Erholung“ ist sichtbar. | ✅ |
+| A-14 | D-12 | Skala 68 + 20·z, 60-Tage-Referenz, Schlafziel 7:30. | Normaler Tag ≈ 68, heutiger Wert 92. | ✅ |
+| A-15 | E-18 | Das Cockpit kennt keine Gerätemarke; alle Daten kommen über intervals.icu. | Coros oder anderes Gerät funktioniert ohne Codeänderung. | ✅ |
+| A-16 | D-13 | Navigation zeigt Heute, Verpflegung, Aktivitäten. | Kein „Trends“-Eintrag mehr sichtbar. | ✅ |
+| A-17 | D-14 | Verpflegungsseite: Modus, Dauer, Gewicht, Temperatur; Ausgabe g/h, Gesamt, Getränk, Gels, Wasser, Salz, Zeitplan, Vortag/Frühstück/danach. | Für 4 h Wettkampf kommen 90 g/h und 8 Gels heraus; für 2 h locker 45 g/h. | ✅ |
+| A-18 | D-14 | Ab 60 g/h weist die Seite auf Glukose-Fruktose-Mischung hin. | Hinweis sichtbar, sobald die Rate über 60 liegt. | ✅ |
+| A-19 | D-15 | Karten, Ring und Erklärung nutzen dieselbe Nacht; Kopfzeile nennt das Datum der Nacht, wenn es nicht heute ist. | Bei fehlender Nacht von heute steht „Nacht vom 30. Oktober“ und überall 7:59 h. | ✅ |
+| A-20 | D-16 | Verpflegungsseite schaltet zwischen Gels und Ahornsirup um; bei Sirup stehen ml je Stunde, Shotgröße, Kohlenhydrate und Salz je Shot sowie die Gesamtmenge. | Für 4 h Wettkampf: 415 ml Sirup, 8 Shots à 50 ml, 0,74 g Salz pro Shot. | ✅ |
+| A-21 | D-17 | Zeitplan bei Ahornsirup enthält nur Shots. Unpassende Shotgröße führt zu einem Vorschlag. | Bei 1:51 locker und 50 ml steht ein Shot; die Seite schlägt 25 ml mit drei Shots vor. | ✅ |
+| A-22 | D-18 | „Locker“ folgt dem eigenen Praxistest, nicht dem Literaturfaktor. | 1:51 locker ergibt 40 g/h, 75 g gesamt, 85 ml Sirup. | ✅ |
+| A-23 | D-19 | Shotgröße in g oder ml eingebbar, Ausgabe in derselben Einheit. | 35 g ergeben 23 g Kohlenhydrate; 35 ml ergeben 30 g. | ✅ |
+| A-24 | D-20 | Erholung nutzt 21-Tage-Referenz, vollen Tageswert und 25 Punkte je SD. | Schlechte Nacht 31.10. fällt in die gelbe Ampel, 26.10. in die orange. | ✅ |
+| A-25 | D-22 | Bevels Score lässt sich auf „Heute“ eintragen und überlebt einen Sync; beide Werte stehen nebeneinander. | 30.10. wir 93 / Bevel 94, 31.10. wir 65 / Bevel 51 sind sichtbar. | ✅ |
+| A-26 | D-21 | Kein hrvSDNN in Modell oder Oberfläche. | Nur HRV (rMSSD) erscheint. | ✅ |
+| A-27 | D-24 | Der Vault enthält keine Zahlen-Notizen; Wochen kommen aus `tc woche`. | Vault liest sich in ~8 KB; `tc woche` liefert KW 41–44 mit denselben Zahlen wie vorher die Notizen. | ✅ |
+| A-28 | D-27 | Eingabefelder sind mindestens 16 px groß, öffnen die Zahlentastatur und schließen sie mit „Fertig“. | Fokus auf „Bevel heute" verändert die Seitenbreite nicht; die Schrift im Feld misst 16 px. | ✅ || A-28 | D-27 | Eingabefelder sind mindestens 16 px groß, öffnen die Zahlentastatur und schließen sie mit „Fertig“. | Fokus auf „Bevel heute" verändert die Seitenbreite nicht; die Schrift im Feld misst 16 px. | ✅ |
+| A-29 | D-29 | Oberfläche folgt der Richtung B+: Tinten-Rampe, ein Teal-Akzent, Serif für Titel und Countdowns, Mono für Zahlen, Universalschrift Plex Sans. | Kein Farbschein und keine Sparkline mehr sichtbar; die Uhr trägt Zonenring und Referenzmarke; Aktivitäten stehen als Tabelle; Bündel unter 260 kB. | ✅ |
+
+---
+
+## 5. Etappen
+
+| Etappe | Inhalt | Status |
+|---|---|---|
+| 0 | Datenzugang, Push-Kanal, Befund | ✅ abgeschlossen |
+| 1 | Dashboard: Heute, Trends, Aktivitäten | ✅ abgeschlossen |
+| 2 | **Klarheit:** Erholung statt Readiness, Erklärung, deutsche Begriffe, drei Countdowns, PWA | ✅ abgeschlossen |
+| 2b | **Bevel-Modell:** 60-Tage-Referenz, Schlaf 50/50, Atmung, SpO₂-Abzug, keine Last | ✅ abgeschlossen |
+| 2c | **Verpflegung:** Kohlenhydratrechner mit zwei Modi, Zeitplan, Herrichten | ✅ abgeschlossen |
+| 3 | Check-in, Schlafdetails, Datenqualität, Plan vs. Ist | ⏳ |
+| 4 | Wirkungsanalyse, Bevel-Ablösung, eigene Planung | ⏳ |
+
+---
+
+## 6. Nicht-Ziele (vorerst)
+
+- Kein Multi-User, keine Cloud.
+- Keine automatische Planänderung ohne Freigabe.
+- Keine medizinische Diagnose.
+- Kein Ersatz für intervals.icu als Kalender und Geräte-Sync.
+- Keine intervals-Fachbegriffe in der Oberfläche.
+
+---
+
+## 7. Log
+
+| Datum | Änderung |
+|---|---|
+| 30.10.2026 | Dokument angelegt, E-01 bis E-07, F-01 bis F-09 |
+| 30.10.2026 | Diskussion: D-01 bis D-11, E-08 bis E-11, A-01 bis A-11, Etappen 2–4 |
+| 30.10.2026 | Etappe 2 umgesetzt: Erholung mit Tageswert/Schnitt/üblich, Klartext-Erklärung, deutsche Begriffe, drei Countdowns, PWA, Deployment-Doku |
+| 30.10.2026 | E-12, E-13 und F-10 (Kalibrierung) mit Vergleichsrechnung aufgenommen; Entscheidung offen |
+| 30.10.2026 | Bevel-Logik dokumentiert (E-14, E-15), Pakete P1–P4 in F-11 gerechnet |
+| 30.10.2026 | D-12 entschieden und umgesetzt: P1 (Bevel-Logik), Etappe 2b abgeschlossen |
+| 30.10.2026 | E-16 (Zepp-API) und F-12 (Schlafscore/Phasen) aufgenommen; Entscheidung offen |
+| 30.10.2026 | E-17 (CIRQA Smart Band) und F-13 (Test) aufgenommen; Entscheidung offen |
+| 31.10.2026 | E-18 (Health Sync, Geräteunabhängigkeit) und E-19 (felsr als Referenz) aufgenommen |
+| 31.10.2026 | D-13 (Trends entfällt) und D-14 (Verpflegungsrechner) entschieden und umgesetzt, Etappe 2c |
+| 31.10.2026 | E-20 und D-15: fehlende Nacht von heute zeigt den letzten Stand, Schlafdefizit ignoriert Lücken |
+| 31.10.2026 | E-21 und D-16: Ahornsirup als Quelle, Salz je Shot in Gramm |
+| 31.10.2026 | D-17: Wasser fliegt aus dem Zeitplan, Shotgröße bekommt einen Vorschlag |
+| 31.10.2026 | E-22 und D-18: erster Praxistest (73 g in 1:51) kalibriert „Locker“ auf 0,90 |
+| 31.10.2026 | E-23 und D-19: Shotgröße in Gramm oder Milliliter, Standard Gramm |
+| 31.10.2026 | E-24 und D-20: Erholung auf 21-Tage-Referenz, voller Tageswert, 25 Punkte je SD |
+| 31.10.2026 | E-25: intervals.icu kann keine Schlafphasen liefern – geprüft an API und Schema |
+| 31.10.2026 | E-26, D-21 und D-22: hrvSDNN verworfen, Bevel-Abgleich gebaut, sieben Tage sammeln |
+| 31.10.2026 | E-27 und D-23: 8 Dubletten aus Garmin + Health Sync entfernt, Prüfung in Sync und als `tc dedupe` |
+| 31.10.2026 | Cockpit läuft auf dem Homeserver (Docker, Port 8100, Cron 07:00), Sync lädt nur noch 19 Felder statt 40 |
+| 31.10.2026 | E-28 und D-24: Vault auf die Urteils-Ebene reduziert, 330 Notizen entfernt, `tc woche` ersetzt die Wochen-Notizen |
+| 01.11.2026 | D-25: Atmung aus der Anzeige, „gestern"-Marker für alte Werte, Sync-Knopf im mobilen Kopf, Safe-Area, Countdowns untereinander |
+| 01.11.2026 | D-26 hebt D-15 und die Renormierung auf: Score nur bei vollständigen Daten von heute, sonst „Keine Daten" |
+| 01.11.2026 | D-27: Eingabefelder auf 16 px gegen den Safari-Zoom, Zahlentastatur und „Fertig" schließt sie; geprüft bei 390 px Breite (keine horizontale Ausdehnung) |
+| 01.11.2026 | E-29 und D-28: Oberflächenprüfung gegen *unslop* (12 Funde), Regeln als `UI-REGELN.md` festgeschrieben, ab jetzt verbindlich |
+| 01.11.2026 | D-29: Richtung B+ gebaut und auf dem Server — neue Rampe, Serif/Mono-Schriften selbst gehostet, Instrument-Uhr, Wochenstreifen, Tabellen, recharts entfernt |

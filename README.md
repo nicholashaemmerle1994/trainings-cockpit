@@ -1,0 +1,242 @@
+# Trainings- & Recovery-Cockpit
+
+Lokales Dashboard für Training und Erholung. Garmin und Amazfit/Zepp laufen in
+intervals.icu zusammen; das Cockpit bewertet die Erholung, zeigt Belastung und
+Form in verständlicher Sprache und begleitet die Saisonziele.
+
+**Stand:** Etappe 2d — Oberfläche neu gebaut (Richtung B+ nach *unslop*, D-29),
+Erholung nur aus vollständigen Daten von heute (D-26), Verpflegungsrechner,
+iPhone-taugliche Web-App. Läuft auf dem Homeserver.
+
+![Heute](docs/img/today.png)
+
+## Was drin ist
+
+| Seite | Inhalt |
+|---|---|
+| **Heute** | Erholung mit Klartext-Erklärung, Treibern (heute / Schnitt / üblich), Schlaf, HRV, Ruhepuls, Frische, Countdowns, Bevel-Abgleich, letzte 7 Tage, geplante Einheiten |
+| **Verpflegung** | Kohlenhydratrechner für zwei Modi: Locker (Long Run, Zone 2) und Wettkampf. Ergebnis in Gramm je Stunde, Getränk, Gels, Wasser, Salz, Zeitplan und Einkaufsliste |
+| **Aktivitäten** | alle Einheiten mit Filter nach Sportart, Dauer, Distanz, Pace, Belastung |
+
+Dazu: Dark UI, mobiles Layout, installierbar auf dem iPhone (PWA),
+Sync-Knopf, Saison-Countdowns.
+
+<p>
+  <img src="docs/img/fuel.png" width="76%" alt="Verpflegung" />
+  <img src="docs/img/mobile.png" width="22%" alt="Handy" />
+</p>
+
+## Begriffe
+
+Keine intervals-Fachbegriffe in der Oberfläche:
+
+| Intern | Anzeige | Bedeutung |
+|---|---|---|
+| CTL | **Fitness** | langfristige Trainingsbelastung (42 Tage) |
+| ATL | **Müdigkeit** | kurzfristige Belastung (7 Tage) |
+| TSB | **Frische** | Fitness minus Müdigkeit |
+| ACWR | **Belastungsverhältnis** | 7 Tage im Verhältnis zu 28 Tagen |
+| Load | **Belastung** | Trainingspunkte einer Einheit |
+
+## Erholung
+
+Nachtsignale, gewichtetes Mittel. Die letzte Nacht zählt vollständig; verglichen
+wird mit den eigenen letzten drei Wochen.
+**Training fließt nicht direkt ein** – Belastung wirkt über die nächste Nacht.
+
+**Alles oder nichts (D-26):** Ein Wert entsteht nur, wenn HRV, Ruhepuls, Schlaf
+**und** Atmung von heute vorliegen. Fehlt eines, zeigt das Cockpit „Keine Daten"
+und nennt das fehlende Signal — kein Teilwert, keine Hochrechnung aus dem Rest,
+kein Wert von gestern.
+
+| Signal | Gewicht | Basis |
+|---|---|---|
+| HRV | 35 % | Tageswert gegen die eigene 21-Tage-Referenz (z-Score) |
+| Ruhepuls | 20 % | dito, invertiert |
+| Schlaf | 30 % | 50 % Dauer gegen 7:30 h, 50 % Schlafscore |
+| Atmung | 5 % | Nachtschnitt gegen 21-Tage-Referenz, niedriger = besser |
+| SpO₂ | 5 % | **nur Abzug** unter 95 % oder ≥ 2 Punkte unter Referenz |
+
+Skala: `68 + 25·z` – ein normaler Tag ergibt 68, +1 SD 93, −1 SD 43.
+Ampel: ≥ 70 gut erholt, 50–69 solide, 35–49 Erholungsbedarf, < 35 Ruhetag.
+Jeder Wert zeigt **heute**, **Schnitt** und **üblich**; darunter erklärt ein Satz
+den Score. Ausreißer (z. B. HRV 255) werden gefiltert. Temperatur fehlt aktuell
+in den Daten und wird ergänzt, sobald sie verfügbar ist.
+
+## Verpflegung
+
+Zwei Modi, ein Rechenweg. Die Zahlen hängen an der Dauer, nicht am Gewicht –
+die Grenze sitzt in der Darmwand, nicht in der Muskelmasse.
+
+| Dauer | Locker | Wettkampf |
+|---|---|---|
+| < 45 min | 0 g/h | 0 g/h |
+| 45–75 min | 20 g/h | 25 g/h |
+| 75–120 min | 40 g/h | 50 g/h |
+| 2–3 h | 55 g/h | 65 g/h |
+| 3–4 h | 70 g/h | 85 g/h |
+| > 4 h | 75 g/h | 90 g/h |
+
+„Locker“ ist an den ersten eigenen Lauf kalibriert (73 g für 17 km in 1:51,
+D-18), nicht an den Literaturfaktor.
+
+- **Deckel 90 g/h.** Ab 60 g/h nur mit Glukose *und* Fruktose – sonst bleibt
+  der Rest im Darm liegen.
+- **Zwei Quellen zur Wahl.** *Gels & Pulver*: Getränk und Gels teilen sich die
+  Stunde, Konzentration im Getränk bleibt unter 8 %. *Ahornsirup*: alles kommt
+  aus den Shots, die Flasche trägt nur Wasser.
+- **Wasser und Salz** skalieren mit Dauer und Temperatur. Getrunken wird nach
+  Durst, nie über die Schweissrate.
+- **Drumherum:** Vortag (nur Wettkampf ab 2,5 h), Frühstück 3 h vorher, danach
+  Kohlenhydrate plus Eiweiß. Gewicht zählt nur hier.
+
+### Ahornsirup
+
+65,3 g Kohlenhydrate je 100 g, Dichte 1,33 g/ml – 100 ml sind rund 87 g
+Kohlenhydrate. Ein Shot von 50 ml wiegt 66 g und bringt 43 g, also etwa zwei Gels.
+
+| Einheit | ml Sirup / h | Shots à 50 ml | Takt | Salz je Shot |
+|---|---|---|---|---|
+| 1:51 locker | 46 | 2 | alle 65 min | 1,10 g |
+| 2 h locker | 63 | 3 | alle 47 min | 0,80 g |
+| 2 h Wettkampf | 75 | 3 | alle 40 min | 1,02 g |
+| 3 h Wettkampf | 98 | 6 | alle 31 min | 0,78 g |
+| 4 h Wettkampf | 104 | 8 | alle 29 min | 0,74 g |
+
+Salz rechnet der Rechner in Gramm, weil man es abwiegt: 1 g Natrium entspricht
+2,54 g Kochsalz. Zu jedem Shot gehören ein paar Schluck Wasser — **Wasser steht
+nicht im Zeitplan**, es läuft nebenher und ohne Kohlenhydrate. Passt die
+Shotgröße schlecht zur Stunde, schlägt die Seite eine passendere vor.
+
+Grundlage: Dauerbänder nach ACSM/IOC-Konsens, Mitte des Bandes statt oberes Ende.
+Referenz und Rechenkern: [felsr.com/verpflegung](https://felsr.com/verpflegung).
+Siehe E-19 in [docs/ENTSCHEIDUNGEN.md](docs/ENTSCHEIDUNGEN.md).
+
+## Oberfläche
+
+Die Gestaltung folgt den Regeln in [docs/UI-REGELN.md](docs/UI-REGELN.md)
+(übernommen aus *unslop* von Damir Sokolovsky, CC BY 4.0): ein helles Element je
+Bildschirm, ruhiger Rahmen, eine getönte Neutralrampe, ein Akzent, keine
+Verläufe über Flächen, keine Sparklines in Kennzahlen, Sentence case, 4-px-Raster.
+
+- **Drei Schriften, selbst gehostet.** Instrument Serif für Titel und
+  Countdown-Zahlen, Plex Sans für Text, Plex Mono für alles Zählbare
+  (`web/public/fonts/`, 97 kB zusammen, kein Aufruf an Google).
+- **Ein Akzent.** Wörthersee-Teal markiert Aktion, Auswahl und den heutigen Tag.
+  Grün, Gelb, Orange, Rot erscheinen nur als Befund der Erholung.
+- **Die Uhr ist ein Instrument.** Zonenring, Referenzmarke auf den
+  21-Tage-Schnitt, Skalen in den Treiberzeilen.
+- **Kein Diagramm-Paket.** Die Lastkurve ist von Hand als SVG gezeichnet;
+  recharts ist raus, das Bündel liegt bei 251 kB.
+
+## Datenquellen
+
+| Quelle | Rolle |
+|---|---|
+| **intervals.icu** | einzige Schnittstelle des Cockpits: Aktivitäten, Wellness (Schlaf, HRV, Ruhepuls), Kalender |
+| **Health Sync** | schickt Garmin- und Apple-Health-Daten nach intervals.icu (seit 31.10.2026) |
+| **Garmin Personal API** | Aktivitäten und FIT-Dateien, Gewicht (Phase 0 geprüft) |
+| **Zepp/Amazfit** | liefert über intervals.icu; die Helio trägt die Nachtdaten |
+
+Das Cockpit kennt **keine Gerätemarke**. Alles kommt über intervals.icu, damit
+ein Wechsel auf Coros oder ein anderes Gerät ohne Codeänderung funktioniert
+(E-18). Die Daten liegen in einer eigenen SQLite-DB (`data/cockpit.db`); der
+Garmin-Direktzugriff ist vorbereitet und wird in Etappe 3 ergänzt.
+
+## Schnellstart (lokal)
+
+```bash
+cd trainings-cockpit
+cp .env.example .env
+chmod 600 .env          # Keys eintragen
+uv sync
+
+uv run tc doctor --online
+uv run tc sync --days 365
+uv run tc serve
+```
+
+Frontend einmal bauen:
+
+```bash
+cd web && npm install && npm run build && cd ..
+```
+
+Dann **http://127.0.0.1:8000** öffnen.
+
+## Entwicklung
+
+```bash
+uv run tc serve --reload      # API mit Auto-Reload
+cd web && npm run dev         # Frontend mit HMR auf :5173
+```
+
+## Docker / Homeserver
+
+```bash
+TC_UID=$(id -u) TC_GID=$(id -g) docker compose up -d --build
+```
+
+Details, HTTPS über Tailscale, Backup und iPhone-Installation:
+[docs/DEPLOY.md](docs/DEPLOY.md).
+
+## Befehle
+
+| Befehl | Zweck |
+|---|---|
+| `tc doctor [--online]` | Keys, Rechte und Verbindungen prüfen |
+| `tc sync --days 365` | intervals.icu in die lokale DB laden |
+| `tc serve [--port 8000]` | Dashboard starten |
+| `tc fetch intervals --days 90` | Rohdaten als JSON sichern |
+| `tc fetch garmin --days 30 --fit` | Garmin-Aktivitäten, Schlaf, HRV, FIT-Test |
+| `tc dedupe` | doppelt aufgezeichnete Einheiten entfernen |
+| `tc push-test` | Test-Workout nach intervals.icu pushen und prüfen |
+| `tc report` | Phase-0-Befund als Markdown |
+
+## Tests
+
+```bash
+uv run pytest
+cd web && npm run build
+```
+
+70 Backend-Tests: Metriken, DB-Upserts, API, intervals-Client,
+Garmin-Normalisierung, Verpflegungsrechner.
+
+## Struktur
+
+```
+docs/ENTSCHEIDUNGEN.md   Erkenntnisse, Fragen und Entscheidungen (Grundlage für Änderungen)
+docs/KONZEPT.md          Architektur, Metriken, Saisonplan
+docs/PHASE0-BEFUND.md    Datenlage und Befund vom 30.10.2026
+docs/DEPLOY.md           Homeserver, HTTPS, Backup, iPhone
+src/trainings_cockpit/
+  api.py                 FastAPI + Auslieferung des Frontends
+  metrics.py             Erholung, Fitness/Müdigkeit, Wochen, Serien
+  fuel.py                Verpflegung: Kohlenhydrate, Getränk, Wasser, Salz, Zeitplan
+  db.py                  SQLite-Schema und Upserts
+  sync.py                intervals.icu → DB
+  sources/               intervals- und Garmin-Client
+  spike/                 Phase-0-Werkzeuge
+docs/UI-REGELN.md        Gestaltungsregeln (unslop), gelten für jede Oberfläche
+web/src/
+  pages/                 Heute, Verpflegung, Aktivitäten
+  components/            Uhr, Diagramm, Wochenstreifen, Tabelle, Karten
+  styles.css             Tokens, Layout, Komponenten
+web/public/fonts/        Plex Sans, Plex Mono, Instrument Serif (selbst gehostet)
+tests/                   pytest
+```
+
+## Regeln
+
+- Änderungen werden zuerst in [docs/ENTSCHEIDUNGEN.md](docs/ENTSCHEIDUNGEN.md)
+  entschieden, dann umgesetzt.
+- Keys nur in `.env` (`chmod 600`), niemals im Repo.
+- Keine Cloud, kein Multi-User: der Garmin-Key ist persönlich.
+- `data/` enthält Gesundheitsdaten und ist gitignored.
+
+## Nächste Schritte
+
+1. **Etappe 3:** Morgen-Check-in, Schlafdetails, Datenqualität, Plan vs. Ist,
+   Garmin-Aktivitäten direkt in die DB.
+2. **Etappe 4:** Wirkungsanalyse der Einheiten, Bevel-Ablösung, eigene Planung.

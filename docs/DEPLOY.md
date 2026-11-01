@@ -1,0 +1,93 @@
+# Deployment auf dem Homeserver
+
+Das Cockpit läuft als Docker-Container, 24/7, mit lokaler SQLite-DB.
+Keine Cloud, keine offenen Ports nach außen.
+
+## Voraussetzungen
+
+- Docker + Docker Compose auf dem Server (Linux, NAS oder Raspberry Pi)
+- Dieses Projekt auf dem Server (git clone oder kopieren)
+- `.env` mit den Keys (siehe `.env.example`)
+
+## Start
+
+```bash
+cd trainings-cockpit
+cp .env.example .env
+chmod 600 .env
+# Keys eintragen: INTERVALS_API_KEY, GARMIN_PERSONAL_API_KEY
+
+TC_UID=$(id -u) TC_GID=$(id -g) docker compose up -d --build
+```
+
+Aufruf im LAN: `http://<server-ip>:8000`
+
+Der Container läuft als dein Benutzer, damit er in `./data` schreiben darf.
+Auf einem NAS ohne Shell-Benutzer kannst du `TC_UID`/`TC_GID` auch fest setzen
+(z. B. `1000:1000`) und den Ordner `data/` entsprechend berechtigen.
+
+## iPhone: App auf dem Home-Bildschirm
+
+1. Seite in **Safari** öffnen (nicht Chrome).
+2. Teilen-Symbol → **Zum Home-Bildschirm**.
+3. Name „Cockpit" bestätigen.
+
+Die Seite startet dann ohne Browser-Leiste. Für Installierbarkeit und
+Service-Worker ist HTTPS empfehlenswert; im LAN funktioniert es auch über HTTP,
+nur ohne Offline-Cache.
+
+## HTTPS über Tailscale (empfohlen)
+
+Wenn der Server in deinem Tailnet ist:
+
+```bash
+tailscale serve --bg 8000
+```
+
+Dann die angezeigte `https://…ts.net`-Adresse auf dem iPhone öffnen und
+installieren. Kein Port im Internet, kein Zertifikat manuell.
+
+## Daten und Backup
+
+Alles liegt unter `./data`:
+
+```
+data/cockpit.db        SQLite-Datenbank
+data/raw/              Rohdumps (intervals, Garmin, Push-Tests)
+data/reports/          Phase-0-Befunde
+```
+
+Backup (täglich per cron):
+
+```bash
+sqlite3 data/cockpit.db ".backup 'backup/cockpit-$(date +%F).db'"
+```
+
+Die DB ist im WAL-Modus; für ein konsistentes Backup immer `.backup` verwenden,
+nicht einfach die Datei kopieren.
+
+## Update
+
+```bash
+git pull
+TC_UID=$(id -u) TC_GID=$(id -g) docker compose up -d --build
+```
+
+## Betrieb prüfen
+
+```bash
+docker compose ps
+docker compose logs -f cockpit
+curl -s http://127.0.0.1:8000/api/health
+```
+
+## Sync
+
+Aktuell wird per Knopf im Dashboard oder per CLI synchronisiert:
+
+```bash
+docker compose exec cockpit tc sync --days 365
+```
+
+Ein automatischer Scheduler (morgens/abends) ist noch nicht eingebaut und
+kommt in einer späteren Etappe.

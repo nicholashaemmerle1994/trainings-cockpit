@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="de" data-v="a">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Cockpit — Richtung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=Instrument+Serif:wght@400&display=swap" rel="stylesheet" />
+<style>
+  html[data-v="a"] {
+    --bg: #161513;
+    --side: #12110f;
+    --card: #1c1a18;
+    --raised: #262421;
+    --line: rgba(239, 233, 222, 0.08);
+    --line-strong: rgba(239, 233, 222, 0.16);
+    --text: #efe9de;
+    --text-2: #aaa398;
+    --text-3: #8a847a;
+    --accent: #efe9de;
+    --on-accent: #161513;
+    --good: #6fae86;
+    --mid: #cfa04f;
+    --low: #d1733c;
+  }
+  html[data-v="b"] {
+    --bg: #0b0d14;
+    --side: #07080d;
+    --card: #11141c;
+    --raised: #1a1e28;
+    --line: rgba(238, 240, 245, 0.08);
+    --line-strong: rgba(238, 240, 245, 0.16);
+    --text: #eef0f5;
+    --text-2: #a3a9b8;
+    --text-3: #7a8296;
+    --accent: #3f9e8f;
+    --on-accent: #04100e;
+    --good: #4cc38a;
+    --mid: #d0a54e;
+    --low: #d8763f;
+  }
+
+  html[data-v="c"] {
+    --bg: #08090f;
+    --side: #06070c;
+    --card: #11141c;
+    --raised: #1a1e28;
+    --line: rgba(238, 240, 245, 0.08);
+    --line-strong: rgba(238, 240, 245, 0.16);
+    --text: #eef0f5;
+    --text-2: #a3a9b8;
+    --text-3: #7a8296;
+    --accent: #3f9e8f;
+    --on-accent: #04100e;
+    --good: #4cc38a;
+    --mid: #d0a54e;
+    --low: #d8763f;
+    --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  }
+
+  html[data-v="c"] h1 {
+    font-family: var(--serif);
+    font-size: 42px;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.05;
+  }
+
+  html[data-v="c"] .cd-n { font-family: var(--serif); font-size: 34px; font-weight: 400; letter-spacing: 0; }
+
+  .c-only { display: none; }
+
+  html[data-v="c"] .c-only { display: block; }
+  html[data-v="c"] .c-only.cell { display: table-cell; }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono, .n { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+  .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100dvh; }
+
+  /* ---------------------------------------------------------- Seitenleiste */
+  .side {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 24px 16px;
+    background: var(--side);
+    border-right: 1px solid var(--line);
+  }
+
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 0; font-size: 16px; font-weight: 500; }
+
+  .brand svg { display: block; color: var(--text-2); }
+
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+
+  .nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 8px;
+    color: var(--text-2);
+    text-decoration: none;
+    font-size: 14px;
+  }
+
+  .nav a svg { flex: none; color: var(--text-3); }
+
+  .nav a.active {
+    background: var(--raised);
+    color: var(--text);
+    box-shadow: inset 0 1px 0 var(--line-strong);
+  }
+
+  .nav a.active svg { color: var(--text-2); }
+
+  .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; padding: 0 8px; }
+
+  .who { font-size: 13px; color: var(--text-2); }
+
+  .who span { display: block; font-size: 11px; color: var(--text-3); }
+
+  /* ------------------------------------------------------------- Inhalt */
+  main { padding: 32px 32px 64px; max-width: 1360px; }
+
+  .page-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  h1 { margin: 0; font-size: 28px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.15; }
+
+  .meta { margin: 6px 0 0; font-size: 11.5px; color: var(--text-3); }
+
+  .btn {
+    height: 36px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .btn-quiet {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  /* ------------------------------------------------------------ Countdown */
+  .countdowns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+
+  .cd { display: block; padding: 20px 0 20px 20px; }
+
+  .cd:first-child { padding-left: 0; }
+
+  .cd + .cd { border-left: 1px solid var(--line); }
+
+  .cd-top { display: flex; align-items: baseline; gap: 6px; }
+
+  .cd-n { font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
+
+  .cd-u { font-size: 12px; color: var(--text-3); }
+
+  .cd-name { display: block; margin-top: 2px; font-size: 13px; color: var(--text-2); }
+
+  /* ---------------------------------------------------------------- Karten */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+
+  h2 { margin: 0; font-size: 15px; font-weight: 500; }
+
+  .card-sub { margin: 3px 0 0; font-size: 12.5px; color: var(--text-3); }
+
+  .hero { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 16px; margin-top: 24px; }
+
+  .right { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  /* ------------------------------------------------------------ Erholung */
+  .recovery { padding: 20px; display: flex; flex-direction: column; }
+
+  .dial { display: grid; place-items: center; padding: 8px 0 0; }
+
+  .score { font-family: "IBM Plex Mono", monospace; font-size: 56px; font-weight: 500; line-height: 1; letter-spacing: -0.02em; }
+
+  .band { margin-top: -4px; font-size: 13px; color: var(--good); }
+
+  .drivers { width: 100%; margin-top: 20px; border-collapse: collapse; }
+
+  .drivers th { padding-bottom: 6px; font-size: 10.5px; font-weight: 400; color: var(--text-3); text-align: right; }
+
+  .drivers th:first-child { text-align: left; }
+
+  .drivers td { padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; text-align: right; }
+
+  .drivers td:first-child { text-align: left; color: var(--text-2); }
+
+  .drivers .today { color: var(--text); }
+
+  .drivers .avg { color: var(--text-2); }
+
+  .drivers .base { color: var(--text-3); }
+
+  .recovery .note { margin: 16px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+
+  /* Skala je Treiber: Haarlinie, Marke für üblich, Strich für heute */
+  .track { display: none; position: relative; width: 66px; height: 1px; margin-left: 10px; background: var(--line-strong); vertical-align: middle; }
+
+  html[data-v="c"] .track { display: inline-block; }
+
+  .track u { position: absolute; top: -3px; left: 50%; width: 1px; height: 7px; background: var(--text-3); text-decoration: none; }
+
+  .track b { position: absolute; top: -4px; width: 2px; height: 10px; background: var(--text); }
+
+  /* Wochenstreifen: sieben Tage Last */
+  .week-strip { display: none; margin-top: 14px; }
+
+  html[data-v="c"] .week-strip { display: block; }
+
+  .week-bars { display: grid; grid-template-columns: repeat(7, 1fr); align-items: end; gap: 6px; height: 64px; padding-bottom: 0; border-bottom: 1px solid var(--line); }
+
+  .week-bars i { display: block; background: rgba(238, 240, 245, 0.14); border-radius: 2px 2px 0 0; min-height: 3px; }
+
+  .week-bars i.peak { background: rgba(238, 240, 245, 0.34); }
+
+  .week-bars i.today { background: var(--accent); min-height: 5px; }
+
+  .week-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 6px; font-family: "IBM Plex Mono", monospace; font-size: 9.5px; color: var(--text-3); text-align: center; }
+
+  .week-days .today { color: var(--accent); }
+
+  /* ---------------------------------------------------------- Kennzahlen */
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-content: start; }
+
+  .stat { padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+
+  .stat .k { display: block; font-size: 12px; color: var(--text-3); }
+
+  .stat .v { display: block; margin-top: 10px; font-family: "IBM Plex Mono", monospace; font-size: 30px; font-weight: 500; line-height: 1; letter-spacing: -0.01em; }
+
+  .stat .v small { margin-left: 4px; font-size: 13px; font-weight: 400; color: var(--text-3); }
+
+  .stat .s { display: block; margin-top: 12px; font-size: 11.5px; color: var(--text-3); }
+
+  /* --------------------------------------------------------------- Bevel */
+  .bevel { padding: 16px 20px; }
+
+  .bevel-row { display: flex; align-items: center; gap: 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
+
+  .bevel-row .d { color: var(--text-3); font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+
+  .bevel-row .pair { margin-left: auto; display: flex; gap: 16px; }
+
+  .bevel-field { display: flex; align-items: center; gap: 8px; }
+
+  .bevel-field span { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+
+  .bevel-field input { width: 52px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); color: var(--text); font-family: "IBM Plex Mono", monospace; font-size: 16px; text-align: right; }
+
+  /* -------------------------------------------------------------- Diagramm */
+  .split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+
+  .chart { padding: 20px; }
+
+  .legend { display: flex; gap: 16px; margin-top: 12px; font-size: 11.5px; color: var(--text-3); }
+
+  .legend span { display: flex; align-items: center; gap: 6px; }
+
+  .legend i { display: block; width: 14px; height: 0; border-top: 1.5px solid var(--text-2); }
+
+  .legend i.dotted { border-top-style: dotted; border-color: var(--text-3); }
+
+  .chart svg { display: block; width: 100%; height: auto; margin-top: 8px; overflow: visible; }
+
+  /* ------------------------------------------------------------ Wochenband */
+  .week { padding: 20px; }
+
+  .week-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+
+  .week-row span:first-child { color: var(--text-2); }
+
+  .week-row span:last-child { font-family: "IBM Plex Mono", monospace; font-size: 14px; }
+
+  .week h3 { margin: 16px 0 4px; font-size: 11.5px; font-weight: 400; color: var(--text-3); }
+
+  .plan-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 7px 0; font-size: 13px; }
+
+  .plan-row .m { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--text-3); }
+
+  /* ------------------------------------------------------------ Liste */
+  .acts { margin-top: 16px; padding: 20px; }
+
+  .acts-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+
+  .acts-head a { font-size: 12.5px; color: var(--text-2); text-decoration: none; }
+
+  table.list { width: 100%; border-collapse: collapse; }
+
+  table.list th { padding: 0 0 8px; border-bottom: 1px solid var(--line); font-size: 10.5px; font-weight: 400; color: var(--text-3); text-align: left; }
+
+  table.list th.r, table.list td.r { text-align: right; }
+
+  table.list td { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+
+  table.list tr:last-child td { border-bottom: 0; }
+
+  table.list .date { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
+
+  table.list .sport { color: var(--text-2); }
+
+  table.list .num { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+
+  table.list .load { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--text); }
+
+  /* --------------------------------------------------------------- Handy */
+  /* Umschalter der beiden Richtungen — gehört zum Mockup, nicht zum Produkt */
+  .switch {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 99;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--card);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .switch button {
+    width: 34px;
+    height: 28px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-3);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .switch button.on {
+    background: var(--raised);
+    color: var(--text);
+  }
+
+  .switch span {
+    display: flex;
+    align-items: center;
+    padding: 0 8px 0 6px;
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
+    color: var(--text-3);
+  }
+
+  @media (max-width: 1000px) {
+    .app { grid-template-columns: minmax(0, 1fr); }
+    .side { display: none; }
+    main { padding: 20px 20px 48px; }
+    h1 { font-size: 22px; }
+    html[data-v="c"] h1 { font-size: 32px; }
+    html[data-v="c"] .cd-n { font-size: 28px; }
+    .page-head { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+    .btn { height: 34px; padding: 0 14px; font-size: 13px; white-space: nowrap; justify-self: start; }
+    .countdowns { grid-template-columns: minmax(0, 1fr); }
+    .cd { padding: 14px 0; border-left: 0 !important; border-top: 1px solid var(--line); }
+    .cd:first-child { border-top: 0; padding-top: 16px; }
+    .cd-top { justify-content: flex-start; }
+    .hero { grid-template-columns: minmax(0, 1fr); }
+    .split { grid-template-columns: minmax(0, 1fr); }
+    .bevel-row { flex-wrap: wrap; }
+    .bevel-row .pair { margin-left: 0; }
+    .recovery { padding: 16px; }
+
+    /* Liste ohne Tabelle: eine Einheit ist ein Block aus zwei Zeilen */
+    table.list thead { display: none; }
+    table.list, table.list tbody, table.list tr, table.list td { display: block; }
+    table.list tr { padding: 12px 0; border-bottom: 1px solid var(--line); }
+    table.list td { padding: 0; border-bottom: 0; }
+    table.list td.date { font-size: 11px; }
+    table.list td .sport { display: none; }
+    table.list td.r { text-align: left; display: inline-block; margin-top: 3px; }
+    table.list td.r + td.r { margin-left: 14px; }
+    table.list td.load { float: right; margin-top: 3px; }
+    table.list td.hide-m { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Cockpit
+    </div>
+    <nav class="nav">
+      <a class="active" href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>Heute</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3h8M10 3v6l-4 8a3 3 0 0 0 2.7 4h6.6A3 3 0 0 0 18 17l-4-8V3"/></svg>Verpflegung</a>
+      <a href="#"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Aktivitäten</a>
+    </nav>
+    <div class="side-foot">
+      <div class="who">Nicholas Pahr<span>Sync 07:02</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="page-head">
+      <div>
+        <h1>Sonntag, 1. November</h1>
+        <p class="meta">Zuletzt synchronisiert 07:02</p>
+      </div>
+      <button class="btn">Aktualisieren</button>
+    </header>
+
+    <section class="countdowns">
+      <div class="cd">
+        <div class="cd-top"><span class="cd-n mono">20</span><span class="cd-u">Tage</span></div>
+        <span class="cd-name">Halbmarathon</span>
+      </div>
+      <div class="cd">
+        <div class="cd-top"><span class="cd-n mono">168</span><span class="cd-u">Tage</span></div>
+        <span class="cd-name">Vienna City Marathon</span>
+      </div>
+      <div class="cd">
+        <div class="cd-top"><span class="cd-n mono">224</span><span class="cd-u">Tage</span></div>
+        <span class="cd-name">IRONMAN Kärnten-Klagenfurt</span>
+      </div>
+    </section>
+
+    <section class="hero">
+      <article class="card recovery">
+        <div class="card-head">
+          <div>
+            <h2>Erholung</h2>
+            <p class="card-sub">Nacht vom 30. Oktober</p>
+          </div>
+        </div>
+
+        <div class="dial">
+          <svg width="252" height="252" viewBox="0 0 252 252" aria-label="Erholung 93 von 100">
+            <g id="bezel" stroke="var(--line-strong)" stroke-width="1"></g>
+            <g id="zones" fill="none" stroke-width="3"></g>
+            <circle cx="126" cy="126" r="96" fill="none" stroke="var(--raised)" stroke-width="6"/>
+            <circle cx="126" cy="126" r="96" fill="none" stroke="var(--good)" stroke-width="6" stroke-linecap="round"
+                    stroke-dasharray="562 603" transform="rotate(-90 126 126)"/>
+            <g id="ref"></g>
+            <text x="126" y="132" text-anchor="middle" class="score" fill="var(--text)">93</text>
+            <text x="126" y="156" text-anchor="middle" fill="var(--good)" font-size="12.5" font-family="IBM Plex Sans, sans-serif">Gut erholt</text>
+            <text id="reftext" x="126" y="186" text-anchor="middle" fill="var(--text-3)" font-size="10.5" font-family="IBM Plex Mono, monospace">21-Tage-Schnitt 84</text>
+          </svg>
+        </div>
+
+        <table class="drivers">
+          <thead>
+            <tr><th></th><th>heute</th><th>Schnitt</th><th>üblich</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="lbl">HRV<i class="track"><u></u><b style="left: 90%"></b></i></td><td class="today mono">39 ms</td><td class="avg mono">32</td><td class="base mono">31</td></tr>
+            <tr><td class="lbl">Ruhepuls<i class="track"><u></u><b style="left: 63%"></b></i></td><td class="today mono">57 bpm</td><td class="avg mono">61</td><td class="base mono">61</td></tr>
+            <tr><td class="lbl">Schlaf<i class="track"><u></u><b style="left: 63%"></b></i></td><td class="today mono">7:59 h</td><td class="avg mono">7:47</td><td class="base mono">7:30</td></tr>
+          </tbody>
+        </table>
+
+        <p class="note">HRV und Ruhepuls liegen über dem Schnitt, der Schlaf war lang. Belastung fließt nicht direkt ein, sie wirkt über die nächste Nacht.</p>
+      </article>
+
+      <div class="right">
+        <div class="stats">
+          <div class="stat">
+            <span class="k">Schlaf</span>
+            <span class="v">7:59<small>h</small></span>
+            <span class="s">Schlafscore 73 · Defizit 0,2 h</span>
+          </div>
+          <div class="stat">
+            <span class="k">HRV</span>
+            <span class="v">39<small>ms</small></span>
+            <span class="s">Schnitt 32 · üblich 31 ms</span>
+          </div>
+          <div class="stat">
+            <span class="k">Ruhepuls</span>
+            <span class="v">57<small>bpm</small></span>
+            <span class="s">Schnitt 61 · üblich 61 bpm</span>
+          </div>
+          <div class="stat">
+            <span class="k">Frische</span>
+            <span class="v">−21</span>
+            <span class="s">Fitness 54,0 · Müdigkeit 75,4</span>
+          </div>
+        </div>
+
+        <section class="card bevel">
+          <div class="card-head">
+            <div>
+              <h2>Bevel-Abgleich</h2>
+              <p class="card-sub">Zweite Meinung zum selben Morgen</p>
+            </div>
+            <div class="bevel-field">
+              <span>Bevel heute</span>
+              <input type="number" inputmode="numeric" value="94" />
+            </div>
+          </div>
+          <div class="bevel-row">
+            <span class="d">Fr., 30. Okt. · 1 von 7 Tagen</span>
+            <span class="pair">
+              <span class="mono">wir 93</span>
+              <span class="mono">Bevel 94</span>
+              <span class="mono" style="color: var(--text-3)">−1</span>
+            </span>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="split">
+      <article class="card chart">
+        <div class="card-head">
+          <div>
+            <h2>Belastung &amp; Frische</h2>
+            <p class="card-sub">Fitness 42 Tage, Müdigkeit 7 Tage, bis heute</p>
+          </div>
+        </div>
+        <div class="legend">
+          <span><i></i>Fitness</span>
+          <span><i class="dotted"></i>Müdigkeit</span>
+        </div>
+        <svg id="chart" viewBox="0 0 720 260" preserveAspectRatio="none"></svg>
+      </article>
+
+      <aside class="card week">
+        <div class="card-head">
+          <div>
+            <h2>Letzte 7 Tage</h2>
+            <p class="card-sub">Umfang und Plan</p>
+          </div>
+        </div>
+        <div class="week-strip">
+          <div class="week-bars">
+            <i style="height: 18%"></i><i style="height: 82%"></i><i style="height: 68%"></i><i style="height: 2%"></i><i style="height: 71%"></i><i class="peak" style="height: 100%"></i><i class="today" style="height: 2%"></i>
+          </div>
+          <div class="week-days">
+            <span>Mo 26</span><span>Di 27</span><span>Mi 28</span><span>Do 29</span><span>Fr 30</span><span>Sa 31</span><span class="today">So 1</span>
+          </div>
+        </div>
+        <div class="week-row"><span>Umfang</span><span>14,4 h</span></div>
+        <div class="week-row"><span>Belastung</span><span>743</span></div>
+        <div class="week-row"><span>Einheiten</span><span>18</span></div>
+        <div class="week-row" style="border-bottom: 0"><span>Belastungsverhältnis</span><span>1,32</span></div>
+        <h3>Geplant</h3>
+        <div class="plan-row"><span>Long Ride</span><span class="m">heute · 2:45 h</span></div>
+        <div class="plan-row"><span>Koppellauf</span><span class="m">heute · 20 min</span></div>
+        <div class="plan-row"><span>Dauerlauf</span><span class="m">Mo. · 1:09 h</span></div>
+      </aside>
+    </section>
+
+    <section class="card acts">
+      <div class="acts-head">
+        <h2>Letzte Aktivitäten</h2>
+        <a href="#">Alle ansehen</a>
+      </div>
+      <table class="list">
+        <thead>
+          <tr>
+            <th>Datum</th>
+            <th>Einheit</th>
+            <th class="r">Dauer</th>
+            <th class="r hide-m">Strecke</th>
+            <th class="r">Belastung</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="date">Sa., 31. Okt.</td><td><span class="sport">Laufen · </span>Wien – Long Run</td><td class="r num">1:52 h</td><td class="r num hide-m">17,0 km</td><td class="r load">137</td></tr>
+          <tr><td class="date">Fr., 30. Okt.</td><td><span class="sport">Schwimmen · </span>Schwimmbad</td><td class="r num">27 min</td><td class="r num hide-m">1,25 km</td><td class="r load">25</td></tr>
+          <tr><td class="date">Fr., 30. Okt.</td><td><span class="sport">Rad indoor · </span>Kurze leichte Aerobe</td><td class="r num">45 min</td><td class="r num hide-m">20,6 km</td><td class="r load">41</td></tr>
+          <tr><td class="date">Fr., 30. Okt.</td><td><span class="sport">Kraft · </span>Morning Weight Training</td><td class="r num">1:04 h</td><td class="r num hide-m">—</td><td class="r load">25</td></tr>
+          <tr><td class="date">Do., 29. Okt.</td><td><span class="sport">Mobility · </span>Entspannung und Konzentration</td><td class="r num">6 min</td><td class="r num hide-m">—</td><td class="r load">0</td></tr>
+          <tr><td class="date">Mi., 28. Okt.</td><td><span class="sport">Laufen · </span>Wien – Tempolauf</td><td class="r num">51 min</td><td class="r num hide-m">8,1 km</td><td class="r load">67</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<div class="switch" role="group" aria-label="Richtung">
+  <span>Richtung</span>
+  <button type="button" data-go="a" class="on">A</button>
+  <button type="button" data-go="b">B</button>
+  <button type="button" data-go="c">B+</button>
+</div>
+
+<script>
+  const CTL = [44.1,44.9,43.8,46.5,45.4,49.6,49.1,50.9,49.7,49.5,53.2,53.8,55.7,54.8,57.3,56.0,54.7,53.4,52.1,50.9,49.7,48.5,47.4,46.3,45.5,44.4,43.4,42.3,41.9,40.9,42.0,41.0,40.0,41.8,42.2,42.2,41.3,40.3,39.3,39.2,43.5,42.5,41.6,41.1,41.4,41.9,43.6,44.4,44.4,45.9,47.1,46.0,45.5,45.4,44.3,44.3,43.6,44.3,43.2,46.7,48.6,49.3,49.4,51.3,50.1,49.0,47.8,46.7,45.9,46.2,47.2,47.2,46.1,46.4,47.1,47.9,48.6,50.0,49.4,48.2,49.3,50.8,53.8,53.1,54.5,54.8,53.5,54.0,59.9,58.5];
+  const ATL = [52.4,56.0,48.5,63.2,54.8,77.1,70.8,77.8,67.4,63.9,83.2,82.8,89.3,80.1,90.7,78.7,68.2,59.1,51.2,44.4,38.5,33.4,28.9,25.1,23.5,20.4,17.6,19.3,19.9,17.3,26.3,22.8,19.7,32.7,36.9,37.8,32.8,28.4,24.6,25.6,51.9,45.4,39.7,41.1,43.0,45.8,54.8,62.6,60.0,66.4,73.5,63.7,58.3,56.1,48.7,48.0,43.5,47.2,40.9,60.9,69.7,71.2,71.8,80.1,72.4,62.7,54.4,47.1,42.7,44.6,50.8,54.8,47.7,49.4,53.1,56.7,62.8,69.0,62.7,54.4,63.7,70.4,84.7,76.6,81.5,83.0,71.9,75.4,84.4,72.4];
+
+  // Lünette: 60 Striche, jeder fünfte lang
+  const bezel = document.getElementById("bezel");
+  for (let i = 0; i < 60; i += 1) {
+    const a = (i / 60) * Math.PI * 2 - Math.PI / 2;
+    const long = i % 5 === 0;
+    const r1 = long ? 104 : 110;
+    const r2 = 117;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", 126 + Math.cos(a) * r1);
+    line.setAttribute("y1", 126 + Math.sin(a) * r1);
+    line.setAttribute("x2", 126 + Math.cos(a) * r2);
+    line.setAttribute("y2", 126 + Math.sin(a) * r2);
+    if (!long) line.setAttribute("opacity", "0.5");
+    bezel.appendChild(line);
+  }
+
+  // Diagramm: Achse mit Strichen, zwei Linien, heute markiert
+  const svg = document.getElementById("chart");
+  const narrow = window.innerWidth < 700;
+  const W = narrow ? 360 : 720, H = narrow ? 200 : 260, L = narrow ? 26 : 34, R = 12, T = 12, B = 26;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  svg.style.height = narrow ? "180px" : "auto";
+  const x = (i) => L + (i / (CTL.length - 1)) * (W - L - R);
+  const y = (v) => T + (1 - v / 100) * (H - T - B);
+  const el = (name, attrs) => {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  };
+
+  for (const level of [0, 25, 50, 75, 100]) {
+    svg.appendChild(el("line", { x1: L, x2: W - R, y1: y(level), y2: y(level), stroke: "var(--line)", "stroke-width": 1 }));
+    svg.appendChild(el("text", { x: L - 6, y: y(level) + 3.5, "text-anchor": "end", fill: "var(--text-3)", "font-size": narrow ? 9 : 10, "font-family": "IBM Plex Mono, monospace" })).textContent = level;
+  }
+
+  const path = (values) => values.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  svg.appendChild(el("path", { d: path(ATL), fill: "none", stroke: "var(--text-3)", "stroke-width": 1.25, "stroke-dasharray": "2 3", "stroke-linecap": "round" }));
+  svg.appendChild(el("path", { d: path(CTL), fill: "none", stroke: "var(--text-2)", "stroke-width": 1.5 }));
+
+  // ein Strich je Tag am unteren Rand
+  for (let i = 0; i < CTL.length; i += 1) {
+    svg.appendChild(el("line", { x1: x(i), x2: x(i), y1: H - B, y2: H - B + 5, stroke: "var(--line-strong)", "stroke-width": 1 }));
+  }
+
+  // heute
+  const last = CTL.length - 1;
+  svg.appendChild(el("line", { x1: x(last), x2: x(last), y1: T, y2: H - B, stroke: "var(--accent)", "stroke-width": 1 }));
+  svg.appendChild(el("circle", { cx: x(last), cy: y(CTL[last]), r: 3, fill: "var(--text)" }));
+
+  const months = narrow ? [[0, "Aug"], [55, "Okt"], [87, "Nov"]] : [[0, "Aug"], [28, "Sep"], [55, "Okt"], [87, "Nov"]];
+  for (const [i, label] of months) {
+    svg.appendChild(el("line", { x1: x(i), x2: x(i), y1: H - B, y2: H - B + 4, stroke: "var(--line-strong)", "stroke-width": 1 }));
+    svg.appendChild(el("text", { x: x(i), y: H - 8, fill: "var(--text-3)", "font-size": narrow ? 9 : 10, "font-family": "IBM Plex Mono, monospace" })).textContent = label;
+  }
+
+  // Zonen und Referenzmarke der Uhr — nur in Richtung C
+  const zones = document.getElementById("zones");
+  const ref = document.getElementById("ref");
+  const reftext = document.getElementById("reftext");
+  const RING = 104;
+
+  function arc(from, to, color) {
+    const length = ((to - from) / 100) * 2 * Math.PI * RING;
+    const gap = 2 * Math.PI * RING - length;
+    const node = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    node.setAttribute("cx", 126);
+    node.setAttribute("cy", 126);
+    node.setAttribute("r", RING);
+    node.setAttribute("stroke", color);
+    node.setAttribute("stroke-dasharray", `${length.toFixed(1)} ${gap.toFixed(1)}`);
+    node.setAttribute("transform", `rotate(${-90 + from * 3.6} 126 126)`);
+    return node;
+  }
+
+  function drawInstrument(on) {
+    zones.replaceChildren();
+    ref.replaceChildren();
+    reftext.style.display = on ? "block" : "none";
+    if (!on) return;
+
+    zones.appendChild(arc(0, 45, "var(--low)"));
+    zones.appendChild(arc(45, 70, "var(--mid)"));
+    zones.appendChild(arc(70, 100, "var(--good)"));
+    zones.setAttribute("opacity", "0.28");
+
+    const angle = (-90 + 84 * 3.6) * (Math.PI / 180);
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", 126 + Math.cos(angle) * 96);
+    line.setAttribute("y1", 126 + Math.sin(angle) * 96);
+    line.setAttribute("x2", 126 + Math.cos(angle) * 88);
+    line.setAttribute("y2", 126 + Math.sin(angle) * 88);
+    line.setAttribute("stroke", "var(--text-2)");
+    line.setAttribute("stroke-width", "2");
+    ref.appendChild(line);
+  }
+
+  // Richtung: ?v=b in der Adresse, Klick auf den Umschalter oder Taste A / B / C
+  const buttons = [...document.querySelectorAll(".switch button")];
+
+  function setVariant(variant) {
+    document.documentElement.dataset.v = variant;
+    for (const button of buttons) button.classList.toggle("on", button.dataset.go === variant);
+    drawInstrument(variant === "c");
+    const url = new URL(location.href);
+    url.searchParams.set("v", variant);
+    history.replaceState(null, "", url);
+  }
+
+  for (const button of buttons) {
+    button.addEventListener("click", () => setVariant(button.dataset.go));
+  }
+
+  window.addEventListener("keydown", (event) => {
+    const key = event.key.toLowerCase();
+    if (key === "a" || key === "b" || key === "c") setVariant(key);
+  });
+
+  const params = new URLSearchParams(location.search);
+  const wanted = params.get("v");
+  setVariant(wanted === "b" || wanted === "c" ? wanted : "a");
+</script>
+</body>
+</html>
