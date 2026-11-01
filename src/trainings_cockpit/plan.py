@@ -67,14 +67,15 @@ def sport_family(sport: str | None) -> str | None:
     return SPORT_FAMILY.get(sport or "")
 
 
-def hr_profiles(conn: Any) -> dict[str, dict[str, Any]]:
-    """Max-HF und Zonengrenzen je Sportart, wie intervals.icu sie führt.
+def sport_profiles(conn: Any) -> dict[str, dict[str, Any]]:
+    """Max-HF, Zonengrenzen und FTP je Sportart, wie intervals.icu sie führt.
 
-    Die Prozente im Plan sind Prozent der maximalen Herzfrequenz. Ohne diese
-    Zahlen bliebe nur das Prozentzeichen; mit ihnen steht dort, was auf der Uhr
-    steht. Fehlt das Profil (noch kein Sync), bleibt es beim Prozentwert.
+    Die Prozente im Plan sind Prozent der maximalen Herzfrequenz oder der
+    Schwelle. Ohne diese Zahlen bliebe nur das Prozentzeichen; mit ihnen steht
+    dort, was auf der Uhr steht. Fehlt das Profil (noch kein Sync), bleibt es
+    beim Prozentwert.
     """
-    raw = db.get_setting(conn, "hr_profile")
+    raw = db.get_setting(conn, "sport_profile") or db.get_setting(conn, "hr_profile")
     if not raw:
         return {}
     try:
@@ -119,6 +120,21 @@ def _to_bpm(target: dict[str, Any], entry: dict[str, Any] | None) -> dict[str, A
         high = float(round(max_hr * target["hi"] / 100))
         return {**target, "lo": low, "hi": high, "unit": "bpm"}
     return target
+
+
+def _to_watts(target: dict[str, Any], entry: dict[str, Any] | None, sport: str | None) -> dict[str, Any]:
+    """Prozent der Schwelle in Watt übersetzen. Ohne FTP bleibt es Prozent."""
+    if not entry or target["unit"] != "%" or target.get("basis") != "ftp":
+        return target
+    # Drinnen gilt die FTP des Ergometers, draußen die Straßen-FTP.
+    ftp = entry.get("ftp")
+    if str(sport or "").startswith("Virtual") and entry.get("indoor_ftp"):
+        ftp = entry["indoor_ftp"]
+    if not ftp:
+        return target
+    low = float(round(ftp * target["lo"] / 100))
+    high = float(round(ftp * target["hi"] / 100))
+    return {**target, "lo": low, "hi": high, "unit": "W", "label": None}
 
 
 def speeds(conn: Any, days: int = 180, today: date | None = None) -> dict[str, float]:
@@ -265,6 +281,7 @@ def _nice_ticks(low: float, high: float, unit: str) -> list[int]:
 def parse_workout(
     raw: str | None,
     profile: dict[str, Any] | None = None,
+    sport: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Schritte und Achse eines Plans.
 
@@ -286,9 +303,13 @@ def parse_workout(
 
     if profile:
         for step in flat:
-            if step["target"]:
-                step["target"] = _to_bpm(step["target"], profile)
-                step["target_text"] = _target_text(step["target"], step["distance_m"] or None)
+            target = step["target"]
+            if not target:
+                continue
+            target = _to_bpm(target, profile)
+            target = _to_watts(target, profile, sport)
+            step["target"] = target
+            step["target_text"] = _target_text(target, step["distance_m"] or None)
 
     units = [s["target"]["unit"] for s in flat if s["target"]]
     if not units:
@@ -368,7 +389,7 @@ def planned(
     hr: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Die geplante Einheit als Zahlen: Dauer, Distanz, Schritte, Achse."""
-    steps, axis = parse_workout(event.get("raw"), hr)
+    steps, axis = parse_workout(event.get("raw"), hr, event.get("sport"))
     planned_s = sum(s["seconds"] for s in steps)
     planned_m = sum(s["distance_m"] for s in steps)
 
@@ -482,7 +503,7 @@ def done_payload(row: dict[str, Any]) -> dict[str, Any]:
 def session(conn: Any, event: dict[str, Any], speeds_kmh: dict[str, float] | None = None) -> dict[str, Any]:
     """Alles, was die Einheit auf dem Bildschirm braucht."""
     speeds_kmh = speeds_kmh or speeds(conn)
-    numbers = planned(event, speeds_kmh, _profile_for(hr_profiles(conn), event.get("sport")))
+    numbers = planned(event, speeds_kmh, _profile_for(sport_profiles(conn), event.get("sport")))
     row = matches(conn, event)
     return {
         "id": event["id"],

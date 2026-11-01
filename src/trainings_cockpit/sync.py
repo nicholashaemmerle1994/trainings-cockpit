@@ -56,7 +56,7 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         n_wellness = db.upsert_wellness(conn, wellness)
         n_events = db.upsert_events(conn, events)
 
-        db.set_setting(conn, "hr_profile", json.dumps(_hr_profile(sport_settings)))
+        db.set_setting(conn, "sport_profile", json.dumps(_sport_profile(sport_settings)))
         db.set_setting(conn, "athlete_name", _pretty_name(athlete.get("name")))
         db.set_setting(conn, "athlete_id", str(athlete.get("id") or ""))
         db.set_setting(conn, "last_sync", datetime.now().isoformat(timespec="seconds"))
@@ -91,20 +91,27 @@ def dubletten_entfernen(conn: Any) -> int:
     return db.delete_activities(conn, weg)
 
 
-def _hr_profile(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Max-HF und Zonengrenzen je Sportart aus den Einstellungen von intervals.
+def _sport_profile(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Max-HF, Zonengrenzen und FTP je Sportart aus den Einstellungen von intervals.
 
-    Die Prozente in einem Plan sind Prozent der maximalen Herzfrequenz; ohne
-    diese Zahlen kann die Oberfläche nur „70–75 %" schreiben statt „133–143 bpm".
+    Die Prozente in einem Plan sind Prozent der maximalen Herzfrequenz oder der
+    Schwelle; ohne diese Zahlen kann die Oberfläche nur „70–75 %" schreiben
+    statt „133–143 bpm" und „% FTP" statt „170–186 W".
     """
     profile: dict[str, dict[str, Any]] = {}
     for row in rows or []:
-        max_hr = row.get("max_hr")
-        zones = row.get("hr_zones") or []
-        if not max_hr or not zones:
+        entry: dict[str, Any] = {}
+        if row.get("max_hr") and row.get("hr_zones"):
+            entry["max_hr"] = row["max_hr"]
+            entry["zones"] = [int(z) for z in row["hr_zones"]]
+        if row.get("ftp"):
+            entry["ftp"] = row["ftp"]
+        if row.get("indoor_ftp"):
+            entry["indoor_ftp"] = row["indoor_ftp"]
+        if not entry:
             continue
         for sport in row.get("types") or []:
-            profile[str(sport)] = {"max_hr": max_hr, "zones": [int(z) for z in zones]}
+            profile[str(sport)] = entry
     return profile
 
 

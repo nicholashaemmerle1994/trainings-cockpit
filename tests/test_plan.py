@@ -134,7 +134,7 @@ def test_herzfrequenzzone_wird_zur_spanne() -> None:
     assert out["steps"][0]["hi"] == 70
 
 
-PROFILE = {"max_hr": 190, "zones": [132, 155, 167, 174, 190]}
+PROFILE = {"max_hr": 190, "zones": [132, 155, 167, 174, 190], "ftp": 195, "indoor_ftp": 185}
 
 
 def test_prozent_der_hf_werden_zu_schlaegen() -> None:
@@ -163,9 +163,32 @@ def test_zone_wird_zu_ihren_grenzen_in_schlaegen() -> None:
     assert out["steps"][0]["hi"] == 155
 
 
-def test_prozent_der_schwelle_bleibt_prozent() -> None:
+def test_prozent_der_schwelle_werden_zu_watt() -> None:
     event = make_event([{"power": {"start": 87, "end": 95, "units": "%ftp"}, "duration": 600}])
     out = plan.planned(event, SPEEDS, PROFILE)
+
+    # 87 % und 95 % von 195 W
+    assert out["steps"][0]["target"] == "170–185 W"
+    assert out["steps"][0]["lo"] == 170
+    assert out["steps"][0]["hi"] == 185
+    assert out["axis"] is not None
+    assert out["axis"]["unit"] == "W"
+
+
+def test_drinnen_gilt_die_ftp_des_ergometers() -> None:
+    event = make_event(
+        [{"power": {"start": 90, "end": 100, "units": "%ftp"}, "duration": 600}],
+        sport="VirtualRide",
+    )
+    out = plan.planned(event, SPEEDS, PROFILE)
+
+    # 90 % und 100 % von 185 W (indoor_ftp); 166,5 rundet auf 166
+    assert out["steps"][0]["target"] == "166–185 W"
+
+
+def test_ohne_profil_bleibt_prozent_der_schwelle() -> None:
+    event = make_event([{"power": {"start": 87, "end": 95, "units": "%ftp"}, "duration": 600}])
+    out = plan.planned(event, SPEEDS)
 
     assert out["steps"][0]["target"] == "87–95 % FTP"
     assert out["axis"] is not None
