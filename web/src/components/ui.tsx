@@ -29,29 +29,6 @@ export function Card({
   );
 }
 
-export function StatCard({
-  label,
-  value,
-  unit,
-  sub,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  sub: string;
-}) {
-  return (
-    <div className="stat">
-      <span className="k">{label}</span>
-      <span className="v">
-        {value}
-        {unit && <small>{unit}</small>}
-      </span>
-      <span className="s">{sub}</span>
-    </div>
-  );
-}
-
 export function Skeleton({ height = 120 }: { height?: number }) {
   return <div className="skeleton" style={{ height }} />;
 }

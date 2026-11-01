@@ -1,20 +1,9 @@
 import { useState } from "react";
-import { api } from "../api";
 import { RecoveryDial } from "../components/RecoveryDial";
 import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
 import { IconBike, IconRun, IconSwim, IconWeights } from "../components/icons";
-import { StatCard } from "../components/ui";
-import {
-  fmtClock,
-  fmtDate,
-  fmtDateLong,
-  fmtKm,
-  fmtMinutes,
-  fmtNumber,
-  fmtSigned,
-  fmtSpan,
-} from "../format";
+import { fmtClock, fmtDate, fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
 import type { Overview, RecoveryComponent, SessionRow } from "../types";
 
 function clamp(value: number, min: number, max: number): number {
@@ -39,30 +28,9 @@ function driverPlain(value: number | null | undefined, unit: string): string {
   return unit === "h" ? fmtClock(value) : fmtNumber(value);
 }
 
-export function Today({
-  data,
-  onRefresh,
-  onSync,
-  syncing,
-}: {
-  data: Overview;
-  onRefresh: () => void;
-  onSync: () => void;
-  syncing: boolean;
-}) {
+export function Today({ data }: { data: Overview }) {
   const { today } = data;
-  const [bevel, setBevel] = useState(today.vendor != null ? String(Math.round(today.vendor)) : "");
-  const [saved, setSaved] = useState(false);
   const [openSession, setOpenSession] = useState<number | null>(null);
-  const compared = data.series.recovery.filter((entry) => entry.vendor != null).slice(-7);
-
-  const saveBevel = async () => {
-    const value = Number(bevel);
-    if (bevel.trim() === "" || Number.isNaN(value) || value < 0 || value > 100) return;
-    await api.vendorScore(today.date, value);
-    setSaved(true);
-    onRefresh();
-  };
 
   const recovery = today.recovery;
   const drivers = recovery.components.filter((component) => component.key !== "resp");
@@ -94,9 +62,6 @@ export function Today({
           <h1>{fmtDateLong(today.date)}</h1>
           <p className="meta">Zuletzt synchronisiert {syncTime}</p>
         </div>
-        <button type="button" className="btn" onClick={onSync} disabled={syncing}>
-          {syncing ? "Synchronisiert…" : "Aktualisieren"}
-        </button>
       </header>
 
       {data.goals.length > 0 && (
@@ -113,147 +78,64 @@ export function Today({
         </section>
       )}
 
-      <section className="hero">
-        <article className="card recovery">
+      <article className="card recovery">
           <div className="card-head">
-            <div>
-              <h2>Erholung</h2>
-              <p className="card-sub">
-                {recovery.label === "Referenz wird aufgebaut"
-                  ? `Neuer Sensor · ${reference?.nights ?? 0} von ${reference?.minimum ?? 7} Nächten`
-                  : recovery.score == null
-                    ? "Wartet auf die Nacht"
-                    : `Nacht vom ${fmtDate(today.as_of ?? today.date, {
-                        day: "numeric",
-                        month: "long",
-                      })}`}
-              </p>
-            </div>
+          <div>
+            <h2>Erholung</h2>
+            <p className="card-sub">
+              {recovery.label === "Referenz wird aufgebaut"
+                ? `Neuer Sensor · ${reference?.nights ?? 0} von ${reference?.minimum ?? 7} Nächten`
+                : recovery.score == null
+                  ? "Wartet auf die Nacht"
+                  : `Nacht vom ${fmtDate(today.as_of ?? today.date, {
+                      day: "numeric",
+                      month: "long",
+                    })}`}
+            </p>
+          </div>
           </div>
 
           <RecoveryDial
-            score={recovery.score}
-            band={recovery.band}
-            label={recovery.label}
-            referenceText={referenceText}
-            referenceScore={referenceScore}
+          score={recovery.score}
+          band={recovery.band}
+          label={recovery.label}
+          referenceText={referenceText}
+          referenceScore={referenceScore}
           />
 
+          <div className="recovery-side">
           {drivers.length > 0 && (
-            <table className="drivers">
-              <thead>
-                <tr>
-                  <th />
-                  <th>heute</th>
-                  <th>Schnitt</th>
-                  <th>üblich</th>
+          <table className="drivers">
+            <thead>
+              <tr>
+                <th />
+                <th>heute</th>
+                <th>Schnitt</th>
+                <th>üblich</th>
+              </tr>
+            </thead>
+            <tbody>
+              {drivers.map((component) => (
+                <tr key={component.key}>
+                  <td>
+                    {component.label}
+                    <i className="track">
+                      <u />
+                      <b style={{ left: `${driverPosition(component)}%` }} />
+                    </i>
+                  </td>
+                  <td className="today">{driverToday(component)}</td>
+                  <td className="avg">{driverPlain(component.average, component.unit)}</td>
+                  <td className="base">{driverPlain(component.baseline, component.unit)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {drivers.map((component) => (
-                  <tr key={component.key}>
-                    <td>
-                      {component.label}
-                      <i className="track">
-                        <u />
-                        <b style={{ left: `${driverPosition(component)}%` }} />
-                      </i>
-                    </td>
-                    <td className="today">{driverToday(component)}</td>
-                    <td className="avg">{driverPlain(component.average, component.unit)}</td>
-                    <td className="base">{driverPlain(component.baseline, component.unit)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              ))}
+            </tbody>
+          </table>
           )}
 
           <p className="note">{recovery.explanation}</p>
-        </article>
-
-        <div className="right">
-          <div className="stats">
-            <StatCard
-              label="Schlaf"
-              value={fmtClock(today.sleep.hours)}
-              unit="h"
-              sub={`Schlafscore ${today.sleep.score ?? "—"} · Defizit ${fmtNumber(today.sleep.debt_7d, 1)} h`}
-            />
-            <StatCard
-              label="HRV"
-              value={fmtNumber(today.hrv.value)}
-              unit="ms"
-              sub={`Schnitt ${fmtNumber(today.hrv.average)} · üblich ${fmtNumber(today.hrv.baseline)} ms`}
-            />
-            <StatCard
-              label="Ruhepuls"
-              value={fmtNumber(today.rhr.value)}
-              unit="bpm"
-              sub={`Schnitt ${fmtNumber(today.rhr.average)} · üblich ${fmtNumber(today.rhr.baseline)} bpm`}
-            />
           </div>
-
-          <section className="card bevel">
-            <div className="card-head">
-              <div>
-                <h2>Bevel-Abgleich</h2>
-                <p className="card-sub">Zweite Meinung zum selben Morgen</p>
-              </div>
-              <div className="bevel-field">
-                <span>Bevel heute</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={1}
-                  inputMode="numeric"
-                  enterKeyHint="done"
-                  value={bevel}
-                  placeholder="—"
-                  onChange={(event) => {
-                    setBevel(event.target.value);
-                    setSaved(false);
-                  }}
-                  onBlur={() => void saveBevel()}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      event.currentTarget.blur();
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            {compared.length > 0 ? (
-              [...compared]
-                .reverse()
-                .slice(0, 3)
-                .map((entry) => (
-                  <div className="bevel-row" key={entry.date}>
-                    <span className="d">
-                      {fmtDate(entry.date, { weekday: "short", day: "numeric", month: "short" })} ·{" "}
-                      {compared.length} von 7 Tagen
-                    </span>
-                    <span className="pair">
-                      <span>wir {entry.score}</span>
-                      <span>Bevel {Math.round(entry.vendor ?? 0)}</span>
-                      <span style={{ color: "var(--text-3)" }}>
-                        {fmtSigned(entry.score - (entry.vendor ?? 0))}
-                      </span>
-                    </span>
-                  </div>
-                ))
-            ) : (
-              <div className="bevel-row">
-                <span className="d">
-                  {saved ? "Gespeichert" : "Noch kein Tag erfasst"} · Ziel sind sieben
-                </span>
-              </div>
-            )}
-          </section>
-        </div>
-      </section>
+      </article>
 
       <section className="split">
         <TrainingCard sessions={data.sessions} onOpen={setOpenSession} />
@@ -284,8 +166,7 @@ export function Today({
             <span>Belastungsverhältnis</span>
             <span>{fmtNumber(today.load.acwr, 2)}</span>
           </div>
-
-        </aside>
+      </aside>
       </section>
 
       {openSession != null && (

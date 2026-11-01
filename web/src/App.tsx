@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { Sidebar, type Tab } from "./components/Sidebar";
-import { IconFuel, IconList, IconToday } from "./components/icons";
-import { Activities } from "./pages/Activities";
+import { IconFuel, IconToday } from "./components/icons";
 import { Fuel } from "./pages/Fuel";
 import { Today } from "./pages/Today";
 import type { Overview } from "./types";
@@ -10,7 +9,6 @@ import type { Overview } from "./types";
 const TABS: { key: Tab; label: string; icon: typeof IconToday }[] = [
   { key: "today", label: "Heute", icon: IconToday },
   { key: "fuel", label: "Verpflegung", icon: IconFuel },
-  { key: "activities", label: "Aktivitäten", icon: IconList },
 ];
 
 /** Wie weit man ziehen muss, bevor der Sync losgeht. */
@@ -120,20 +118,19 @@ export default function App() {
 
   return (
     <div className="shell">
-      <Sidebar tab={tab} onTab={setTab} athlete={data.athlete.name} lastSync={data.generated_at} />
+      <Sidebar
+        tab={tab}
+        onTab={setTab}
+        athlete={data.athlete.name}
+        lastSync={data.generated_at}
+        onSync={() => void handleSync()}
+        syncing={syncing}
+      />
 
       <main className="main">
         {error && <div className="banner">{error}</div>}
-        {tab === "today" && (
-          <Today
-            data={data}
-            onRefresh={() => void load()}
-            onSync={() => void handleSync()}
-            syncing={syncing}
-          />
-        )}
+        {tab === "today" && <Today data={data} />}
         {tab === "fuel" && <Fuel />}
-        {tab === "activities" && <Activities />}
       </main>
 
       <nav className="tabbar">

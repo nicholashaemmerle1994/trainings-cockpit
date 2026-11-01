@@ -1,11 +1,10 @@
-import { IconFuel, IconList, IconToday } from "./icons";
+import { IconFuel, IconSync, IconToday } from "./icons";
 
-export type Tab = "today" | "fuel" | "activities";
+export type Tab = "today" | "fuel";
 
 const NAV: { key: Tab; label: string; icon: typeof IconToday }[] = [
   { key: "today", label: "Heute", icon: IconToday },
   { key: "fuel", label: "Verpflegung", icon: IconFuel },
-  { key: "activities", label: "Aktivitäten", icon: IconList },
 ];
 
 export function Sidebar({
@@ -13,11 +12,15 @@ export function Sidebar({
   onTab,
   athlete,
   lastSync,
+  onSync,
+  syncing,
 }: {
   tab: Tab;
   onTab: (tab: Tab) => void;
   athlete: string;
   lastSync: string | null;
+  onSync: () => void;
+  syncing: boolean;
 }) {
   return (
     <aside className="sidebar">
@@ -41,6 +44,10 @@ export function Sidebar({
       </nav>
 
       <div className="side-foot">
+        <button type="button" className="side-sync" onClick={onSync} disabled={syncing}>
+          <IconSync size={16} />
+          {syncing ? "Synchronisiert…" : "Aktualisieren"}
+        </button>
         <div className="who">
           {athlete}
           <span>
