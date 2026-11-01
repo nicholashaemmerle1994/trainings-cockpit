@@ -356,6 +356,32 @@ Prüfung der drei Seiten gegen die Slop-Liste von *unslop* (Screenshots in
 - **Vorlagenprobe:** dunkelgrau, Mintgrün, Inter, Karten mit Schein — das könnte
   jede Fitness-App sein. Es sagt nichts über Kärnten, Ironman oder Morgenlicht.
 
+### E-30 · Vier Quellen, eine Tür (01.11.2026)
+
+Stand der Rohdaten in der Datenbank (287 Einheiten, 01.11.2026):
+
+| Quelle in `activity.raw` | Einheiten | Gerät |
+|---|---|---|
+| Health Sync (`OAUTH_CLIENT`) | 139 | Health Sync |
+| Garmin Connect | 125 | fenix 7 Pro, Venu Sq |
+| Wahoo | 19 | WAHOO_FITNESS App |
+| Zepp / Amazfit | 4 | Helio Strap, Watch |
+| Rouvy, Sufferfest | 5 | virtuelle Ausfahrten |
+
+- **Last liegt für alle 287 Einheiten vor**, auch für die 42 Kraft-Einheiten
+  (Ø 28). Krafttraining fällt also nicht aus Fitness und Müdigkeit heraus.
+- **Wellness, letzte 60 Tage:** HRV 60 von 61, Ruhepuls 61, Schlaf 60,
+  Schlafscore 59, **Atmung nur 27**. Komplette Nächte: **27 von 61**.
+  Nach D-26 heißt das: an 34 Tagen entsteht kein Erholungswert — nicht weil die
+  Nacht schlecht war, sondern weil die Atmung fehlt.
+- **Dubletten:** keine offenen (`tc dedupe --dry-run` sauber). Die Erkennung
+  hängt am Verlauf, nicht an der Quelle: Garmin Connect schlägt Health Sync,
+  bei Gleichstand entscheidet die Zahl der Felder, dann die Dauer.
+
+Die Konsequenz: Ein Band, das jede Nacht HRV, Ruhepuls, Schlaf **und Atmung**
+liefert, ist die eigentliche Lücke. Fehlt die Atmung weiter, ändert das Band an
+der Trefferquote nichts.
+
 ---
 
 ## 3. Entscheidungen
@@ -391,6 +417,7 @@ Prüfung der drei Seiten gegen die Slop-Liste von *unslop* (Screenshots in
 | D-27 | 01.11.2026 | **Eingabefelder sind mindestens 16 px groß.** Alle Text- und Zahlenfelder bekommen `font-size: 16px`, unabhängig von der Schrift der Karte drumherum; die Felder bleiben schmal und rechtsbündig. Dazu `inputmode` (Zahlen- statt Buchstabentastatur) und `enterkeyhint="done"`: „Fertig" speichert und schließt die Tastatur. | Safari auf dem iPhone zoomt beim Fokussieren in jedes Feld unter 16 px hinein und wieder heraus erst beim Neuladen — die Seite stand dann schief, der Kopf war weg, die Tastatur schnitt den Rest ab. | Globale Regel in `styles.css` statt Einzelfeld-Flicken; `maximum-scale=1` bleibt verboten, weil es Zoom für alle abschaltet. |
 | D-28 | 01.11.2026 | **Die Oberfläche folgt `unslop`** (Damir Sokolovsky, [github.com/heydamir/unslop](https://github.com/heydamir/unslop), CC BY 4.0). Die gekürzte Fassung steht in [`UI-REGELN.md`](UI-REGELN.md) und gilt für jede künftige Oberflächenarbeit: erst prüfen, dann fünf Zeilen Richtung, dann neun Durchgänge in fester Reihenfolge. | Der Bildschirm liest sich als Vorlage: Farbschein auf jeder Karte, Sparklines statt Zahlen, Großbuchstaben-Labels, fünf Iconfarben, Begrüßung als Überschrift (E-29). Der Athlet sieht die Seite täglich und will ein Werkzeug, kein Template. | Kein Umbau ohne Richtung und Freigabe; die alte Optik wird über die neun Durchgänge ersetzt, Abschnitte und Reihenfolge bleiben. Nennung des Urhebers bleibt in jeder Kopie. |
 | D-29 | 01.11.2026 | **Richtung B+ ist umgesetzt.** Kühle Tinten-Rampe (#08090f, #11141c, #1a1e28), ein Akzent Wörthersee-Teal (#3f9e8f), Farbe sonst nur als Befund. Instrument Serif für Titel und Countdown-Zahlen, Plex Sans für Text, Plex Mono für alles Zählbare. Fünf Charakter-Momente: die Uhr als Instrument mit Zonenring und Referenzmarke auf den 21-Tage-Schnitt, Skalen in den Treiberzeilen, Laststreifen der sieben Tage, Tagesstriche unter dem Diagramm, Aktivitäten als Tabelle. | Ohne die fünf Momente war die kühle Fassung (B) sauber, aber beliebig; die Serif und die Instrumente geben dem Trainingsbuch eine eigene Stimme, ohne in Slop zurückzufallen. | Schriften selbst gehostet (5 × woff2, 97 kB), recharts entfernt: Bündel 638 → 251 kB. Kennzahlen ohne Sparkline, Großbuchstaben-Labels ersetzt, Abstände auf dem 4-px-Raster, Verpflegung zweispaltig, Aktivitätenliste lädt in 40er-Schritten nach. |
+| D-30 | 01.11.2026 | **Die Quelle bleibt austauschbar.** Garmin CIRQA (Nacht), Bevel (Kraft) und Wahoo (Rad) ändern keinen Code: alle drei landen über Health Sync bzw. intervals.icu in derselben Tabelle. Die Dubletten-Regel bleibt (Garmin Connect vor Health Sync, dann Feldzahl, dann Dauer). | Ein Gerät, das nur eine Quelle hinzufügt, darf kein Umbau sein. Der Athlet wechselt die Uhr, nicht das Cockpit. | Nach dem ersten Sync mit dem Band wird geprüft: Atmung je Nacht, HRV als rMSSD (D-21), Schlafscore, keine neuen Dubletten. Bleibt die Atmung lückenhaft, bleibt es bei „Keine Daten“ (D-26). |
 
 ---
 
@@ -483,4 +510,5 @@ Prüfung der drei Seiten gegen die Slop-Liste von *unslop* (Screenshots in
 | 01.11.2026 | D-26 hebt D-15 und die Renormierung auf: Score nur bei vollständigen Daten von heute, sonst „Keine Daten" |
 | 01.11.2026 | D-27: Eingabefelder auf 16 px gegen den Safari-Zoom, Zahlentastatur und „Fertig" schließt sie; geprüft bei 390 px Breite (keine horizontale Ausdehnung) |
 | 01.11.2026 | E-29 und D-28: Oberflächenprüfung gegen *unslop* (12 Funde), Regeln als `UI-REGELN.md` festgeschrieben, ab jetzt verbindlich |
+| 01.11.2026 | E-30 und D-30: Quellenlandkarte (Health Sync, Garmin, Wahoo, Zepp), Atmung nur an 27 von 61 Nächten, Quelle bleibt austauschbar |
 | 01.11.2026 | D-29: Richtung B+ gebaut und auf dem Server — neue Rampe, Serif/Mono-Schriften selbst gehostet, Instrument-Uhr, Wochenstreifen, Tabellen, recharts entfernt |
