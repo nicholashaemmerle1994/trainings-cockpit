@@ -14,12 +14,21 @@ export interface RecoveryComponent {
   vendor?: number | null;
 }
 
+export interface RecoveryReference {
+  nights: number;
+  minimum: number;
+  target: number;
+  average: number | null;
+}
+
 export interface Recovery {
   score: number | null;
   band: Band;
   label: string;
   confidence: number;
   components: RecoveryComponent[];
+  missing?: string[];
+  reference?: RecoveryReference | null;
   explanation: string;
 }
 

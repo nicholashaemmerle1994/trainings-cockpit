@@ -60,6 +60,10 @@ def main(argv: list[str] | None = None) -> int:
     dup = sub.add_parser("dedupe", help="Doppelt aufgezeichnete Einheiten aus der DB entfernen")
     dup.add_argument("--dry-run", action="store_true", help="Nur zeigen, nichts löschen")
 
+    base = sub.add_parser("baseline", help="Referenz der Nachtsignale: Stand, Neustart, aus")
+    base.add_argument("--start", help="Erste Nacht mit dem neuen Sensor (JJJJ-MM-TT)")
+    base.add_argument("--off", action="store_true", help="Neustart-Marke entfernen")
+
     srv = sub.add_parser("serve", help="Dashboard starten")
     srv.add_argument("--host", default="127.0.0.1")
     srv.add_argument("--port", type=int, default=8000)
@@ -83,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
             return _woche(settings, args.wochen)
         if args.command == "dedupe":
             return _dedupe(settings, args.dry_run)
+        if args.command == "baseline":
+            return _baseline(settings, args)
         if args.command == "serve":
             return _serve(settings, args)
     except IntervalsError as exc:
@@ -92,6 +98,59 @@ def main(argv: list[str] | None = None) -> int:
         console.print(f"[red]Garmin:[/red] {exc}")
         return 2
     return 0
+
+
+# ---------------------------------------------------------------- baseline
+
+
+def _baseline(settings: Settings, args: argparse.Namespace) -> int:
+    conn = db.connect(settings.db_path)
+    try:
+        db.init_db(conn)
+
+        if args.off:
+            db.set_wellness_epoch(conn, None)
+            console.print("Neustart-Marke entfernt — die Referenz nutzt wieder die ganze Historie.")
+            return 0
+
+        if args.start:
+            try:
+                epoch = date.fromisoformat(args.start)
+            except ValueError:
+                console.print("[red]Datum muss JJJJ-MM-TT sein.[/red]")
+                return 2
+            db.set_wellness_epoch(conn, epoch)
+            console.print(
+                f"Referenz beginnt am {epoch.strftime('%d.%m.%Y')}. "
+                f"Die ersten {metrics.REFERENCE_MIN_NIGHTS} Nächte ergeben keinen Wert."
+            )
+            return 0
+
+        epoch = db.wellness_epoch(conn)
+        if epoch is None:
+            console.print("Keine Neustart-Marke gesetzt — Referenz läuft über die ganze Historie.")
+            return 0
+
+        nights = conn.execute(
+            "SELECT COUNT(*) FROM wellness WHERE date >= ? "
+            "AND (hrv IS NOT NULL OR rhr IS NOT NULL OR sleep_s IS NOT NULL "
+            "OR respiration IS NOT NULL)",
+            (epoch.isoformat(),),
+        ).fetchone()[0]
+        state = (
+            "Referenz wird aufgebaut"
+            if nights < metrics.REFERENCE_MIN_NIGHTS
+            else "Referenz im Aufbau"
+            if nights < metrics.BASELINE_DAYS
+            else "Referenz steht"
+        )
+        console.print(
+            f"Seit {epoch.strftime('%d.%m.%Y')}: {nights} Nächte mit Signal, "
+            f"Ziel {metrics.BASELINE_DAYS}. {state}."
+        )
+        return 0
+    finally:
+        conn.close()
 
 
 # ------------------------------------------------------------------ doctor

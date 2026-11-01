@@ -234,3 +234,48 @@ def test_ein_fehlendes_signal_ergibt_keinen_score() -> None:
     assert recovery["label"] == "Keine Daten"
     assert recovery["components"] == []
     assert "Atmung" in recovery["explanation"]
+
+
+def test_neuer_sensor_wartet_auf_sieben_naechte() -> None:
+    today = date(2026, 11, 9)
+    wellness = _wellness(90, today)
+    days = metrics.daily_days(wellness, [], today - timedelta(days=89), today)
+
+    # Sensorwechsel vor drei Nächten: die Referenz ist noch nicht belastbar.
+    epoch = today - timedelta(days=2)
+    recovery = metrics.compute_recovery(days, len(days) - 1, epoch)
+
+    assert recovery["score"] is None
+    assert recovery["label"] == "Referenz wird aufgebaut"
+    assert recovery["components"] == []
+    assert recovery["reference"]["nights"] == 3
+    assert recovery["reference"]["minimum"] == metrics.REFERENCE_MIN_NIGHTS
+    assert "3 von 7" in recovery["explanation"]
+
+
+def test_neuer_sensor_ignoriert_die_alte_referenz() -> None:
+    today = date(2026, 11, 9)
+    wellness = _wellness(90, today)
+    # Die alte Zeit hat eine ganz andere HRV – sie darf die neue Referenz nicht prägen.
+    for row in wellness:
+        if row["date"] < (today - timedelta(days=10)).isoformat():
+            row["hrv"] = 90.0
+
+    days = metrics.daily_days(wellness, [], today - timedelta(days=89), today)
+    epoch = today - timedelta(days=10)
+    recovery = metrics.compute_recovery(days, len(days) - 1, epoch)
+
+    hrv = next(c for c in recovery["components"] if c["key"] == "hrv")
+    assert hrv["baseline"] == 50.0
+    assert recovery["reference"]["nights"] >= metrics.REFERENCE_MIN_NIGHTS
+    assert recovery["score"] is not None
+
+
+def test_ohne_marke_gibt_es_keine_referenzangabe() -> None:
+    today = date(2026, 10, 30)
+    wellness = _wellness(90, today)
+    days = metrics.daily_days(wellness, [], today - timedelta(days=89), today)
+
+    recovery = metrics.compute_recovery(days, len(days) - 1)
+    assert recovery["reference"] is None
+    assert recovery["score"] is not None

@@ -66,11 +66,17 @@ export function Today({
 
   const recovery = today.recovery;
   const drivers = recovery.components.filter((component) => component.key !== "resp");
-  const window = data.series.recovery.slice(-21);
-  const reference =
-    recovery.score != null && window.length > 0
-      ? Math.round(window.reduce((sum, entry) => sum + entry.score, 0) / window.length)
-      : null;
+  const reference = recovery.reference ?? null;
+  const referenceScore = reference?.average ?? null;
+  const referenceText = reference
+    ? reference.nights < reference.minimum
+      ? `Referenz ${reference.nights} von ${reference.minimum} Nächten`
+      : referenceScore == null
+        ? `Referenz ${reference.nights} von ${reference.target} Nächten`
+        : `${reference.nights} von ${reference.target} Nächten · Schnitt ${referenceScore}`
+    : referenceScore == null
+      ? "21-Tage-Schnitt —"
+      : `21-Tage-Schnitt ${referenceScore}`;
   const syncTime = new Date(data.generated_at).toLocaleTimeString("de-AT", {
     hour: "2-digit",
     minute: "2-digit",
@@ -108,12 +114,14 @@ export function Today({
             <div>
               <h2>Erholung</h2>
               <p className="card-sub">
-                {recovery.score == null
-                  ? "Wartet auf die Nacht"
-                  : `Nacht vom ${fmtDate(today.as_of ?? today.date, {
-                      day: "numeric",
-                      month: "long",
-                    })}`}
+                {recovery.label === "Referenz wird aufgebaut"
+                  ? `Neuer Sensor · ${reference?.nights ?? 0} von ${reference?.minimum ?? 7} Nächten`
+                  : recovery.score == null
+                    ? "Wartet auf die Nacht"
+                    : `Nacht vom ${fmtDate(today.as_of ?? today.date, {
+                        day: "numeric",
+                        month: "long",
+                      })}`}
               </p>
             </div>
           </div>
@@ -122,7 +130,8 @@ export function Today({
             score={recovery.score}
             band={recovery.band}
             label={recovery.label}
-            reference={reference}
+            referenceText={referenceText}
+            referenceScore={referenceScore}
           />
 
           {drivers.length > 0 && (

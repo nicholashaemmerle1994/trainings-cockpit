@@ -26,6 +26,9 @@ VALID_RANGES = {
     "weight_kg": (30.0, 200.0),
 }
 WEIGHTS = {"hrv": 35.0, "rhr": 20.0, "sleep": 30.0, "resp": 5.0, "spo2": 5.0}
+#: Ein neuer Sensor misst anders. Nach einem Gerätewechsel beginnt die Referenz
+#: neu, sonst mischt sie zwei Sensoren und zeigt eine Erholung, die es nicht gibt.
+REFERENCE_MIN_NIGHTS = 7
 #: Ohne diese Signale gibt es keinen Score. SpO2 fehlt hier, weil es nur abzieht.
 REQUIRED_SIGNALS = {
     "hrv": "die HRV",
@@ -150,7 +153,21 @@ def _hours(
 # ----------------------------------------------------------------- Readiness
 
 
-def compute_recovery(days: list[Day], index: int) -> dict[str, Any]:
+def reference_nights(days: list[Day], index: int, epoch: date | None) -> int | None:
+    """Nächte mit mindestens einem Signal seit dem Sensorwechsel."""
+    if epoch is None:
+        return None
+    return sum(
+        1
+        for d in days[: index + 1]
+        if d.day >= epoch
+        and (d.hrv is not None or d.rhr is not None or d.sleep_h is not None or d.respiration is not None)
+    )
+
+
+def compute_recovery(
+    days: list[Day], index: int, epoch: date | None = None
+) -> dict[str, Any]:
     """Erholung nach Nachtsignalen.
 
     HRV und Ruhepuls gegen die eigene 21-Tage-Referenz, Schlaf aus Dauer und
@@ -163,13 +180,37 @@ def compute_recovery(days: list[Day], index: int) -> dict[str, Any]:
     current = days[index]
     components: list[dict[str, Any]] = []
 
+    nights = reference_nights(days, index, epoch)
+    if nights is not None and nights < REFERENCE_MIN_NIGHTS:
+        fehlt = REFERENCE_MIN_NIGHTS - nights
+        return {
+            "score": None,
+            "band": "unknown",
+            "label": "Referenz wird aufgebaut",
+            "confidence": 0.0,
+            "components": [],
+            "missing": [],
+            "reference": {
+                "nights": nights,
+                "minimum": REFERENCE_MIN_NIGHTS,
+                "target": BASELINE_DAYS,
+                "average": None,
+            },
+            "explanation": (
+                f"Neuer Sensor: die Referenz beginnt neu. "
+                f"{nights} von {REFERENCE_MIN_NIGHTS} Nächten sind da, "
+                f"noch {fehlt} bis zum ersten Wert."
+            ),
+        }
+
+
     hrv = _component(
         key="hrv",
         label="HRV",
         unit="ms",
         today=current.hrv,
         window=[d.hrv for d in window],
-        baseline=_baseline(days, index, "hrv"),
+        baseline=_baseline(days, index, "hrv", epoch),
         invert=False,
         weight=WEIGHTS["hrv"],
     )
@@ -182,7 +223,7 @@ def compute_recovery(days: list[Day], index: int) -> dict[str, Any]:
         unit="bpm",
         today=current.rhr,
         window=[d.rhr for d in window],
-        baseline=_baseline(days, index, "rhr"),
+        baseline=_baseline(days, index, "rhr", epoch),
         invert=True,
         weight=WEIGHTS["rhr"],
     )
@@ -222,14 +263,14 @@ def compute_recovery(days: list[Day], index: int) -> dict[str, Any]:
         unit="/min",
         today=current.respiration,
         window=[d.respiration for d in window],
-        baseline=_baseline(days, index, "respiration"),
+        baseline=_baseline(days, index, "respiration", epoch),
         invert=True,
         weight=WEIGHTS["resp"],
     )
     if respiration:
         components.append(respiration)
 
-    spo2 = _spo2_component(days, index, window)
+    spo2 = _spo2_component(days, index, window, epoch)
     if spo2:
         components.append(spo2)
 
@@ -264,6 +305,16 @@ def compute_recovery(days: list[Day], index: int) -> dict[str, Any]:
         # Alle Pflichtsignale sind da, sonst gäbe es diesen Zweig nicht.
         "confidence": 1.0,
         "components": components,
+        "reference": (
+            None
+            if nights is None
+            else {
+                "nights": nights,
+                "minimum": REFERENCE_MIN_NIGHTS,
+                "target": BASELINE_DAYS,
+                "average": None,
+            }
+        ),
         "explanation": _explanation(band, components, current.day),
     }
 
@@ -312,11 +363,11 @@ def _component(
 
 
 def _spo2_component(
-    days: list[Day], index: int, window: list[Day]
+    days: list[Day], index: int, window: list[Day], epoch: date | None = None
 ) -> dict[str, Any] | None:
     """SpO2 zählt nur als Abzug, nie als Bonus."""
     today = days[index].spo2
-    baseline = _baseline(days, index, "spo2")
+    baseline = _baseline(days, index, "spo2", epoch)
     if today is None or not baseline:
         return None
     base = mean(baseline)
@@ -338,11 +389,13 @@ def _spo2_component(
     }
 
 
-def _baseline(days: list[Day], index: int, field: str) -> list[float] | None:
+def _baseline(
+    days: list[Day], index: int, field: str, epoch: date | None = None
+) -> list[float] | None:
     values = [
         getattr(d, field)
         for d in days[max(0, index - BASELINE_DAYS) : index]
-        if getattr(d, field) is not None
+        if getattr(d, field) is not None and (epoch is None or d.day >= epoch)
     ]
     return values if len(values) >= 7 else None
 
@@ -587,7 +640,8 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
     activities = db.activities_between(conn, history_start, today)
     series_days = daily_days(wellness, activities, history_start, today)
 
-    recovery = compute_recovery(series_days, len(series_days) - 1)
+    epoch = db.wellness_epoch(conn)
+    recovery = compute_recovery(series_days, len(series_days) - 1, epoch)
     current = series_days[-1] if series_days else None
 
     # Die Nachtsignale kommen mit dem Sync des Tages. Liegt für heute noch nichts
@@ -633,6 +687,17 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
     recovery_points = [
         p for p in recovery_series(series_days) if p["date"] >= window_start.isoformat()
     ]
+
+    # 21-Tage-Schnitt der Scores – nach einem Sensorwechsel nur die Nächte
+    # seit dem Wechsel, sonst stünde der neue Wert neben einem alten Maßstab.
+    if (recovery.get("reference") or {}).get("nights", 0) >= REFERENCE_MIN_NIGHTS:
+        since = epoch.isoformat() if epoch else None
+        recent = [
+            point["score"]
+            for point in recovery_points[-BASELINE_DAYS:]
+            if point.get("score") is not None and (since is None or point["date"] >= since)
+        ]
+        recovery["reference"]["average"] = round(mean(recent)) if recent else None
 
     week_acts = [a for a in activities if a["date"] >= (today - timedelta(days=7)).isoformat()]
     week_hours = sum((a.get("moving_s") or a.get("duration_s") or 0) for a in week_acts) / 3600

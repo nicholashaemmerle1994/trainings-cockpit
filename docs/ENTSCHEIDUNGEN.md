@@ -382,6 +382,21 @@ Die Konsequenz: Ein Band, das jede Nacht HRV, Ruhepuls, Schlaf **und Atmung**
 liefert, ist die eigentliche Lücke. Fehlt die Atmung weiter, ändert das Band an
 der Trefferquote nichts.
 
+### E-31 · Garmin filtert, was bei intervals ankommt (01.11.2026)
+
+Seit Ende September 2026 schickt Garmin Partnern nicht mehr die Datei, die das
+Gerät aufgezeichnet hat: die Aufzeichnung bleibt, Garmins eigene Kennzahlen
+(Training Effect, Recovery Time, VO₂max, Stamina, Performance Condition) fehlen.
+Der offizielle Wellness-Sync liefert außerdem **kein `respiration`** — genau das
+Feld, an dem bei uns 34 von 61 Nächten scheitern (E-30).
+
+Ein Selbstbau-Projekt löst beides über Garmins Personal API und schreibt die
+fehlenden Wellness-Werte nach intervals
+([garmin-intervals-bridge](https://github.com/futureweb/garmin-intervals-bridge)).
+Für uns zählt: die Lücke ist bekannt, sie liegt bei Garmin und nicht bei uns —
+und sie ist über die Personal API schließbar, für die im Cockpit schon ein
+Client liegt (`sources/garmin.py`).
+
 ---
 
 ## 3. Entscheidungen
@@ -418,6 +433,8 @@ der Trefferquote nichts.
 | D-28 | 01.11.2026 | **Die Oberfläche folgt `unslop`** (Damir Sokolovsky, [github.com/heydamir/unslop](https://github.com/heydamir/unslop), CC BY 4.0). Die gekürzte Fassung steht in [`UI-REGELN.md`](UI-REGELN.md) und gilt für jede künftige Oberflächenarbeit: erst prüfen, dann fünf Zeilen Richtung, dann neun Durchgänge in fester Reihenfolge. | Der Bildschirm liest sich als Vorlage: Farbschein auf jeder Karte, Sparklines statt Zahlen, Großbuchstaben-Labels, fünf Iconfarben, Begrüßung als Überschrift (E-29). Der Athlet sieht die Seite täglich und will ein Werkzeug, kein Template. | Kein Umbau ohne Richtung und Freigabe; die alte Optik wird über die neun Durchgänge ersetzt, Abschnitte und Reihenfolge bleiben. Nennung des Urhebers bleibt in jeder Kopie. |
 | D-29 | 01.11.2026 | **Richtung B+ ist umgesetzt.** Kühle Tinten-Rampe (#08090f, #11141c, #1a1e28), ein Akzent Wörthersee-Teal (#3f9e8f), Farbe sonst nur als Befund. Instrument Serif für Titel und Countdown-Zahlen, Plex Sans für Text, Plex Mono für alles Zählbare. Fünf Charakter-Momente: die Uhr als Instrument mit Zonenring und Referenzmarke auf den 21-Tage-Schnitt, Skalen in den Treiberzeilen, Laststreifen der sieben Tage, Tagesstriche unter dem Diagramm, Aktivitäten als Tabelle. | Ohne die fünf Momente war die kühle Fassung (B) sauber, aber beliebig; die Serif und die Instrumente geben dem Trainingsbuch eine eigene Stimme, ohne in Slop zurückzufallen. | Schriften selbst gehostet (5 × woff2, 97 kB), recharts entfernt: Bündel 638 → 251 kB. Kennzahlen ohne Sparkline, Großbuchstaben-Labels ersetzt, Abstände auf dem 4-px-Raster, Verpflegung zweispaltig, Aktivitätenliste lädt in 40er-Schritten nach. |
 | D-30 | 01.11.2026 | **Die Quelle bleibt austauschbar.** Garmin CIRQA (Nacht), Bevel (Kraft) und Wahoo (Rad) ändern keinen Code: alle drei landen über Health Sync bzw. intervals.icu in derselben Tabelle. Die Dubletten-Regel bleibt (Garmin Connect vor Health Sync, dann Feldzahl, dann Dauer). | Ein Gerät, das nur eine Quelle hinzufügt, darf kein Umbau sein. Der Athlet wechselt die Uhr, nicht das Cockpit. | Nach dem ersten Sync mit dem Band wird geprüft: Atmung je Nacht, HRV als rMSSD (D-21), Schlafscore, keine neuen Dubletten. Bleibt die Atmung lückenhaft, bleibt es bei „Keine Daten“ (D-26). |
+| D-31 | 01.11.2026 | **Nach einem Sensorwechsel beginnt die Referenz neu.** Ein Datum (`wellness_epoch`) markiert die erste Nacht mit dem neuen Gerät. Ab dort zählen nur noch Nächte dieses Sensors in die 21-Tage-Referenz. Die ersten **7 Nächte** ergeben keinen Wert („Referenz wird aufgebaut“), von 8 bis 21 steht sie „im Aufbau“, danach ist sie normal. Die Historie bleibt in der Datenbank. | Ein anderes Gerät misst anders: HRV und Ruhepuls verschieben sich systematisch, nicht zufällig. Alte und neue Nächte in einer Referenz zeigen zwei Wochen lang eine Erholung, die es nicht gibt. | Neues Feld `reference` in `/api/overview`, `tc baseline --start JJJJ-MM-TT` (und `--off`), Anzeige in Uhr und Untertitel. Gilt für das CIRQA-Band, das am 4. November 2026 kommt. |
+| D-32 | 01.11.2026 | **Die bessere Aufzeichnung gewinnt, die Last bleibt bei intervals.** Von einer Einheit, die mehrfach ankommt, bleibt die aussagekräftigere: Garmin Connect vor Health Sync, dann die vollständigere, dann die längere. Die Trainingslast wird **nicht** selbst gerechnet: Garmins `activityTrainingLoad` liegt im Median 2,64× über intervals' Last (Spanne 0,29–8,64 über 66 Paare) und würde Fitness und Müdigkeit unbrauchbar machen. | Ein zweites Lastmaß würde die Historie unvergleichbar machen; die Aufzeichnung selbst darf trotzdem die bessere sein. | Läufe und Schwimmen kommen künftig als Garmin-Aufzeichnung, Kraft und Rad aus intervals (Bevel, Wahoo). Health Sync verliert die Berechtigung; Strava bleibt außen vor, weil es keine Zusatzinformation liefert, die intervals nicht schon hat. |
 
 ---
 
@@ -511,4 +528,5 @@ der Trefferquote nichts.
 | 01.11.2026 | D-27: Eingabefelder auf 16 px gegen den Safari-Zoom, Zahlentastatur und „Fertig" schließt sie; geprüft bei 390 px Breite (keine horizontale Ausdehnung) |
 | 01.11.2026 | E-29 und D-28: Oberflächenprüfung gegen *unslop* (12 Funde), Regeln als `UI-REGELN.md` festgeschrieben, ab jetzt verbindlich |
 | 01.11.2026 | E-30 und D-30: Quellenlandkarte (Health Sync, Garmin, Wahoo, Zepp), Atmung nur an 27 von 61 Nächten, Quelle bleibt austauschbar |
+| 01.11.2026 | E-31, D-31 und D-32: Garmin filtert Kennzahlen, Referenz-Neustart beim Sensorwechsel gebaut, Last bleibt bei intervals |
 | 01.11.2026 | D-29: Richtung B+ gebaut und auf dem Server — neue Rampe, Serif/Mono-Schriften selbst gehostet, Instrument-Uhr, Wochenstreifen, Tabellen, recharts entfernt |

@@ -26,21 +26,23 @@ function zoneArc(from: number, to: number): { length: number; gap: number; rotat
 }
 
 export function RecoveryDial({
+  referenceScore,
   score,
   band,
   label,
-  reference,
+  referenceText,
 }: {
   score: number | null;
   band: Band;
   label: string;
-  reference: number | null;
+  referenceText: string;
+  referenceScore: number | null;
 }) {
   const color = BAND_COLORS[band] ?? BAND_COLORS.unknown;
   const value = score ?? 0;
   const offset = CIRCUMFERENCE * (1 - value / 100);
-  const [refX1, refY1] = reference == null ? [0, 0] : polar(98, reference);
-  const [refX2, refY2] = reference == null ? [0, 0] : polar(90, reference);
+  const [refX1, refY1] = polar(98, referenceScore ?? 0);
+  const [refX2, refY2] = polar(90, referenceScore ?? 0);
 
   return (
     <div className="dial">
@@ -90,7 +92,7 @@ export function RecoveryDial({
           />
         )}
 
-        {reference != null && (
+        {referenceScore != null && (
           <line x1={refX1} y1={refY1} x2={refX2} y2={refY2} stroke="var(--text-2)" strokeWidth="2" />
         )}
       </svg>
@@ -100,9 +102,7 @@ export function RecoveryDial({
         <span className="dial-band" style={score == null ? undefined : { color }}>
           {label}
         </span>
-        <span className="dial-ref">
-          {reference == null ? "21-Tage-Schnitt —" : `21-Tage-Schnitt ${Math.round(reference)}`}
-        </span>
+        <span className="dial-ref">{referenceText}</span>
       </div>
     </div>
   );

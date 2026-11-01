@@ -332,6 +332,25 @@ def get_setting(conn: sqlite3.Connection, key: str) -> str | None:
     return row[0] if row else None
 
 
+def wellness_epoch(conn: sqlite3.Connection) -> date | None:
+    """Erste Nacht mit dem aktuellen Sensor – Referenzbeginn (D-31)."""
+    raw = get_setting(conn, "wellness_epoch")
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def set_wellness_epoch(conn: sqlite3.Connection, epoch: date | None) -> None:
+    if epoch is None:
+        conn.execute("DELETE FROM setting WHERE key = 'wellness_epoch'")
+    else:
+        set_setting(conn, "wellness_epoch", epoch.isoformat())
+    conn.commit()
+
+
 def log_sync(
     conn: sqlite3.Connection,
     source: str,
