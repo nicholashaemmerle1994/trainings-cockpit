@@ -67,7 +67,12 @@ export function Today({
   const recovery = today.recovery;
   const drivers = recovery.components.filter((component) => component.key !== "resp");
   const reference = recovery.reference ?? null;
-  const referenceScore = reference?.average ?? null;
+  const recentScores = data.series.recovery.slice(-21);
+  const seriesAverage =
+    recentScores.length > 0
+      ? Math.round(recentScores.reduce((sum, entry) => sum + entry.score, 0) / recentScores.length)
+      : null;
+  const referenceScore = reference?.average ?? seriesAverage;
   const referenceText = reference
     ? reference.nights < reference.minimum
       ? `Referenz ${reference.nights} von ${reference.minimum} Nächten`

@@ -67,7 +67,10 @@ def test_overview_returns_dashboard_payload(client: TestClient) -> None:
 
     assert payload["athlete"]["name"] == "Nicholas Pahr"
     assert payload["today"]["recovery"]["score"] is not None
-    assert payload["today"]["load"]["ctl"] == 50.0
+    # Fitness rechnet das Cockpit aus den eigenen Aktivitäten (D-34), nicht aus
+    # den Tageswerten von intervals.
+    ctl = payload["today"]["load"]["ctl"]
+    assert ctl is not None and 0 < ctl < 200
     assert len(payload["series"]["load"]) == 90
     assert payload["activities"][0]["sport_label"] == "Laufen"
     assert payload["goals"] == []

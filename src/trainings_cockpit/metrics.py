@@ -92,20 +92,17 @@ def daily_days(
         load = loads.get(key, 0.0)
         saw_load = saw_load or load > 0
 
-        recorded_ctl = wellness_row.get("ctl") if wellness_row else None
-        recorded_atl = wellness_row.get("atl") if wellness_row else None
         ctl += (load - ctl) / 42
         atl += (load - atl) / 7
 
+        # Fitness und Müdigkeit rechnet das Cockpit selbst. intervals' Tageswerte
+        # kennen die Läufe nicht mehr, die über die Garmin-Personal-API kommen —
+        # sie würden die Form ab dem Sensorwechsel systematisch zu niedrig zeigen.
         point = Day(
             day=day,
             load=round(load, 1),
-            ctl=round(recorded_ctl, 1)
-            if recorded_ctl is not None
-            else (round(ctl, 1) if saw_load else None),
-            atl=round(recorded_atl, 1)
-            if recorded_atl is not None
-            else (round(atl, 1) if saw_load else None),
+            ctl=round(ctl, 1) if saw_load else None,
+            atl=round(atl, 1) if saw_load else None,
             hrv=_num(wellness_row, "hrv", VALID_RANGES["hrv"]),
             rhr=_num(wellness_row, "rhr", VALID_RANGES["rhr"]),
             sleep_h=_hours(wellness_row, "sleep_s", VALID_RANGES["sleep_s"]),

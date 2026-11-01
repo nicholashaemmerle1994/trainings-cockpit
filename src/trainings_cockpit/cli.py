@@ -18,7 +18,7 @@ from . import __version__, db, dedupe, metrics
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings, mask
 from .security import is_world_readable
-from .sources.garmin import GarminUnavailable, fetch_garmin
+from .sources.garmin import GarminUnavailable, actor_rows, fetch_garmin
 from .sources.intervals import IntervalsClient, IntervalsError
 from .spike import dump, workout
 from .spike import report as report_mod
@@ -60,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     dup = sub.add_parser("dedupe", help="Doppelt aufgezeichnete Einheiten aus der DB entfernen")
     dup.add_argument("--dry-run", action="store_true", help="Nur zeigen, nichts löschen")
 
+    gar = sub.add_parser("garmin", help="Läufe und Schwimmen direkt aus der Garmin-Personal-API laden")
+    gar.add_argument("--days", type=int, default=365, help="Vergangenheit in Tagen")
+
     base = sub.add_parser("baseline", help="Referenz der Nachtsignale: Stand, Neustart, aus")
     base.add_argument("--start", help="Erste Nacht mit dem neuen Sensor (JJJJ-MM-TT)")
     base.add_argument("--off", action="store_true", help="Neustart-Marke entfernen")
@@ -87,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
             return _woche(settings, args.wochen)
         if args.command == "dedupe":
             return _dedupe(settings, args.dry_run)
+        if args.command == "garmin":
+            return _garmin(settings, args.days)
         if args.command == "baseline":
             return _baseline(settings, args)
         if args.command == "serve":
@@ -97,6 +102,48 @@ def main(argv: list[str] | None = None) -> int:
     except GarminUnavailable as exc:
         console.print(f"[red]Garmin:[/red] {exc}")
         return 2
+    return 0
+
+
+# ------------------------------------------------------------------ garmin
+
+
+def _garmin(settings: Settings, days: int) -> int:
+    """Nur Aktivitäten holen — Wellness kommt über intervals bzw. den Sync."""
+    if not settings.garmin_key:
+        console.print("[red]Kein GARMIN_PERSONAL_API_KEY gesetzt.[/red]")
+        return 2
+
+    today = date.today()
+    oldest = today - timedelta(days=max(days, 1))
+    cache = settings.ensure_data_dir() / "garmin" / "bearer-token.json"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+
+    console.print(f"[bold]Garmin[/bold] · Läufe und Schwimmen · {oldest} … {today}")
+    result = fetch_garmin(
+        settings.garmin_key,
+        oldest,
+        today,
+        only_activities=True,
+        token_cache=cache,
+    )
+    rows = actor_rows(result)
+    if not rows:
+        console.print("[yellow]Keine Läufe oder Schwimmen im Zeitraum.[/yellow]")
+        return 1
+
+    conn = db.connect(settings.db_path)
+    try:
+        db.init_db(conn)
+        neu = db.upsert_activities(conn, rows, mapped=True)
+        weg = sync_mod.dubletten_entfernen(conn)
+    finally:
+        conn.close()
+
+    console.print(
+        f"  {neu} Einheiten geschrieben · {weg} Dubletten entfernt"
+        + (f" · Fehler: {', '.join(sorted(result.errors))}" if result.errors else "")
+    )
     return 0
 
 

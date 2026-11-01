@@ -50,7 +50,8 @@ def fetch_garmin(
     newest: date,
     *,
     download_fit: bool = False,
-    activity_limit: int = 500,
+    only_activities: bool = False,
+    activity_limit: int = 1000,
     token_cache: Path | None = None,
 ) -> GarminDump:
     try:
@@ -70,10 +71,11 @@ def fetch_garmin(
         token = authenticator.obtain_token(api_key)
 
     with GarminPersonalApiClient(token.access_token) as client:
-        _try(dump, "profile", lambda: client.get_user_profile_settings())
-        _windowed(dump, "sleep", client.get_daily_sleep_summaries, oldest, newest)
-        _windowed(dump, "hrv", client.get_daily_hrv_summaries, oldest, newest)
-        _windowed(dump, "weight", client.get_weight_measurements, oldest, newest)
+        if not only_activities:
+            _try(dump, "profile", lambda: client.get_user_profile_settings())
+            _windowed(dump, "sleep", client.get_daily_sleep_summaries, oldest, newest)
+            _windowed(dump, "hrv", client.get_daily_hrv_summaries, oldest, newest)
+            _windowed(dump, "weight", client.get_weight_measurements, oldest, newest)
         _try(
             dump,
             "activities",
