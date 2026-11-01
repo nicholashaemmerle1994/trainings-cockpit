@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Cockpit — Einheit, Richtung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=Instrument+Serif:wght@400&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #08090f;
+    --side: #06070c;
+    --card: #11141c;
+    --raised: #1a1e28;
+    --line: rgba(238, 240, 245, 0.08);
+    --line-strong: rgba(238, 240, 245, 0.16);
+    --text: #eef0f5;
+    --text-2: #a3a9b8;
+    --text-3: #7a8296;
+    --accent: #3f9e8f;
+    --on-accent: #04100e;
+    --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 96px; }
+
+  /* --------------------------------------------------------- Mockup-Rahmen */
+  .bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .eyebrow {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    letter-spacing: 0;
+    color: var(--text-3);
+  }
+
+  .bar h1 {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 40px;
+    font-weight: 400;
+    line-height: 1;
+  }
+
+  .seg { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; }
+
+  .seg button {
+    height: 28px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+
+  .seg button.on { background: var(--raised); color: var(--text); box-shadow: inset 0 1px 0 var(--line-strong); }
+
+  .note {
+    max-width: 760px;
+    margin: 16px 0 0;
+    color: var(--text-2);
+    font-size: 13px;
+  }
+
+  .note b { font-weight: 500; color: var(--text); }
+
+  .cap {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 48px 0 16px;
+  }
+
+  .cap-n {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-3);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0 6px;
+    line-height: 18px;
+  }
+
+  .cap h2 { margin: 0; font-size: 15px; font-weight: 500; }
+
+  .cap p { margin: 0; font-size: 12.5px; color: var(--text-3); }
+
+  .row { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+
+  .col { display: flex; flex-direction: column; gap: 12px; }
+
+  .col-cap { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--text-2); }
+
+  .col-cap span { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+
+  /* ------------------------------------------------------------- Telefon */
+  .phone {
+    width: 390px;
+    height: 904px;
+    padding: 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 46px;
+    background: var(--side);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+  }
+
+  .screen {
+    position: relative;
+    height: 100%;
+    border-radius: 36px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  .pill {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 92px;
+    height: 24px;
+    border-radius: 12px;
+    background: #04050a;
+  }
+
+  .sheet { padding: 44px 20px 20px; }
+
+  /* ------------------------------------------------------- Einheit, Basis */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 32px; }
+
+  .top-mid { font-size: 11px; letter-spacing: 0.04em; color: var(--text-3); }
+
+  .ic {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin: 0 -6px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  .ic svg { display: block; }
+
+  .name {
+    margin: 24px 0 0;
+    font-family: var(--serif);
+    font-size: 34px;
+    font-weight: 400;
+    line-height: 1.04;
+    letter-spacing: 0;
+  }
+
+  .kind { margin: 6px 0 0; font-size: 13px; color: var(--text-2); }
+
+  .state-line { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: var(--text-2);
+  }
+
+  .chip svg { color: var(--text-3); }
+
+  /* ------------------------------------------------------------ Kennzahlen */
+  .figs { display: flex; gap: 24px; margin-top: 20px; }
+
+  .fig { display: flex; flex-direction: column; gap: 2px; }
+
+  .fig-n { font-family: var(--mono); font-size: 25px; line-height: 1.1; color: var(--text-3); letter-spacing: -0.01em; }
+
+  .fig-n.lead { color: var(--text); }
+
+  .fig-l { font-size: 11.5px; color: var(--text-3); }
+
+  /* ------------------------------------------------------------- Abschnitte */
+  .sec { margin-top: 24px; }
+
+  .sec-h {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 8px;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  .sec-h em { font-style: normal; font-family: var(--mono); font-size: 11px; }
+
+  /* Struktur */
+  .structbar { display: flex; gap: 2px; height: 6px; margin-bottom: 12px; }
+
+  .structbar span { border-radius: 2px; background: rgba(238, 240, 245, 0.14); }
+  .structbar span.work { background: var(--accent); }
+
+  .srow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: baseline;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .srow-name { font-size: 13.5px; }
+  .srow-dur { font-family: var(--mono); font-size: 12px; color: var(--text-2); }
+  .srow-tgt { font-family: var(--mono); font-size: 12px; color: var(--text-3); text-align: right; min-width: 64px; }
+
+  /* Zeilen mit Wert rechts */
+  .kv {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--text-2);
+  }
+
+  .kv span:last-child { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+
+  .kv.quiet span:last-child { color: var(--text-2); }
+
+  /* Vergleich plan / gemacht */
+  .cmp {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--text-2);
+  }
+
+  .cmp span { font-family: var(--mono); font-size: 12.5px; }
+  .cmp .plan { color: var(--text-3); text-align: right; min-width: 56px; }
+  .cmp .real { color: var(--text); text-align: right; min-width: 64px; }
+
+  .src { margin: 24px 0 0; font-size: 11px; color: var(--text-3); }
+
+  /* -------------------------------------------------------- Diagramm (V2) */
+  .chart { display: block; width: 100%; height: auto; margin-top: 20px; overflow: visible; }
+
+  .chart text { font-family: var(--mono); font-size: 9px; fill: var(--text-3); }
+
+  .grid3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    margin-top: 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--line);
+  }
+
+  .cell { padding: 10px 12px; background: var(--card); display: flex; flex-direction: column; gap: 2px; }
+  .cell-n { font-family: var(--mono); font-size: 15px; color: var(--text); white-space: nowrap; }
+  .cell-l { font-size: 11px; line-height: 1.3; color: var(--text-3); }
+
+  /* ------------------------------------------------------------- Leiter (V3) */
+  .ladder { margin-top: 20px; display: flex; flex-direction: column; }
+
+  .lad {
+    display: grid;
+    grid-template-columns: 40px 6px minmax(0, 1fr);
+    gap: 10px;
+    align-items: stretch;
+    padding-bottom: 8px;
+  }
+
+  .lad-t { font-family: var(--mono); font-size: 10px; color: var(--text-3); padding-top: 1px; }
+
+  .lad-b { border-radius: 2px; background: rgba(238, 240, 245, 0.14); }
+  .lad-b.work { background: var(--accent); }
+
+  .lad-x { display: flex; flex-direction: column; gap: 2px; padding-bottom: 4px; }
+  .lad-name { font-size: 13.5px; }
+  .lad-meta { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); }
+
+  /* --------------------------------------------------- Heute-Karte (Einstieg) */
+  .today { width: 760px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+
+  .today-h { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 20px 20px 12px; }
+
+  .today-h h3 { margin: 0; font-size: 15px; font-weight: 500; }
+  .today-h span { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); }
+
+  .sess { display: block; }
+
+  .srow-btn {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    padding: 12px 20px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms var(--ease);
+  }
+
+  .srow-btn:hover { background: rgba(238, 240, 245, 0.03); }
+
+  .sess-name { display: block; font-size: 14px; }
+  .sess-meta { display: block; margin-top: 2px; font-family: var(--mono); font-size: 11.5px; color: var(--text-3); }
+  .sess-state { font-size: 12px; color: var(--text-3); }
+  .srow-btn svg { color: var(--text-3); }
+
+  .today-lab { padding: 16px 20px 0; font-size: 11.5px; color: var(--text-3); }
+
+  .today-foot { padding: 12px 20px 16px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-3); }
+
+  /* -------------------------------------------------------- Breites Blatt */
+  .sheet-wide { width: 820px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+
+  .wide-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+
+  .wide-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 20px; }
+
+  .wide-head h1 { margin: 0; font-family: var(--serif); font-size: 30px; font-weight: 400; line-height: 1.05; }
+
+  .wide-figs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+
+  .wide-fig { display: flex; flex-direction: column; gap: 2px; padding: 16px 20px; }
+  .wide-fig + .wide-fig { border-left: 1px solid var(--line); }
+  .wide-fig .fig-n { font-size: 22px; }
+  .wide-fig .fig-l { font-size: 11.5px; }
+
+  .wide-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 0; }
+
+  .wide-col { padding: 16px 20px 20px; }
+  .wide-col + .wide-col { border-left: 1px solid var(--line); }
+
+  .wide-col .sec:first-child { margin-top: 0; }
+
+  .foot-note { margin-top: 40px; max-width: 820px; color: var(--text-3); font-size: 12.5px; line-height: 1.6; }
+
+  .foot-note b { font-weight: 500; color: var(--text-2); }
+
+  .foot-note ol { margin: 8px 0 0; padding-left: 20px; }
+  .foot-note li { margin-bottom: 4px; }
+
+  @media (max-width: 900px) {
+    .wrap { padding: 20px 16px 64px; }
+    .phone { width: 100%; max-width: 390px; }
+    .today, .sheet-wide { width: 100%; }
+    .wide-body { grid-template-columns: minmax(0, 1fr); }
+    .wide-col + .wide-col { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <div>
+      <span class="eyebrow">Mockup</span>
+      <h1>Einheit</h1>
+    </div>
+    <div class="seg" id="sess">
+      <button type="button" data-s="ride" class="on">Long Ride</button>
+      <button type="button" data-s="run">Koppellauf</button>
+      <button type="button" data-s="thr">3 × 10</button>
+    </div>
+  </header>
+
+  <p class="note">
+    Drei Einheiten aus dem Plan: zwei von heute, erledigt, und eine geplante am Dienstag.
+    <b>Ungefähre Zahlen</b> stehen mit ≈, gemessene ohne. Kein Coach-Text, keine Empfehlung —
+    nur Plan, Umfang und was dazugehört. Höhe der Balken ist Dauer, Farbe ist Arbeit.
+  </p>
+
+  <div class="cap">
+    <span class="cap-n">01</span>
+    <h2>Heute</h2>
+    <p>Einstieg: die Zeile in der Tageskarte, die die Einheit öffnet</p>
+  </div>
+
+  <div class="today" id="today"></div>
+
+  <div class="cap">
+    <span class="cap-n">02</span>
+    <h2>Blatt und Profil</h2>
+    <p>zwei Wege, dieselben Daten auf dem Handy zu zeigen</p>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="col-cap">Variante 1 · Blatt <span>ruhig, lesend</span></div>
+      <div class="phone"><div class="screen"><div class="pill"></div><div class="sheet" id="v1"></div></div></div>
+    </div>
+    <div class="col">
+      <div class="col-cap">Variante 2 · Profil <span>Diagramm zuerst</span></div>
+      <div class="phone"><div class="screen"><div class="pill"></div><div class="sheet" id="v2"></div></div></div>
+    </div>
+  </div>
+
+  <div class="cap">
+    <span class="cap-n">03</span>
+    <h2>Tafel</h2>
+    <p>dieselben Daten breit, für den Bildschirm, an dem die Planung passiert</p>
+  </div>
+
+  <div class="sheet-wide" id="v3"></div>
+
+  <div class="foot-note">
+    <b>Wie die ungefähren Zahlen entstehen.</b>
+    <ol>
+      <li>Dauer-Ziel (Rad, lange Einheit): Distanz aus der Median-Geschwindigkeit der letzten
+        90 Tage je Sportart — Rad 24 km/h, Lauf 8,6 km/h, Schwimmen 2,6 km/h.</li>
+      <li>Distanz-Ziel (Lauf, Schwimmen): Dauer aus Distanz und Median-Tempo — Lauf 7:00 min/km.</li>
+      <li>Kohlenhydrate nur ab 60 Minuten, aus derselben Funktion wie die Verpflegungsseite.</li>
+      <li>Die Struktur kommt aus den Schritten des Plans (Leistung, HF-Bereich, Distanz), die
+        Zonenzeit aus dem Plandokument von intervals.icu.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+  const ICON = {
+    back: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>',
+    close: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+    check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    right: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+  };
+
+  const DATA = {
+    ride: {
+      name: "Long Ride",
+      kind: "Rad · Zone 2 · 125 W im Schnitt",
+      status: "Erledigt",
+      done: true,
+      figs: [
+        { v: "≈ 2 h 45 min", l: "Dauer", lead: true },
+        { v: "≈ 65 km", l: "Distanz, geschätzt" },
+      ],
+      total: 165,
+      axis: { from: 55, to: 150, ticks: [60, 100, 140], unit: "W" },
+      steps: [
+        { name: "Aufwärmen", dur: "10 min", target: "60–100 W", min: 10, lo: 60, hi: 100 },
+        { name: "Hauptteil", dur: "2 h 30 min", target: "120–140 W", min: 150, lo: 120, hi: 140, work: true },
+        { name: "Auslaufen", dur: "5 min", target: "60–100 W", min: 5, lo: 60, hi: 100 },
+      ],
+      cells: [
+        { n: "2 h 45", l: "Dauer" },
+        { n: "≈ 65 km", l: "Distanz, geschätzt" },
+        { n: "117", l: "Last" },
+      ],
+      carbs: "150 g",
+      fuel: [
+        { l: "Kohlenhydrate", v: "150 g · 55 g/h" },
+        { l: "Gels", v: "3 × 22 g" },
+        { l: "Wasser", v: "1,4 l" },
+        { l: "Natrium", v: "1.100 mg" },
+      ],
+      cmp: [
+        { l: "Dauer", plan: "2 h 45", real: "2 h 43" },
+        { l: "Distanz", plan: "≈ 65 km", real: "73,7 km" },
+        { l: "Last", plan: "117", real: "154" },
+        { l: "Intensität", plan: "65 %", real: "75 %" },
+      ],
+    },
+    run: {
+      name: "Koppellauf",
+      kind: "Lauf · Zone 2 · 3,0 km",
+      status: "Erledigt",
+      done: true,
+      figs: [
+        { v: "3,0 km", l: "Distanz", lead: true },
+        { v: "≈ 20 min", l: "Dauer, geschätzt" },
+      ],
+      total: 20,
+      axis: { from: 55, to: 90, ticks: [60, 70, 80, 90], unit: "%" },
+      steps: [{ name: "Hauptteil", dur: "3,0 km", target: "Z2 HF", min: 20, lo: 70, hi: 81, work: true }],
+      cells: [
+        { n: "3,0 km", l: "Distanz" },
+        { n: "≈ 20 min", l: "Dauer, geschätzt" },
+        { n: "19", l: "Last" },
+      ],
+      carbs: null,
+      fuel: null,
+      cmp: [
+        { l: "Dauer", plan: "≈ 20 min", real: "18:35" },
+        { l: "Distanz", plan: "3,0 km", real: "3,0 km" },
+        { l: "Last", plan: "19", real: "25" },
+        { l: "Intensität", plan: "75 %", real: "90 %" },
+      ],
+    },
+    thr: {
+      name: "Threashold 3x10",
+      kind: "Rad · Dienstag, 3. November · 3 × 10 min",
+      status: "Geplant",
+      done: false,
+      figs: [
+        { v: "≈ 1 h 05 min", l: "Dauer", lead: true },
+        { v: "≈ 26 km", l: "Distanz, geschätzt" },
+      ],
+      total: 65,
+      axis: { from: 50, to: 190, ticks: [60, 110, 170], unit: "W" },
+      steps: [
+        { name: "Aufwärmen", dur: "10 min", target: "60–100 W", min: 10, lo: 60, hi: 100 },
+        { name: "Hauptteil 3×", dur: "45 min", target: "160–170 W", min: 45, lo: 160, hi: 170, work: true },
+        { name: "Auslaufen", dur: "10 min", target: "60–100 W", min: 10, lo: 60, hi: 100 },
+      ],
+      segs: [
+        { min: 10, lo: 60, hi: 100 },
+        { min: 10, lo: 160, hi: 170, work: true },
+        { min: 5, lo: 90, hi: 110 },
+        { min: 10, lo: 160, hi: 170, work: true },
+        { min: 5, lo: 90, hi: 110 },
+        { min: 10, lo: 160, hi: 170, work: true },
+        { min: 5, lo: 90, hi: 110 },
+        { min: 10, lo: 60, hi: 100 },
+      ],
+      cells: [
+        { n: "1 h 05", l: "Dauer" },
+        { n: "≈ 26 km", l: "Distanz, geschätzt" },
+        { n: "62", l: "Last" },
+      ],
+      carbs: "20 g",
+      fuel: [
+        { l: "Kohlenhydrate", v: "20 g · 20 g/h" },
+        { l: "Wasser", v: "0,5 l" },
+      ],
+      cmp: null,
+    },
+  };
+
+  const segsOf = (d) => d.segs || d.steps;
+
+  function figs(d) {
+    return `<div class="figs">${d.figs
+      .map((f) => `<div class="fig"><span class="fig-n${f.lead ? " lead" : ""}">${f.v}</span><span class="fig-l">${f.l}</span></div>`)
+      .join("")}</div>`;
+  }
+
+  function stateChip(d) {
+    return `<div class="state-line"><span class="chip">${d.done ? ICON.check : ""}${d.status}</span></div>`;
+  }
+
+  function structRows(d, withBar) {
+    const bar = withBar
+      ? `<div class="structbar">${segsOf(d).map((s) => `<span class="${s.work ? "work" : ""}" style="flex:${s.min}"></span>`).join("")}</div>`
+      : "";
+    const total = d.total >= 60 ? `${Math.floor(d.total / 60)} h ${String(d.total % 60).padStart(2, "0")} min` : `${d.total} min`;
+    return `<div class="sec">
+      <div class="sec-h">Struktur<em>${total}</em></div>
+      ${bar}
+      ${d.steps
+        .map(
+          (s) =>
+            `<div class="srow"><span class="srow-name">${s.name}</span><span class="srow-dur">${s.dur}</span><span class="srow-tgt">${s.target}</span></div>`,
+        )
+        .join("")}
+    </div>`;
+  }
+
+  function fuelBlock(d) {
+    if (!d.fuel) {
+      return `<div class="sec">
+        <div class="sec-h">Verpflegung</div>
+        <div class="kv"><span>Unter 60 Minuten</span><span>Wasser reicht</span></div>
+      </div>`;
+    }
+    return `<div class="sec">
+      <div class="sec-h">Verpflegung</div>
+      ${d.fuel
+        .map(
+          (row, i) =>
+            `<div class="kv${i === 0 ? "" : " quiet"}"><span>${row.l}</span><span>${row.v}</span></div>`,
+        )
+        .join("")}
+    </div>`;
+  }
+
+  function cmpBlock(d) {
+    if (!d.cmp) return "";
+    return `<div class="sec">
+      <div class="sec-h">Geplant · gemacht</div>
+      ${d.cmp
+        .map((c) => `<div class="cmp"><span>${c.l}</span><span class="plan">${c.plan}</span><span class="real">${c.real}</span></div>`)
+        .join("")}
+    </div>`;
+  }
+
+  function topbar() {
+    return `<div class="top">
+      <button class="ic" type="button" aria-label="Zurück">${ICON.back}</button>
+      <span class="top-mid mono">Einheit</span>
+      <button class="ic" type="button" aria-label="Schließen">${ICON.close}</button>
+    </div>`;
+  }
+
+  /* ------------------------------------------------------------ Variante 1 */
+  function v1(d) {
+    return `${topbar()}
+      <h1 class="name">${d.name}</h1>
+      <p class="kind">${d.kind}</p>
+      ${stateChip(d)}
+      ${figs(d)}
+      ${structRows(d, true)}
+      ${d.cmp ? fuelBlock(d) + cmpBlock(d) : fuelBlock(d)}
+      <p class="src">Plan aus intervals.icu</p>`;
+  }
+
+  /* ------------------------------------------------------------ Variante 2 */
+  function chart(d) {
+    const W = 350;
+    const H = d.height || 152;
+    const L = 42;
+    const R = 6;
+    const T = 8;
+    const B = 16;
+    const y = (v) => T + (1 - (v - d.axis.from) / (d.axis.to - d.axis.from)) * (H - T - B);
+    const x = (m) => L + (m / d.total) * (W - L - R);
+    let out = "";
+    for (const tick of d.axis.ticks) {
+      out += `<line x1="${L}" x2="${W - R}" y1="${y(tick)}" y2="${y(tick)}" stroke="var(--line)" stroke-width="1"/>`;
+      out += `<text x="${L - 6}" y="${y(tick) + 3}" text-anchor="end">${tick} ${d.axis.unit}</text>`;
+    }
+    let at = 0;
+    for (const s of segsOf(d)) {
+      const x0 = x(at);
+      const x1 = x(at + s.min);
+      const top = y(s.hi);
+      const bottom = H - B;
+      const width = Math.max(1, x1 - x0 - 1);
+      const colour = s.work ? "var(--accent)" : "var(--text-3)";
+      const band = Math.max(2, y(s.lo) - top);
+      out += `<rect x="${x0 + 0.5}" y="${top}" width="${width}" height="${bottom - top}" rx="1.5" fill="${colour}" fill-opacity="0.12"/>`;
+      out += `<rect x="${x0 + 0.5}" y="${top}" width="${width}" height="${band}" rx="1.5" fill="${colour}" fill-opacity="0.3"/>`;
+      out += `<line x1="${x0 + 0.5}" x2="${x1 - 0.5}" y1="${top}" y2="${top}" stroke="${colour}" stroke-width="${s.work ? 2.5 : 1.5}"/>`;
+      at += s.min;
+    }
+    out += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--line-strong)" stroke-width="1"/>`;
+    out += `<text x="${W - R}" y="${H - B + 12}" text-anchor="end">Minuten</text>`;
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Geplanter Verlauf">${out}</svg>`;
+  }
+
+  function v2(d) {
+    return `${topbar()}
+      <h1 class="name">${d.name}</h1>
+      <p class="kind">${d.kind}</p>
+      ${stateChip(d)}
+      ${chart(d)}
+      <div class="grid3">${d.cells.map((c) => `<div class="cell"><span class="cell-n">${c.n}</span><span class="cell-l">${c.l}</span></div>`).join("")}</div>
+      ${structRows(d, false)}
+      ${fuelBlock(d)}
+      <p class="src">Plan aus intervals.icu</p>`;
+  }
+
+  /* ------------------------------------------------------------ Variante 3 */
+  function v3(d) {
+    const ladder = d.steps
+      .map((s, i) => {
+        const start = d.steps.slice(0, i).reduce((sum, prev) => sum + prev.min, 0);
+        const label = start === 0 ? "0:00" : d.total >= 60 ? `${Math.floor(start / 60)}:${String(start % 60).padStart(2, "0")}` : `${start} min`;
+        const h = Math.max(24, Math.round((s.min / d.total) * 168) + (s.work ? 0 : 8));
+        return `<div class="lad"><span class="lad-t">${label}</span><span class="lad-b${s.work ? " work" : ""}" style="height:${h}px"></span><span class="lad-x"><span class="lad-name">${s.name}</span><span class="lad-meta">${s.dur} · ${s.target}</span></span></div>`;
+      })
+      .join("");
+
+    return `<div class="wide-top">
+        <span class="mono" style="font-size:11px;color:var(--text-3)">${d.done ? "Heute · Einheit" : "Dienstag, 3. November · Einheit"}</span>
+        <span class="chip">${d.done ? ICON.check : ""}${d.status}</span>
+      </div>
+      <div class="wide-head">
+        <div>
+          <h1>${d.name}</h1>
+          <p class="kind">${d.kind}</p>
+        </div>
+        <span class="mono" style="font-size:11px;color:var(--text-3)">Plan aus intervals.icu</span>
+      </div>
+      <div class="wide-figs">
+        ${d.figs
+          .map((f) => `<div class="wide-fig"><span class="fig-n${f.lead ? " lead" : ""}">${f.v}</span><span class="fig-l">${f.l}</span></div>`)
+          .join("")}
+        <div class="wide-fig"><span class="fig-n">${d.fuel ? d.carbs : "—"}</span><span class="fig-l">${d.fuel ? "Kohlenhydrate" : "Kein Fueling"}</span></div>
+      </div>
+      <div class="wide-body">
+        <div class="wide-col">
+          <div class="sec"><div class="sec-h">Struktur</div><div class="ladder">${ladder}</div></div>
+        </div>
+        <div class="wide-col">
+          ${fuelBlock(d)}
+          ${cmpBlock(d)}
+        </div>
+      </div>`;
+  }
+
+  /* ------------------------------------------------------------- Heute-Karte */
+  function today() {
+    const row = (name, meta, state) => `<button class="srow-btn" type="button">
+      <span><span class="sess-name">${name}</span><span class="sess-meta">${meta}</span></span>
+      <span class="sess-state">${state}</span>
+      ${ICON.right}
+    </button>`;
+
+    return `<div class="today-h"><h3>Training</h3><span>2 Einheiten · 3 h 05 min</span></div>
+      <div class="sess">
+        ${row("Long Ride", "≈ 2 h 45 min · ≈ 65 km · Last 117", "Erledigt")}
+        ${row("Koppellauf", "3,0 km · ≈ 20 min · Last 19", "Erledigt")}
+      </div>
+      <div class="today-lab">Morgen · Montag, 2. November</div>
+      <div class="sess">
+        ${row("Dauerlauf", "≈ 1 h 09 min · 8,0 km · Last 71", "Geplant")}
+      </div>
+      <div class="today-foot">Zwei Einheiten am selben Tag, eine davon kurz. Antippen öffnet die Einheit.</div>`;
+  }
+
+  const mount = { v1: document.getElementById("v1"), v2: document.getElementById("v2"), v3: document.getElementById("v3") };
+  let session = "ride";
+
+  function render() {
+    const d = DATA[session];
+    mount.v1.innerHTML = v1(d);
+    mount.v2.innerHTML = v2(d);
+    mount.v3.innerHTML = v3(d);
+  }
+
+  document.getElementById("today").innerHTML = today();
+
+  document.querySelectorAll("#sess button").forEach((button) => {
+    button.addEventListener("click", () => {
+      session = button.dataset.s;
+      document.querySelectorAll("#sess button").forEach((other) => other.classList.toggle("on", other === button));
+      render();
+    });
+  });
+
+  render();
+</script>
+</body>
+</html>
