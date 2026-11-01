@@ -119,3 +119,21 @@ export function SportIcon({ sport, size = 18 }: { sport: string; size?: number }
   if (sport === "WeightTraining") return <IconWeights size={size} />;
   return <IconBolt size={size} />;
 }
+
+export function IconBack({ size = 20, className }: IconProps) {
+  return (
+    <svg {...svgProps(size)} className={className}>
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </svg>
+  );
+}
+
+export function IconClose({ size = 20, className }: IconProps) {
+  return (
+    <svg {...svgProps(size)} className={className}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}

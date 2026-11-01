@@ -1,21 +1,21 @@
 import { useState } from "react";
 import { api } from "../api";
-import { ActivityTable } from "../components/ActivityTable";
-import { LoadChart } from "../components/LoadChart";
 import { RecoveryDial } from "../components/RecoveryDial";
+import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
+import { IconBike, IconRun, IconSwim, IconWeights } from "../components/icons";
 import { StatCard } from "../components/ui";
 import {
   fmtClock,
   fmtDate,
   fmtDateLong,
-  fmtDuration,
+  fmtKm,
+  fmtMinutes,
   fmtNumber,
   fmtSigned,
   fmtSpan,
-  sportLabel,
 } from "../format";
-import type { Overview, RecoveryComponent } from "../types";
+import type { Overview, RecoveryComponent, SessionRow } from "../types";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -41,13 +41,11 @@ function driverPlain(value: number | null | undefined, unit: string): string {
 
 export function Today({
   data,
-  onOpenActivities,
   onRefresh,
   onSync,
   syncing,
 }: {
   data: Overview;
-  onOpenActivities: () => void;
   onRefresh: () => void;
   onSync: () => void;
   syncing: boolean;
@@ -55,6 +53,7 @@ export function Today({
   const { today } = data;
   const [bevel, setBevel] = useState(today.vendor != null ? String(Math.round(today.vendor)) : "");
   const [saved, setSaved] = useState(false);
+  const [openSession, setOpenSession] = useState<number | null>(null);
   const compared = data.series.recovery.filter((entry) => entry.vendor != null).slice(-7);
 
   const saveBevel = async () => {
@@ -192,11 +191,6 @@ export function Today({
               unit="bpm"
               sub={`Schnitt ${fmtNumber(today.rhr.average)} · üblich ${fmtNumber(today.rhr.baseline)} bpm`}
             />
-            <StatCard
-              label="Frische"
-              value={fmtSigned(today.load.tsb)}
-              sub={`Fitness ${fmtNumber(today.load.ctl, 1)} · Müdigkeit ${fmtNumber(today.load.atl, 1)}`}
-            />
           </div>
 
           <section className="card bevel">
@@ -262,25 +256,7 @@ export function Today({
       </section>
 
       <section className="split">
-        <article className="card chart">
-          <div className="card-head">
-            <div>
-              <h2>Belastung &amp; Frische</h2>
-              <p className="card-sub">Fitness 42 Tage, Müdigkeit 7 Tage, bis heute</p>
-            </div>
-          </div>
-          <div className="legend">
-            <span>
-              <i />
-              Fitness
-            </span>
-            <span>
-              <i className="dotted" />
-              Müdigkeit
-            </span>
-          </div>
-          <LoadChart series={data.series.load} />
-        </article>
+        <TrainingCard sessions={data.sessions} onOpen={setOpenSession} />
 
         <aside className="card week">
           <div className="card-head">
@@ -309,32 +285,94 @@ export function Today({
             <span>{fmtNumber(today.load.acwr, 2)}</span>
           </div>
 
-          {data.upcoming.length > 0 && (
-            <>
-              <h3 className="plan-head">Geplant</h3>
-              {data.upcoming.slice(0, 3).map((entry) => (
-                <div className="plan-row" key={`${entry.date}-${entry.name}`}>
-                  <span>{entry.name || sportLabel(entry.sport)}</span>
-                  <span className="m">
-                    {fmtDate(entry.date, { weekday: "short" })}
-                    {entry.duration_min ? ` · ${fmtDuration(entry.duration_min)}` : ""}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
         </aside>
       </section>
 
-      <section className="card acts">
-        <div className="acts-head">
-          <h2>Letzte Aktivitäten</h2>
-          <button type="button" className="link-btn" onClick={onOpenActivities}>
-            Alle ansehen
-          </button>
-        </div>
-        <ActivityTable items={data.activities} limit={8} />
-      </section>
+      {openSession != null && (
+        <SessionSheet id={openSession} onClose={() => setOpenSession(null)} />
+      )}
     </div>
+  );
+}
+
+const SPORT_ICONS: Record<string, typeof IconRun> = {
+  Ride: IconBike,
+  VirtualRide: IconBike,
+  EBikeRide: IconBike,
+  GravelRide: IconBike,
+  MountainBikeRide: IconBike,
+  Run: IconRun,
+  VirtualRun: IconRun,
+  TrailRun: IconRun,
+  Swim: IconSwim,
+  OpenWaterSwim: IconSwim,
+  WeightTraining: IconWeights,
+};
+
+function sessionMeta(session: SessionRow): string {
+  const duration = `${session.estimated === "dauer" ? "≈ " : ""}${fmtMinutes(session.minutes)}`;
+  const distance = `${session.estimated === "distanz" ? "≈ " : ""}${fmtKm(session.km)}`;
+  const parts = session.primary === "distance" ? [distance, duration] : [duration, distance];
+  return parts.join(" · ");
+}
+
+function TrainingCard({
+  sessions,
+  onOpen,
+}: {
+  sessions: SessionRow[];
+  onOpen: (id: number) => void;
+}) {
+  const today = sessions.filter((session) => session.day === "today");
+  const tomorrow = sessions.filter((session) => session.day === "tomorrow");
+  const totalMinutes = today.reduce((sum, session) => sum + (session.minutes ?? 0), 0);
+  const count = today.length;
+  const subtitle =
+    count === 0
+      ? "Nichts geplant"
+      : `${count} ${count === 1 ? "Einheit" : "Einheiten"} · ${fmtMinutes(totalMinutes)}`;
+
+  const row = (session: SessionRow) => {
+    const Icon = SPORT_ICONS[session.sport] ?? IconRun;
+    return (
+      <button
+        type="button"
+        className="train-row"
+        key={session.id}
+        onClick={() => onOpen(session.id)}
+      >
+        <span className="train-ico">
+          <Icon size={18} />
+        </span>
+        <span className="train-main">
+          <span className="train-name">{session.name || session.sport_label}</span>
+          <span className="train-meta">{sessionMeta(session)}</span>
+        </span>
+        <span className="train-state">{session.done ? "Erledigt" : "Geplant"}</span>
+      </button>
+    );
+  };
+
+  return (
+    <article className="card train">
+      <div className="card-head">
+        <div>
+          <h2>Training</h2>
+          <p className="card-sub">{subtitle}</p>
+        </div>
+      </div>
+
+      {count > 0 && today.map(row)}
+      {count === 0 && <p className="train-empty">Für heute steht nichts im Plan.</p>}
+
+      {tomorrow.length > 0 && (
+        <>
+          <p className="train-lab">
+            Morgen · {fmtDate(tomorrow[0].date, { weekday: "long", day: "numeric", month: "long" })}
+          </p>
+          {tomorrow.map(row)}
+        </>
+      )}
+    </article>
   );
 }

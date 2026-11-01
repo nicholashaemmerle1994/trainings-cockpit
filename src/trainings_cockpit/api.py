@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import db, fuel, metrics
+from . import db, fuel, metrics, plan
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings
 
@@ -79,6 +79,16 @@ def _goals(settings: Settings) -> list[dict[str, Any]]:
             }
         )
     return sorted(items, key=lambda item: item["date"])
+
+
+@app.get("/api/session/{event_id}")
+def session(event_id: int) -> dict[str, Any]:
+    """Eine geplante Einheit mit Aufbau, Verpflegung und Ist-Abgleich."""
+    with connection() as conn:
+        event = db.event_by_id(conn, event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Einheit nicht gefunden")
+        return plan.session(conn, event)
 
 
 @app.get("/api/activities")

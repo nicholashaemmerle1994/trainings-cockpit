@@ -8,6 +8,7 @@ services:
       INTERVALS_API_KEY: ${INTERVALS_API_KEY:-}
       INTERVALS_ATHLETE_ID: ${INTERVALS_ATHLETE_ID:-0}
       GARMIN_PERSONAL_API_KEY: ${GARMIN_PERSONAL_API_KEY:-}
+      TZ: Europe/Vienna
       TC_DATA_DIR: /data
       TC_WEB_DIST: /app/web/dist
       TC_GOAL_NAME: ${TC_GOAL_NAME:-}

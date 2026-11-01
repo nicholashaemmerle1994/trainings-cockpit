@@ -397,6 +397,19 @@ Für uns zählt: die Lücke ist bekannt, sie liegt bei Garmin und nicht bei uns 
 und sie ist über die Personal API schließbar, für die im Cockpit schon ein
 Client liegt (`sources/garmin.py`).
 
+### E-32 · Die Startseite zeigte Messung, nicht Vorhaben (01.11.2026)
+
+Der Athlet öffnet das Cockpit morgens mit einer Frage: *was steht heute an?* Die
+Startseite antwortete mit Frische, einem 90-Tage-Diagramm und der Liste der
+letzten Einheiten — alles Rückblick. Das Vorhaben lag zwei Bildschirme weiter
+unten als „Geplant“ in einer Nebenspalte, und der Plan selbst (Schritte,
+Leistungsbereiche, Verpflegung) war im Cockpit gar nicht zu sehen.
+
+Der Plan liegt vollständig in intervals.icu: 47 Ereignisse, je mit
+`moving_time`, `icu_training_load`, `description` und `workout_doc` (Schritte mit
+Leistung, HF-Bereich oder Distanz, dazu `zoneTimes`). Er wird beim Sync schon
+abgerufen und weggeworfen. Es fehlt also keine Quelle, nur die Anzeige.
+
 ---
 
 ## 3. Entscheidungen
@@ -436,6 +449,10 @@ Client liegt (`sources/garmin.py`).
 | D-31 | 01.11.2026 | **Nach einem Sensorwechsel beginnt die Referenz neu.** Ein Datum (`wellness_epoch`) markiert die erste Nacht mit dem neuen Gerät. Ab dort zählen nur noch Nächte dieses Sensors in die 21-Tage-Referenz. Die ersten **7 Nächte** ergeben keinen Wert („Referenz wird aufgebaut“), von 8 bis 21 steht sie „im Aufbau“, danach ist sie normal. Die Historie bleibt in der Datenbank. | Ein anderes Gerät misst anders: HRV und Ruhepuls verschieben sich systematisch, nicht zufällig. Alte und neue Nächte in einer Referenz zeigen zwei Wochen lang eine Erholung, die es nicht gibt. | Neues Feld `reference` in `/api/overview`, `tc baseline --start JJJJ-MM-TT` (und `--off`), Anzeige in Uhr und Untertitel. Gilt für das CIRQA-Band, das am 4. November 2026 kommt. |
 | D-32 | 01.11.2026 | **Die bessere Aufzeichnung gewinnt, die Last bleibt bei intervals.** Von einer Einheit, die mehrfach ankommt, bleibt die aussagekräftigere: Garmin Connect vor Health Sync, dann die vollständigere, dann die längere. Die Trainingslast wird **nicht** selbst gerechnet: Garmins `activityTrainingLoad` liegt im Median 2,64× über intervals' Last (Spanne 0,29–8,64 über 66 Paare) und würde Fitness und Müdigkeit unbrauchbar machen. | Ein zweites Lastmaß würde die Historie unvergleichbar machen; die Aufzeichnung selbst darf trotzdem die bessere sein. | Läufe und Schwimmen kommen künftig als Garmin-Aufzeichnung, Kraft und Rad aus intervals (Bevel, Wahoo). Health Sync verliert die Berechtigung; Strava bleibt außen vor, weil es keine Zusatzinformation liefert, die intervals nicht schon hat. |
 | D-33 | 01.11.2026 | **Läufe und Schwimmen kommen über Garmins Personal API, Kraft und Rad über intervals.** Garmin hat bei intervals keine Berechtigung mehr, also liefert nur die Personal API die Aufzeichnung. Weil dort keine intervals-Last mehr entsteht, rechnet das Cockpit sie selbst: `Last = Stunden × Faktor × (Puls/160)²`, Faktor 75 für Läufe, 70 für Schwimmen — kalibriert an der historischen intervals-Last (R² = 0,974 über 37 Läufe). Garmins eigene `activityTrainingLoad` wird **nicht** übernommen. | Ein zweites Lastmaß würde Fitness und Müdigkeit unvergleichbar machen; die kalibrierte Formel trifft die alte Skala. | Neues Modul `load.py`, Garmin-Aktivitäten in `sources/garmin.py`, Sync schreibt beide Quellen und räumt Dubletten (Garmin schlägt Health Sync). Erster Lauf: 17 Läufe/Schwimmen direkt, Wochenstunden sinken um die Pausen, die Health Sync mitzählte. |
+| D-35 | 01.11.2026 | **Mobil ist die Referenz, nicht der Notfall.** Jeder Bildschirm wird zuerst auf 390 × 844 gebaut und dort geprüft; der breite Schirm ist die Erweiterung. Kein Layout, das auf dem Handy scrollt, um zwei Spalten zu retten, keine Fläche, die nur mit Maus funktioniert, Tap-Ziele mindestens 40 px hoch, Bedienung mit dem Daumen im unteren Drittel. | Das Cockpit wird fast immer am iPhone benutzt, oft in der Hand, oft vor oder nach dem Training. Ein Entwurf, der am Rechner entsteht und dann schrumpft, trägt dort nicht. | Entwürfe als Handy-Mockup, Prüfung bei 390 px vor jedem Commit, `Mobile-first` als erster Punkt in `UI-REGELN.md`. |
+| D-36 | 01.11.2026 | **Die Startseite zeigt das Training.** „Frische“ als Kennzahl, das Diagramm „Belastung & Frische“ und die Liste „Letzte Aktivitäten“ verlassen die Startseite. An ihre Stelle tritt die Karte **Training** mit den Einheiten von heute und morgen; jede Zeile öffnet die Einheit. Erholung, Treiber, Schlaf/HRV/Ruhepuls, Bevel-Abgleich und die Wochenkarte bleiben. | Rückblick beantwortet die Morgenfrage nicht. Die Zahlen bleiben in der Datenbank und in der Wochenkarte; die Liste der Einheiten lebt auf der Seite Aktivitäten weiter. | Neue Felder `sessions` in `/api/overview`, neue Karte in `Today.tsx`, `LoadChart` und `ActivityTable`-Nutzung auf „Heute“ entfallen. |
+| D-37 | 01.11.2026 | **Die Einheit ist ein Blatt mit Profil** (Variante 2 aus dem Mockup): geplanter Verlauf zuerst, darunter Dauer · Distanz · Last, Aufbau, Verpflegung, bei erledigten Einheiten „Geplant · gemacht“. Dauer und Distanz stehen beide, das Ziel der Einheit führt; der fehlende Wert bekommt ein **≈** und wird aus dem eigenen Median der letzten 90 Tage geschätzt (Rad 24 km/h, Lauf 8,6 km/h, Schwimmen 2,6 km/h). Kohlenhydrate erst ab 60 Minuten, aus `fuel.py`. Kein Coach-Text, keine Empfehlung. | Der Athlet will sehen, was die Einheit verlangt, nicht was jemand dazu meint. Die Schätzung ist aus dem eigenen Fahrtenbuch abgeleitet und damit nachprüfbar; erfundene Zahlen sind verboten. | Neue Tabelle `event` mit `raw` (Schritte, Zonen), neues Modul `plan.py`, `GET /api/session/{id}`, Overlay `SessionSheet` mit `SessionProfile`. |
+
 | D-34 | 01.11.2026 | **Fitness und Müdigkeit rechnet das Cockpit selbst.** Bisher wurden die Tageswerte `ctl`/`atl` aus intervals übernommen. Seit die Läufe über die Personal API kommen, kennt intervals diese Einheiten nicht mehr — seine Form würde ab dem Sensorwechsel systematisch zu niedrig stehen. Ab jetzt zählt die eigene Rechnung (EWMA 42/7 Tage) über die eigenen Aktivitäten. | Ein Wert, der auf einem fremden, unvollständigen Datensatz beruht, ist schlimmer als eine eigene Rechnung, die man erklären kann. | `daily_days` ignoriert die übernommenen Werte; die Last kommt aus `load.py` (Garmin) bzw. intervals (Kraft, Rad). |
 
 ---
@@ -533,4 +550,5 @@ Client liegt (`sources/garmin.py`).
 | 01.11.2026 | D-34: Fitness und Müdigkeit aus eigener Rechnung, 365 Tage Läufe und Schwimmen aus Garmin nachgeladen (93 Einheiten) |
 | 01.11.2026 | D-33: Läufe und Schwimmen direkt aus der Garmin-Personal-API, Last selbst gerechnet (R² 0,974) |
 | 01.11.2026 | E-31, D-31 und D-32: Garmin filtert Kennzahlen, Referenz-Neustart beim Sensorwechsel gebaut, Last bleibt bei intervals |
+| 01.11.2026 | E-32 und D-35 bis D-37: Startseite zeigt das Training, Einheit als Blatt mit Profil, Mobil-first verbindlich |
 | 01.11.2026 | D-29: Richtung B+ gebaut und auf dem Server — neue Rampe, Serif/Mono-Schriften selbst gehostet, Instrument-Uhr, Wochenstreifen, Tabellen, recharts entfernt |

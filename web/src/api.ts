@@ -1,4 +1,4 @@
-import type { ActivitiesResponse, FuelPlan, Overview, SyncResult } from "./types";
+import type { ActivitiesResponse, FuelPlan, Overview, SessionDetail, SyncResult } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -24,6 +24,7 @@ export const api = {
     request<ActivitiesResponse>(
       `/api/activities?limit=300${sport ? `&sport=${encodeURIComponent(sport)}` : ""}`,
     ),
+  session: (id: number) => request<SessionDetail>(`/api/session/${id}`),
   fuel: (params: {
     minutes: number;
     mode: string;

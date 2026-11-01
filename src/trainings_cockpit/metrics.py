@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from statistics import mean, pstdev
 from typing import Any
 
-from . import db
+from . import db, plan
 
 TARGET_SLEEP_H = 7.5
 #: Referenzfenster für „üblich“: die letzten drei Wochen, nicht die letzten drei Monate.
@@ -583,20 +583,7 @@ def week_summaries(
 # ---------------------------------------------------------------- Aktivitäten
 
 
-SPORT_LABELS = {
-    "Run": "Laufen",
-    "VirtualRun": "Laufen (indoor)",
-    "Ride": "Rad",
-    "VirtualRide": "Rad (indoor)",
-    "Swim": "Schwimmen",
-    "OpenWaterSwim": "Freiwasser",
-    "WeightTraining": "Kraft",
-    "Workout": "Workout",
-    "Walk": "Gehen",
-    "Hike": "Wandern",
-    "HighIntensityIntervalTraining": "HIIT",
-    "Transition": "Wechsel",
-}
+SPORT_LABELS = plan.SPORT_LABELS
 
 
 def activity_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -711,12 +698,26 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
     recent = [activity_payload(r) for r in db.recent_activities(conn, 12)]
     upcoming = db.upcoming_events(conn, today, 3)
 
+    # Die Einheiten, um die es heute und morgen geht. Eine Schätzung braucht
+    # alle Aktivitäten der letzten Monate — die Mediane werden einmal gerechnet.
+    speeds_kmh = plan.speeds(conn, today=today)
+    sessions = [
+        {"day": day, **plan.session_row(conn, event, speeds_kmh)}
+        for day, events in (
+            ("today", db.events_on(conn, today)),
+            ("tomorrow", db.events_on(conn, today + timedelta(days=1))),
+        )
+        for event in events
+    ]
+
     return {
         "athlete": {
             "name": db.get_setting(conn, "athlete_name") or "Athlet",
             "id": db.get_setting(conn, "athlete_id") or "",
         },
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        # Mit Zeitzone: die Oberfläche zeigt sonst die Uhr des Containers (UTC),
+        # während der Athlet in Wien auf dieselbe Minute schaut.
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "today": {
             "date": today.isoformat(),
             "recovery": recovery,
@@ -756,6 +757,7 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
             "sleep": sleep_series,
             "recovery": recovery_points,
         },
+        "sessions": sessions,
         "weeks": week_summaries(series_days, activities, 12),
         "activities": recent,
         "upcoming": [

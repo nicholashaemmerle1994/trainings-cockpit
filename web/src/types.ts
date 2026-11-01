@@ -104,9 +104,79 @@ export interface Overview {
     sleep: { date: string; hours: number | null; score: number | null }[];
     recovery: { date: string; score: number; vendor: number | null }[];
   };
+  sessions: SessionRow[];
   weeks: Week[];
   activities: Activity[];
   upcoming: Upcoming[];
+}
+
+export interface SessionStep {
+  label: string;
+  minutes: number;
+  distance_km: number | null;
+  target: string;
+  work: boolean;
+  lo: number | null;
+  hi: number | null;
+}
+
+export interface SessionAxis {
+  from: number;
+  to: number;
+  ticks: number[];
+  unit: string;
+}
+
+export interface SessionFuel {
+  carbs_g: number;
+  rate: number;
+  gels: number;
+  water_ml: number;
+  sodium_mg: number;
+}
+
+export interface SessionActual {
+  activity_id: string;
+  name: string;
+  minutes: number | null;
+  km: number | null;
+  load: number | null;
+  intensity: number | null;
+  hr: number | null;
+}
+
+export interface SessionRow {
+  day: "today" | "tomorrow";
+  id: number;
+  date: string;
+  sport: string;
+  sport_label: string;
+  name: string;
+  minutes: number | null;
+  km: number | null;
+  estimated: "dauer" | "distanz" | "keine";
+  primary: "duration" | "distance" | null;
+  load: number | null;
+  done: boolean;
+}
+
+export interface SessionDetail {
+  id: number;
+  date: string;
+  sport: string;
+  sport_label: string;
+  name: string;
+  load: number | null;
+  intensity: number | null;
+  minutes: number | null;
+  km: number | null;
+  estimated: "dauer" | "distanz" | "keine";
+  primary: "duration" | "distance" | null;
+  axis: SessionAxis | null;
+  steps: SessionStep[];
+  total_minutes: number | null;
+  fuel: SessionFuel | null;
+  actual: SessionActual | null;
 }
 
 export interface ActivitiesResponse {

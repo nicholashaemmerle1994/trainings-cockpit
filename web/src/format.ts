@@ -51,6 +51,25 @@ export function fmtSpan(seconds: number | null | undefined): string {
   return `${h} h ${String(m).padStart(2, "0")} min`;
 }
 
+/** Dauer als „2 h 45 min" – so, wie sie im Plan steht. */
+export function fmtMinutes(minutes: number | null | undefined): string {
+  if (minutes == null) return "—";
+  const total = Math.round(minutes);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${String(m).padStart(2, "0")} min`;
+}
+
+export function fmtLiters(ml: number | null | undefined): string {
+  if (ml == null) return "—";
+  return `${(ml / 1000).toLocaleString("de-AT", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} l`;
+}
+
 export function fmtDuration(minutes: number | null | undefined): string {
   if (minutes == null) return "—";
   const h = Math.floor(minutes / 60);

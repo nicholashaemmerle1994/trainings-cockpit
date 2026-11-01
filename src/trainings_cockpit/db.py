@@ -59,7 +59,10 @@ CREATE TABLE IF NOT EXISTS event (
     name        TEXT,
     load        REAL,
     duration_s  INTEGER,
+    distance_m  REAL,
+    intensity   REAL,
     description TEXT,
+    raw         TEXT,
     updated_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_event_date ON event(date);
@@ -89,8 +92,25 @@ def connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
+#: Spalten, die nach dem ersten Anlegen dazugekommen sind.
+#: (Tabelle, Spalte, Definition) — SQLite kann nur hinzufügen, nie ändern.
+ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("event", "distance_m", "REAL"),
+    ("event", "intensity", "REAL"),
+    ("event", "raw", "TEXT"),
+)
+
+
+def _ensure_columns(conn: sqlite3.Connection) -> None:
+    for table, column, decl in ADDED_COLUMNS:
+        known = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in known:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    _ensure_columns(conn)
     conn.commit()
 
 
@@ -147,7 +167,10 @@ def map_event(row: dict[str, Any]) -> dict[str, Any]:
         "name": row.get("name") or "",
         "load": row.get("icu_training_load"),
         "duration_s": row.get("moving_time"),
+        "distance_m": row.get("distance") or None,
+        "intensity": row.get("icu_intensity"),
         "description": row.get("description") or "",
+        "raw": json.dumps(row, ensure_ascii=False),
     }
 
 
@@ -265,13 +288,15 @@ def upsert_events(conn: sqlite3.Connection, rows: Iterable[dict[str, Any]]) -> i
         conn.execute(
             """
             INSERT INTO event (id, date, sport, category, name, load, duration_s,
-                description, updated_at)
+                distance_m, intensity, description, raw, updated_at)
             VALUES (:id, :date, :sport, :category, :name, :load, :duration_s,
-                :description, :updated_at)
+                :distance_m, :intensity, :description, :raw, :updated_at)
             ON CONFLICT(id) DO UPDATE SET
                 date=excluded.date, sport=excluded.sport, category=excluded.category,
                 name=excluded.name, load=excluded.load, duration_s=excluded.duration_s,
-                description=excluded.description, updated_at=excluded.updated_at
+                distance_m=excluded.distance_m, intensity=excluded.intensity,
+                description=excluded.description, raw=excluded.raw,
+                updated_at=excluded.updated_at
             """,
             {**row, "updated_at": now},
         )
@@ -302,6 +327,28 @@ def wellness_between(conn: sqlite3.Connection, start: date, end: date) -> list[d
 def recent_activities(conn: sqlite3.Connection, limit: int = 20) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM activity ORDER BY start_local DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def events_on(conn: sqlite3.Connection, day: date) -> list[dict[str, Any]]:
+    """Geplante Einheiten eines Tages, nach Startzeit und Anlage sortiert."""
+    rows = conn.execute(
+        "SELECT * FROM event WHERE date = ? AND COALESCE(category, 'WORKOUT') = 'WORKOUT' ORDER BY id",
+        (day.isoformat(),),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def event_by_id(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM event WHERE id = ?", (event_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def events_between(conn: sqlite3.Connection, start: date, end: date) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM event WHERE date BETWEEN ? AND ? AND COALESCE(category, 'WORKOUT') = 'WORKOUT' ORDER BY date, id",
+        (start.isoformat(), end.isoformat()),
     ).fetchall()
     return [dict(r) for r in rows]
 

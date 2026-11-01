@@ -98,7 +98,7 @@ export function RecoveryDial({
       </svg>
 
       <div className="dial-center">
-        <span className="dial-score">{score == null ? "—" : Math.round(score)}</span>
+        <span className={`dial-score${score == null ? " blank" : ""}`}>{score == null ? "—" : Math.round(score)}</span>
         <span className="dial-band" style={score == null ? undefined : { color }}>
           {label}
         </span>

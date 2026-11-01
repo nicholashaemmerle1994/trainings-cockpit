@@ -16,6 +16,20 @@ Ein Bildschirm hat **ein helles Element**, das die Farbe und die Sorgfalt trägt
 Alles andere — Navigation, Karten, Rahmen, Labels — bleibt ruhig. Reichtum gehört
 in den Inhalt, nicht in die Bedienelemente.
 
+## Mobil zuerst
+
+Entworfen wird auf **390 × 844**, geprüft wird dort, und erst danach auf dem
+breiten Schirm. Das Handy ist der Ort, an dem das Cockpit benutzt wird; der
+Rechner zeigt dasselbe größer, nicht anders.
+
+- Zuerst der Bildschirm, den man mit einer Hand erreicht: Kopf oben, Handlung
+  im unteren Drittel, nichts Wichtiges unter der Tableiste.
+- Tap-Ziele mindestens 40 px hoch, 8 px Abstand zwischen zweien.
+- Zwei Spalten nur, wenn sie bei 390 px noch zwei Spalten sind — sonst stapeln.
+- Keine Fläche, die nur mit der Maus funktioniert (Hover, Zeiger, Rechtsklick).
+- Vor dem Umbau ein Handy-Mockup; der breite Schirm kommt danach und ohne neue
+  Entscheidung.
+
 ## Ablauf
 
 1. **Ansehen.** Bildschirm im Browser rendern und einen Screenshot beurteilen,
@@ -158,6 +172,7 @@ Nur Farbe, Fläche, Rahmen, Deckkraft und Transform animieren — nie Breite, H�
 - [ ] Zahlen in einem Format, tabellarisch
 - [ ] Verschachtelte Radien gehen auf
 - [ ] Kennzahlenkarten ohne Sparkline
+- [ ] Bei 390 px geprüft: nichts abgeschnitten, nichts zu klein
 - [ ] Erster Bildschirm als Ganzes, kein totes Band
 - [ ] Keine Schleifenbewegung, eine Kurve, keine Layout-Animation
 - [ ] Vorlagenprobe: Würde der Bildschirm auch zu einem anderen Produkt passen?

@@ -284,12 +284,22 @@ def test_ohne_marke_gibt_es_keine_referenzangabe() -> None:
 def test_wochenumfang_zaehlt_sieben_tage_und_liefert_sekunden(tmp_path) -> None:
     today = date(2026, 11, 1)
     wellness = _wellness(10, today)
+    def activity(day: date, name: str, moving: int, load: int) -> dict:
+        # Felder wie sie intervals liefert — so, wie der Sync sie schreibt.
+        return {
+            "id": f"a-{name}",
+            "start_date_local": f"{day.isoformat()}T08:00:00",
+            "type": "Run",
+            "moving_time": moving,
+            "icu_training_load": load,
+        }
+
     activities = [
         # heute und die sechs Tage davor zählen
-        {"date": today.isoformat(), "moving_s": 3600, "load": 50, "type": "Run"},
-        {"date": (today - timedelta(days=6)).isoformat(), "moving_s": 1800, "load": 20, "type": "Run"},
+        activity(today, "heute", 3600, 50),
+        activity(today - timedelta(days=6), "vorwoche", 1800, 20),
         # der achte Tag zählt nicht mehr
-        {"date": (today - timedelta(days=7)).isoformat(), "moving_s": 7200, "load": 90, "type": "Run"},
+        activity(today - timedelta(days=7), "alt", 7200, 90),
     ]
     from trainings_cockpit import db
 
