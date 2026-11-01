@@ -234,6 +234,9 @@ tests/                   pytest
 - Keys nur in `.env` (`chmod 600`), niemals im Repo.
 - Keine Cloud, kein Multi-User: der Garmin-Key ist persönlich.
 - `data/` enthält Gesundheitsdaten und ist gitignored.
+- Nach jeder größeren Änderung wird committet und gepusht. Nachricht: erste
+  Zeile `Bereich: Was` im Imperativ, darunter zwei bis fünf Zeilen zu Was und
+  Warum.
 
 ## Nächste Schritte
 
