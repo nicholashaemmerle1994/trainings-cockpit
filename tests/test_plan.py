@@ -134,6 +134,56 @@ def test_herzfrequenzzone_wird_zur_spanne() -> None:
     assert out["steps"][0]["hi"] == 70
 
 
+PROFILE = {"max_hr": 190, "zones": [132, 155, 167, 174, 190]}
+
+
+def test_prozent_der_hf_werden_zu_schlaegen() -> None:
+    event = make_event(
+        [{"hr": {"start": 70, "end": 75, "units": "%hr"}, "duration": 600}],
+        sport="Run",
+    )
+    out = plan.planned(event, SPEEDS, PROFILE)
+
+    assert out["steps"][0]["target"] == "133–142 bpm"
+    assert out["axis"] is not None
+    assert out["axis"]["unit"] == "bpm"
+    assert out["axis"]["from"] <= 133
+    assert out["axis"]["to"] >= 142
+
+
+def test_zone_wird_zu_ihren_grenzen_in_schlaegen() -> None:
+    event = make_event(
+        [{"hr": {"units": "hr_zone", "value": 2}, "distance": 3000, "duration": 1213}],
+        sport="Run",
+    )
+    out = plan.planned(event, SPEEDS, PROFILE)
+
+    assert out["steps"][0]["target"] == "132–155 bpm"
+    assert out["steps"][0]["lo"] == 132
+    assert out["steps"][0]["hi"] == 155
+
+
+def test_prozent_der_schwelle_bleibt_prozent() -> None:
+    event = make_event([{"power": {"start": 87, "end": 95, "units": "%ftp"}, "duration": 600}])
+    out = plan.planned(event, SPEEDS, PROFILE)
+
+    assert out["steps"][0]["target"] == "87–95 % FTP"
+    assert out["axis"] is not None
+    assert out["axis"]["unit"] == "% FTP"
+
+
+def test_ohne_profil_bleibt_es_bei_prozent() -> None:
+    event = make_event(
+        [{"hr": {"start": 70, "end": 75, "units": "%hr"}, "duration": 600}],
+        sport="Run",
+    )
+    out = plan.planned(event, SPEEDS)
+
+    assert out["steps"][0]["target"] == "70–75 % HF"
+    assert out["axis"] is not None
+    assert out["axis"]["unit"] == "% HF"
+
+
 def test_verpflegung_erst_ab_sechzig_minuten() -> None:
     assert plan.fuel_for(59) is None
     assert plan.fuel_for(60) is not None

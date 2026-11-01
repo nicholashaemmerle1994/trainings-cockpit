@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -31,6 +32,7 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             activities = dedupe.entdoppeln(client.activities(oldest, today))
             wellness = client.wellness(oldest, today)
             events = client.events(oldest, events_until)
+            sport_settings = client.sport_settings()
 
         n_activities = db.upsert_activities(conn, activities)
 
@@ -54,6 +56,7 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         n_wellness = db.upsert_wellness(conn, wellness)
         n_events = db.upsert_events(conn, events)
 
+        db.set_setting(conn, "hr_profile", json.dumps(_hr_profile(sport_settings)))
         db.set_setting(conn, "athlete_name", _pretty_name(athlete.get("name")))
         db.set_setting(conn, "athlete_id", str(athlete.get("id") or ""))
         db.set_setting(conn, "last_sync", datetime.now().isoformat(timespec="seconds"))
@@ -86,6 +89,23 @@ def dubletten_entfernen(conn: Any) -> int:
     rows = dedupe.aus_datenbank(conn)
     weg = [str(verlierer.get("id")) for _, verlierer in dedupe.paare(rows) if verlierer.get("id")]
     return db.delete_activities(conn, weg)
+
+
+def _hr_profile(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Max-HF und Zonengrenzen je Sportart aus den Einstellungen von intervals.
+
+    Die Prozente in einem Plan sind Prozent der maximalen Herzfrequenz; ohne
+    diese Zahlen kann die Oberfläche nur „70–75 %" schreiben statt „133–143 bpm".
+    """
+    profile: dict[str, dict[str, Any]] = {}
+    for row in rows or []:
+        max_hr = row.get("max_hr")
+        zones = row.get("hr_zones") or []
+        if not max_hr or not zones:
+            continue
+        for sport in row.get("types") or []:
+            profile[str(sport)] = {"max_hr": max_hr, "zones": [int(z) for z in zones]}
+    return profile
 
 
 def _pretty_name(name: object) -> str:

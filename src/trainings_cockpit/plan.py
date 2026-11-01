@@ -67,6 +67,60 @@ def sport_family(sport: str | None) -> str | None:
     return SPORT_FAMILY.get(sport or "")
 
 
+def hr_profiles(conn: Any) -> dict[str, dict[str, Any]]:
+    """Max-HF und Zonengrenzen je Sportart, wie intervals.icu sie führt.
+
+    Die Prozente im Plan sind Prozent der maximalen Herzfrequenz. Ohne diese
+    Zahlen bliebe nur das Prozentzeichen; mit ihnen steht dort, was auf der Uhr
+    steht. Fehlt das Profil (noch kein Sync), bleibt es beim Prozentwert.
+    """
+    raw = db.get_setting(conn, "hr_profile")
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _profile_for(profile: dict[str, dict[str, Any]], sport: str | None) -> dict[str, Any] | None:
+    if not profile:
+        return None
+    entry = profile.get(sport or "")
+    if isinstance(entry, dict):
+        return entry
+    family = sport_family(sport)
+    for key, value in profile.items():
+        if sport_family(key) == family and isinstance(value, dict):
+            return value
+    return None
+
+
+def _to_bpm(target: dict[str, Any], entry: dict[str, Any] | None) -> dict[str, Any]:
+    """Ein Prozentziel in Schläge übersetzen. Ohne Profil bleibt es Prozent."""
+    # Nur Herzfrequenz-Prozente werden zu Schlägen; Prozent der Schwelle (FTP)
+    # und Prozent des Tempos bleiben, was sie sind.
+    if not entry or target["unit"] != "%" or target.get("basis") != "hr":
+        return target
+    max_hr = entry.get("max_hr")
+    zones = entry.get("zones") or []
+    label = target.get("label") or ""
+    if label.startswith("Z") and label[1:].isdigit() and zones:
+        number = int(label[1:])
+        if 1 <= number <= len(zones):
+            high = float(zones[number - 1])
+            # Die untere Grenze von Zone 1 steht in keiner Liste; intervals rechnet
+            # sie ab der halben Maximalfrequenz.
+            low = float(zones[number - 2]) if number >= 2 else float(round((max_hr or zones[0]) * 0.5))
+            return {**target, "lo": low, "hi": high, "unit": "bpm"}
+    if max_hr:
+        low = float(round(max_hr * target["lo"] / 100))
+        high = float(round(max_hr * target["hi"] / 100))
+        return {**target, "lo": low, "hi": high, "unit": "bpm"}
+    return target
+
+
 def speeds(conn: Any, days: int = 180, today: date | None = None) -> dict[str, float]:
     """Median-Geschwindigkeit je Familie aus den eigenen Aktivitäten (km/h)."""
     end = today or date.today()
@@ -149,7 +203,9 @@ def _target_text(target: dict[str, Any] | None, distance_m: float | None) -> str
         km = distance_m / 1000
         parts.append(f"{km:.1f} km".replace(".", ","))
     if target:
-        if target["label"]:
+        if target["unit"] == "bpm":
+            parts.append(f"{target['lo']:.0f}–{target['hi']:.0f} bpm")
+        elif target["label"]:
             parts.append(target["label"])
         elif target["unit"] == "W":
             parts.append(f"{target['lo']:.0f}–{target['hi']:.0f} W")
@@ -191,7 +247,12 @@ def _flatten(steps: list[dict[str, Any]], out: list[dict[str, Any]], depth: int 
 
 def _nice_ticks(low: float, high: float, unit: str) -> list[int]:
     """Drei oder vier runde Marken für die Achse."""
-    candidates = (10, 20, 25, 50, 100) if unit == "W" else (2, 5, 10, 20)
+    if unit == "W":
+        candidates = (10, 20, 25, 50, 100)
+    elif unit == "bpm":
+        candidates = (5, 10, 15, 20, 25)
+    else:
+        candidates = (2, 5, 10, 20)
     for step in candidates:
         first = int(-(-low // step) * step)
         ticks = list(range(first, int(high) + 1, step))
@@ -201,7 +262,10 @@ def _nice_ticks(low: float, high: float, unit: str) -> list[int]:
     return list(range(int(low // step) * step, int(high) + 1, step))[:5] or [int(low)]
 
 
-def parse_workout(raw: str | None) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+def parse_workout(
+    raw: str | None,
+    profile: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Schritte und Achse eines Plans.
 
     Die Achse ist die Skala des Diagramms: absolute Watt, Prozent der Schwelle
@@ -220,10 +284,21 @@ def parse_workout(raw: str | None) -> tuple[list[dict[str, Any]], dict[str, Any]
     if not flat:
         return [], None
 
+    if profile:
+        for step in flat:
+            if step["target"]:
+                step["target"] = _to_bpm(step["target"], profile)
+                step["target_text"] = _target_text(step["target"], step["distance_m"] or None)
+
     units = [s["target"]["unit"] for s in flat if s["target"]]
     if not units:
         return flat, None
-    unit = "W" if "W" in units else "%"
+    if "W" in units:
+        unit = "W"
+    elif "bpm" in units:
+        unit = "bpm"
+    else:
+        unit = "%"
     bands = [s["target"] for s in flat if s["target"] and s["target"]["unit"] == unit]
     if not bands:
         return flat, None
@@ -248,7 +323,12 @@ def parse_workout(raw: str | None) -> tuple[list[dict[str, Any]], dict[str, Any]
     end = high + pad
 
     basis = next((b["basis"] for b in bands if b.get("basis")), None)
-    label = "W" if unit == "W" else f"% {UNIT_LABEL.get(basis or '', '')}".strip()
+    if unit == "W":
+        label = "W"
+    elif unit == "bpm":
+        label = "bpm"
+    else:
+        label = f"% {UNIT_LABEL.get(basis or '', '')}".strip()
 
     return flat, {
         "from": round(start, 1),
@@ -282,9 +362,13 @@ def estimate(
     return None, None, "keine"
 
 
-def planned(event: dict[str, Any], speeds_kmh: dict[str, float]) -> dict[str, Any]:
+def planned(
+    event: dict[str, Any],
+    speeds_kmh: dict[str, float],
+    hr: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Die geplante Einheit als Zahlen: Dauer, Distanz, Schritte, Achse."""
-    steps, axis = parse_workout(event.get("raw"))
+    steps, axis = parse_workout(event.get("raw"), hr)
     planned_s = sum(s["seconds"] for s in steps)
     planned_m = sum(s["distance_m"] for s in steps)
 
@@ -398,7 +482,7 @@ def done_payload(row: dict[str, Any]) -> dict[str, Any]:
 def session(conn: Any, event: dict[str, Any], speeds_kmh: dict[str, float] | None = None) -> dict[str, Any]:
     """Alles, was die Einheit auf dem Bildschirm braucht."""
     speeds_kmh = speeds_kmh or speeds(conn)
-    numbers = planned(event, speeds_kmh)
+    numbers = planned(event, speeds_kmh, _profile_for(hr_profiles(conn), event.get("sport")))
     row = matches(conn, event)
     return {
         "id": event["id"],
