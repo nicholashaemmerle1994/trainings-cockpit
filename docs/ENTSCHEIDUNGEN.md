@@ -410,6 +410,54 @@ Der Plan liegt vollständig in intervals.icu: 47 Ereignisse, je mit
 Leistung, HF-Bereich oder Distanz, dazu `zoneTimes`). Er wird beim Sync schon
 abgerufen und weggeworfen. Es fehlt also keine Quelle, nur die Anzeige.
 
+### E-33 · Garmin zieht die Grenze zwischen Lesen und Schreiben (01.11.2026)
+
+Am 9. Oktober 2026 schrieb der Betreiber von intervals.icu in seinem Forum, Garmin
+habe die Bedingungen im Entwicklerportal geändert, ohne Ankündigung; „It is likely
+that we will have to block access to Garmin data via the API soon". Drei Tage
+später stellte Intervals Pro, ein Coaching-Dienst auf Basis von intervals.icu,
+den Betrieb ein ([watchesreviewed](https://watchesreviewed.com/garmin-api-terms-third-party-apps/)).
+
+Der Kern ist **Ziffer 5.1(o)** des Garmin-Connect-Developer-Program-Agreement:
+kein eigener API-Zugang, über den ein Lizenznehmer **Endnutzerdaten an Dritte**
+weitergibt, die Garmin nicht schriftlich freigegeben hat. Der Wortlaut ist seit
+2023 unverändert — neu ist, dass Garmin ihn durchsetzt. Damit ist die Kette
+„Garmin → intervals.icu → fremde App" gemeint: genau der Weg, über den das
+Cockpit seine Läufe und Schwimmeinheiten bis D-33 aus intervals geholt hat.
+
+Was das **nicht** berührt, ist die Gegenrichtung. Ein Workout, das intervals an
+Garmin schickt, ist kein Garmin-Datenabfluss an Dritte — deshalb laufen die
+geplanten Einheiten weiter auf die Uhr, auch während activities und wellness
+über intervals versiegen. Selbst hochgeladene FIT-Dateien sind nach Einschätzung
+von intervals ebenfalls unkritisch, weil sie nicht über die Partner-API kamen.
+
+Am 21. Oktober 2026 hat Garmin das Programm wieder geöffnet, in drei Stufen
+([DC Rainmaker](https://www.dcrainmaker.com/2026/10/garmin-connect-api-revamps-connect-developer.html),
+[Momentum](https://www.themomentum.ai/blog/garmin-connect-developer-program-reopens)):
+
+- **Personal** — eigene Daten lesen, Key in Sekunden, keine Schreibrechte
+  (das ist unser Zugang, D-33).
+- **Starter** — bis 1.000 Nutzer, kostenlos, Freigabe praktisch sofort, und
+  darin enthalten: **Courses & Training API**, also Routen und strukturierte
+  Workouts auf Garmin-Geräte schieben.
+- **Enterprise** — Historie, Support, mehr als 1.000 Nutzer, kostenpflichtig:
+  1.000 Dollar Einstieg (auf die Nutzungsrechnung angerechnet), Preis je aktivem
+  Nutzer, **Abrechnung ab 1. April 2027**. Bestehende Partner rutschen ohne
+  Einstiegsgebühr automatisch hinein.
+
+Dazu kommt die zweite Baustelle, die wir schon in E-31 gemessen haben: seit Ende
+September 2026 filtert Garmin eigene Kennzahlen aus den FIT-Dateien, die es
+Partnern gibt (Stamina, Recovery Time, VO₂max, Performance Condition, Training
+Effect, Sweat Loss).
+
+Für uns heißt das: **kein Enddatum für den Workout-Versand.** Es gibt kein
+Datum, an dem intervals keine Workouts mehr senden darf; das einzige Datum im
+Raum ist der 1. April 2027, ab dem Garmin von Partnern Geld je aktivem Nutzer
+verlangt. intervals.icu ist ein Ein-Mann-Projekt mit Spendenmodell — ob es sich
+das leisten will, ist die eigentliche offene Frage, nicht die Technik. Ein
+eigener **Starter**-Zugang (kostenlos, 1.000 Nutzer, Training API) wäre die
+Versicherung: dann schiebt das Cockpit selbst, ohne intervals dazwischen.
+
 ---
 
 ## 3. Entscheidungen
@@ -550,5 +598,6 @@ abgerufen und weggeworfen. Es fehlt also keine Quelle, nur die Anzeige.
 | 01.11.2026 | D-34: Fitness und Müdigkeit aus eigener Rechnung, 365 Tage Läufe und Schwimmen aus Garmin nachgeladen (93 Einheiten) |
 | 01.11.2026 | D-33: Läufe und Schwimmen direkt aus der Garmin-Personal-API, Last selbst gerechnet (R² 0,974) |
 | 01.11.2026 | E-31, D-31 und D-32: Garmin filtert Kennzahlen, Referenz-Neustart beim Sensorwechsel gebaut, Last bleibt bei intervals |
+| 01.11.2026 | E-33: Garmin-Programm in drei Stufen, Ziffer 5.1(o) trifft den Datenabfluss, nicht den Workout-Versand, Abrechnung ab 01.04.2027 |
 | 01.11.2026 | E-32 und D-35 bis D-37: Startseite zeigt das Training, Einheit als Blatt mit Profil, Mobil-first verbindlich |
 | 01.11.2026 | D-29: Richtung B+ gebaut und auf dem Server — neue Rampe, Serif/Mono-Schriften selbst gehostet, Instrument-Uhr, Wochenstreifen, Tabellen, recharts entfernt |
