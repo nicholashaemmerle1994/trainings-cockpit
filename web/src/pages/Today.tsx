@@ -12,6 +12,7 @@ import {
   fmtDuration,
   fmtNumber,
   fmtSigned,
+  fmtSpan,
   sportLabel,
 } from "../format";
 import type { Overview, RecoveryComponent } from "../types";
@@ -293,7 +294,7 @@ export function Today({
 
           <div className="week-row">
             <span>Umfang</span>
-            <span>{fmtNumber(today.load.week_hours, 1)} h</span>
+            <span>{fmtSpan(today.load.week_seconds)}</span>
           </div>
           <div className="week-row">
             <span>Belastung</span>

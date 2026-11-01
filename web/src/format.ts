@@ -41,6 +41,16 @@ export function fmtClock(hours: number | null | undefined): string {
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
+/** Wochenumfang als „14 h 36 min" – Minuten zählen, keine Nachkommastellen. */
+export function fmtSpan(seconds: number | null | undefined): string {
+  if (seconds == null) return "—";
+  const total = Math.round(seconds / 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m} min`;
+  return `${h} h ${String(m).padStart(2, "0")} min`;
+}
+
 export function fmtDuration(minutes: number | null | undefined): string {
   if (minutes == null) return "—";
   const h = Math.floor(minutes / 60);

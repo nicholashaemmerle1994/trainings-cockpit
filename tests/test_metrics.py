@@ -279,3 +279,30 @@ def test_ohne_marke_gibt_es_keine_referenzangabe() -> None:
     recovery = metrics.compute_recovery(days, len(days) - 1)
     assert recovery["reference"] is None
     assert recovery["score"] is not None
+
+
+def test_wochenumfang_zaehlt_sieben_tage_und_liefert_sekunden(tmp_path) -> None:
+    today = date(2026, 11, 1)
+    wellness = _wellness(10, today)
+    activities = [
+        # heute und die sechs Tage davor zählen
+        {"date": today.isoformat(), "moving_s": 3600, "load": 50, "type": "Run"},
+        {"date": (today - timedelta(days=6)).isoformat(), "moving_s": 1800, "load": 20, "type": "Run"},
+        # der achte Tag zählt nicht mehr
+        {"date": (today - timedelta(days=7)).isoformat(), "moving_s": 7200, "load": 90, "type": "Run"},
+    ]
+    from trainings_cockpit import db
+
+    conn = db.connect(tmp_path / "week.db")
+    try:
+        db.init_db(conn)
+        for row in wellness[-3:]:
+            db.upsert_wellness(conn, [{**row, "id": row["date"]}])
+        db.upsert_activities(conn, activities)
+        overview = metrics.build_overview(conn, today=today)
+    finally:
+        conn.close()
+
+    assert overview["today"]["load"]["week_seconds"] == 5400
+    assert overview["today"]["load"]["week_sessions"] == 2
+    assert overview["today"]["load"]["week_load"] == 70

@@ -696,8 +696,12 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
         ]
         recovery["reference"]["average"] = round(mean(recent)) if recent else None
 
-    week_acts = [a for a in activities if a["date"] >= (today - timedelta(days=7)).isoformat()]
-    week_hours = sum((a.get("moving_s") or a.get("duration_s") or 0) for a in week_acts) / 3600
+    # Die letzten sieben Tage: heute und die sechs davor. Ein rollierendes
+    # Fenster, keine Kalenderwoche — sonst springt der Wert am Montag.
+    week_from = (today - timedelta(days=6)).isoformat()
+    week_acts = [a for a in activities if week_from <= a["date"] <= today.isoformat()]
+    week_seconds = sum((a.get("moving_s") or a.get("duration_s") or 0) for a in week_acts)
+    week_hours = week_seconds / 3600
     week_load = sum(a.get("load") or 0 for a in week_acts)
 
     load_7 = sum(d.load for d in series_days if d.day > today - timedelta(days=7))
@@ -729,6 +733,7 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
                 "atl": current.atl if current else None,
                 "tsb": current.tsb if current else None,
                 "acwr": acwr,
+                "week_seconds": int(week_seconds),
                 "week_hours": round(week_hours, 1),
                 "week_load": round(week_load),
                 "week_sessions": len(week_acts),

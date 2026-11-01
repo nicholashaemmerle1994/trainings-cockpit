@@ -90,6 +90,7 @@ export interface Overview {
       atl: number | null;
       tsb: number | null;
       acwr: number | null;
+      week_seconds: number;
       week_hours: number;
       week_load: number;
       week_sessions: number;
