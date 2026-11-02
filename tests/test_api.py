@@ -222,3 +222,35 @@ def test_unit_zeigt_zonen_und_quelle(client: TestClient) -> None:
 
 def test_unit_kennt_keine_unbekannte_zeile(client: TestClient) -> None:
     assert client.get("/api/unit/999999").status_code == 404
+
+
+def test_dazugekommene_einheit_steht_auf_der_karte(client: TestClient) -> None:
+    """Was heute ohne Plan passiert ist, gehört auf dieselbe Karte (D-43)."""
+    payload = client.get("/api/overview").json()
+
+    assert [unit["name"] for unit in payload["unplanned"]] == ["Testlauf"]
+    assert payload["unplanned"][0]["minutes"] == 30
+
+
+def test_geplante_einheit_zaehlt_nicht_als_dazugekommen(client: TestClient) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_events(
+        conn,
+        [
+            {
+                "id": 42,
+                "start_date_local": f"{date.today().isoformat()}T07:00:00",
+                "type": "Run",
+                "category": "WORKOUT",
+                "name": "Dauerlauf",
+                "moving_time": 1800,
+            }
+        ],
+    )
+    conn.close()
+
+    payload = client.get("/api/overview").json()
+    assert payload["unplanned"] == []
+    assert payload["sessions"][0]["done"] is True

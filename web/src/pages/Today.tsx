@@ -6,7 +6,7 @@ import { UnitSheet } from "../components/UnitSheet";
 import { WeekSheet } from "../components/WeekSheet";
 import { sportIcon } from "../components/sportIcon";
 import { fmtClock, fmtDate, fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
-import type { Overview, RecoveryComponent, SessionRow } from "../types";
+import type { Overview, RecoveryComponent, SessionRow, UnplannedUnit } from "../types";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -142,7 +142,12 @@ export function Today({ data }: { data: Overview }) {
       </article>
 
       <section className="split">
-        <TrainingCard sessions={data.sessions} onOpen={setOpenSession} />
+        <TrainingCard
+          sessions={data.sessions}
+          unplanned={data.unplanned}
+          onOpen={setOpenSession}
+          onOpenUnit={setOpenUnit}
+        />
 
         <aside className="card week">
           <div className="card-head">
@@ -193,7 +198,7 @@ export function Today({ data }: { data: Overview }) {
           top={openUnit == null}
         />
       )}
-      {weekOpen && openUnit != null && (
+      {openUnit != null && (
         <UnitSheet rowId={openUnit} onClose={() => setOpenUnit(null)} />
       )}
     </div>
@@ -209,15 +214,21 @@ function sessionMeta(session: SessionRow): string {
 
 function TrainingCard({
   sessions,
+  unplanned,
   onOpen,
+  onOpenUnit,
 }: {
   sessions: SessionRow[];
+  unplanned: UnplannedUnit[];
   onOpen: (id: number) => void;
+  onOpenUnit: (rowId: number) => void;
 }) {
   const today = sessions.filter((session) => session.day === "today");
   const tomorrow = sessions.filter((session) => session.day === "tomorrow");
-  const totalMinutes = today.reduce((sum, session) => sum + (session.minutes ?? 0), 0);
-  const count = today.length;
+  const totalMinutes =
+    today.reduce((sum, session) => sum + (session.minutes ?? 0), 0) +
+    unplanned.reduce((sum, unit) => sum + (unit.minutes ?? 0), 0);
+  const count = today.length + unplanned.length;
   const subtitle =
     count === 0
       ? "Nichts geplant"
@@ -244,6 +255,30 @@ function TrainingCard({
     );
   };
 
+  // Dazugekommen, ohne im Plan zu stehen: gleiche Zeile, andere Herkunft.
+  const extraRow = (unit: UnplannedUnit) => {
+    const Icon = sportIcon(unit.sport);
+    const parts = [fmtMinutes(unit.minutes)];
+    if (unit.km) parts.push(fmtKm(unit.km));
+    return (
+      <button
+        type="button"
+        className="train-row"
+        key={`extra-${unit.row_id}`}
+        onClick={() => onOpenUnit(unit.row_id)}
+      >
+        <span className="train-ico">
+          <Icon size={18} />
+        </span>
+        <span className="train-main">
+          <span className="train-name">{unit.name || unit.sport_label}</span>
+          <span className="train-meta">{parts.join(" · ")}</span>
+        </span>
+        <span className="train-state">Zusätzlich</span>
+      </button>
+    );
+  };
+
   return (
     <article className="card train">
       <div className="card-head">
@@ -255,6 +290,7 @@ function TrainingCard({
 
       {count > 0 && today.map(row)}
       {count === 0 && <p className="train-empty">Für heute steht nichts im Plan.</p>}
+      {unplanned.map(extraRow)}
 
       {tomorrow.length > 0 && (
         <>

@@ -105,9 +105,21 @@ export interface Overview {
     recovery: { date: string; score: number; vendor: number | null }[];
   };
   sessions: SessionRow[];
+  unplanned: UnplannedUnit[];
   weeks: Week[];
   activities: Activity[];
   upcoming: Upcoming[];
+}
+
+/** Eine heute erledigte Einheit, die in keinem Plan stand. */
+export interface UnplannedUnit {
+  row_id: number;
+  sport: string;
+  sport_label: string;
+  name: string;
+  minutes: number | null;
+  km: number | null;
+  load: number | null;
 }
 
 export interface SessionStep {

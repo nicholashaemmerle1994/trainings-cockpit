@@ -784,6 +784,11 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
         for event in events
     ]
 
+    # Was heute dazukam, ohne im Plan zu stehen: eine Kraft-Einheit am Morgen
+    # gehört auf dieselbe Karte wie der geplante Lauf am Abend — sonst fehlt
+    # sie dort, obwohl sie in der Woche zählt.
+    unplanned = [plan.done_row(row) for row in plan.unplanned(conn, today)]
+
     return {
         "athlete": {
             "name": db.get_setting(conn, "athlete_name") or "Athlet",
@@ -832,6 +837,7 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
             "recovery": recovery_points,
         },
         "sessions": sessions,
+        "unplanned": unplanned,
         "weeks": week_summaries(series_days, activities, 12),
         "activities": recent,
         "upcoming": [

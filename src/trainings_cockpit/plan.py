@@ -500,6 +500,39 @@ def done_payload(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def unplanned(conn: Any, day: date) -> list[dict[str, Any]]:
+    """Die Einheiten eines Tages, die in keinem Plan standen.
+
+    Dieselbe Zuordnung wie bei `matches`, nur andersherum: jede geplante Einheit
+    nimmt sich ihre Aufzeichnung, was übrig bleibt, ist dazugekommen. Eine
+    einzelne Aufzeichnung kann nur einmal vergeben werden — zwei geplante
+    Einheiten derselben Sportart am selben Tag teilen sich also nicht heimlich
+    dieselbe Zeile.
+    """
+    vergeben = set()
+    for event in db.events_on(conn, day):
+        row = matches(conn, event)
+        if row:
+            vergeben.add(row["id"])
+    return [
+        row for row in db.activities_between(conn, day, day) if row["id"] not in vergeben
+    ]
+
+
+def done_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Kurzfassung einer erledigten Einheit für die Tageskarte."""
+    moving = row.get("moving_s") or row.get("duration_s") or 0
+    return {
+        "row_id": row["id"],
+        "sport": row.get("sport"),
+        "sport_label": SPORT_LABELS.get(row.get("sport") or "", row.get("sport") or ""),
+        "name": row.get("name") or "",
+        "minutes": round(moving / 60) if moving else None,
+        "km": round((row.get("distance_m") or 0) / 1000, 1) if row.get("distance_m") else None,
+        "load": row.get("load"),
+    }
+
+
 def session(conn: Any, event: dict[str, Any], speeds_kmh: dict[str, float] | None = None) -> dict[str, Any]:
     """Alles, was die Einheit auf dem Bildschirm braucht."""
     speeds_kmh = speeds_kmh or speeds(conn)
