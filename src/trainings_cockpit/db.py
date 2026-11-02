@@ -316,6 +316,24 @@ def activities_between(conn: sqlite3.Connection, start: date, end: date) -> list
     return [dict(r) for r in rows]
 
 
+#: Sportarten ohne Trainingswert: Atem- und Entspannungsübungen, Wechsel beim
+#: Triathlon. Die Aufzeichnung bleibt in der Tabelle — sie ist echt —, zählt
+#: aber nirgends als Einheit: nicht auf der Tageskarte, nicht im Umfang, nicht
+#: in der Wochenliste.
+NON_TRAINING_SPORTS = ("Workout", "Transition")
+
+
+def training_between(conn: sqlite3.Connection, start: date, end: date) -> list[dict[str, Any]]:
+    """Aktivitäten eines Zeitraums, ohne die Übungen ohne Trainingswert."""
+    marker = ", ".join("?" for _ in NON_TRAINING_SPORTS)
+    rows = conn.execute(
+        f"SELECT * FROM activity WHERE date BETWEEN ? AND ? AND sport NOT IN ({marker}) "  # noqa: S608 - feste Platzhalter
+        "ORDER BY start_local",
+        (start.isoformat(), end.isoformat(), *NON_TRAINING_SPORTS),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def wellness_between(conn: sqlite3.Connection, start: date, end: date) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM wellness WHERE date BETWEEN ? AND ? ORDER BY date",

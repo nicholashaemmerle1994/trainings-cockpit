@@ -515,7 +515,7 @@ def unplanned(conn: Any, day: date) -> list[dict[str, Any]]:
         if row:
             vergeben.add(row["id"])
     return [
-        row for row in db.activities_between(conn, day, day) if row["id"] not in vergeben
+        row for row in db.training_between(conn, day, day) if row["id"] not in vergeben
     ]
 
 

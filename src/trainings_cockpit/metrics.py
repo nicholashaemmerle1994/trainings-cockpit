@@ -487,7 +487,7 @@ def build_weeks(conn: Any, weeks: int = 8, today: date | None = None) -> list[di
     """
     today = today or date.today()
     start = today - timedelta(days=weeks * 7 + 7)
-    rows = db.activities_between(conn, start, today)
+    rows = db.training_between(conn, start, today)
     buckets: dict[date, dict[str, Any]] = {}
 
     for row in rows:
@@ -695,7 +695,7 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
     history_start = today - timedelta(days=days + 90)
 
     wellness = db.wellness_between(conn, history_start, today)
-    activities = db.activities_between(conn, history_start, today)
+    activities = db.training_between(conn, history_start, today)
     series_days = daily_days(wellness, activities, history_start, today)
 
     epoch = db.wellness_epoch(conn)

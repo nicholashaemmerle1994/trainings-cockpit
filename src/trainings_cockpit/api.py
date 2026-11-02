@@ -97,7 +97,7 @@ def week() -> dict[str, Any]:
     with connection() as conn:
         today = date.today()
         start = today - timedelta(days=6)
-        rows = db.activities_between(conn, start, today)
+        rows = db.training_between(conn, start, today)
     seconds = sum((row.get("moving_s") or row.get("duration_s") or 0) for row in rows)
     return {
         "from": start.isoformat(),

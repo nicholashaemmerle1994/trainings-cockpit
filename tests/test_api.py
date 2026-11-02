@@ -254,3 +254,31 @@ def test_geplante_einheit_zaehlt_nicht_als_dazugekommen(client: TestClient) -> N
     payload = client.get("/api/overview").json()
     assert payload["unplanned"] == []
     assert payload["sessions"][0]["done"] is True
+
+
+def test_atemuebung_zaehlt_nicht_als_einheit(client: TestClient) -> None:
+    """Eine Entspannungsübung ist keine Trainingseinheit (D-44)."""
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_activities(
+        conn,
+        [
+            {
+                "id": "i-entspannung",
+                "start_date_local": f"{date.today().isoformat()}T22:30:00",
+                "type": "Workout",
+                "name": "Entsp. u. konzentr. (kurz)",
+                "moving_time": 333,
+            }
+        ],
+    )
+    conn.close()
+
+    payload = client.get("/api/overview").json()
+    week = client.get("/api/week").json()
+
+    assert [unit["name"] for unit in payload["unplanned"]] == ["Testlauf"]
+    assert payload["today"]["load"]["week_sessions"] == 1
+    assert payload["today"]["load"]["week_seconds"] == 1800
+    assert [unit["name"] for unit in week["units"]] == ["Testlauf"]
