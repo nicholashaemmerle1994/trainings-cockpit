@@ -6,7 +6,7 @@ import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -89,6 +89,33 @@ def session(event_id: int) -> dict[str, Any]:
         if not event:
             raise HTTPException(status_code=404, detail="Einheit nicht gefunden")
         return plan.session(conn, event)
+
+
+@app.get("/api/week")
+def week() -> dict[str, Any]:
+    """Die Einheiten der letzten sieben Tage — dieselbe Summe wie auf der Karte."""
+    with connection() as conn:
+        today = date.today()
+        start = today - timedelta(days=6)
+        rows = db.activities_between(conn, start, today)
+    seconds = sum((row.get("moving_s") or row.get("duration_s") or 0) for row in rows)
+    return {
+        "from": start.isoformat(),
+        "to": today.isoformat(),
+        "seconds": int(seconds),
+        "load": round(sum(row.get("load") or 0 for row in rows)),
+        "units": [metrics.activity_payload(row) for row in rows],
+    }
+
+
+@app.get("/api/unit/{row_id}")
+def unit(row_id: int) -> dict[str, Any]:
+    """Eine erledigte Einheit mit Zonen, Puls und Quelle."""
+    with connection() as conn:
+        row = db.activity_by_row_id(conn, row_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Einheit nicht gefunden")
+        return metrics.unit_payload(row)
 
 
 @app.get("/api/activities")

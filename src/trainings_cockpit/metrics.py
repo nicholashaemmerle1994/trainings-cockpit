@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from statistics import mean, pstdev
@@ -597,12 +598,14 @@ def activity_payload(row: dict[str, Any]) -> dict[str, Any]:
             pace_min_km = round((moving / 60) / (distance / 1000), 2)
     return {
         "id": row["source_id"],
+        "row_id": row["id"],
         "date": row["date"],
         "start": row["start_local"],
         "sport": row["sport"],
         "sport_label": SPORT_LABELS.get(row["sport"], row["sport"]),
         "name": row.get("name") or "",
         "duration_min": round(moving / 60) if moving else None,
+        "total_min": round((row.get("duration_s") or moving) / 60) if moving else None,
         "distance_km": round(distance / 1000, 2) if distance else None,
         "avg_hr": row.get("avg_hr"),
         "max_hr": row.get("max_hr"),
@@ -610,6 +613,77 @@ def activity_payload(row: dict[str, Any]) -> dict[str, Any]:
         "intensity": round(row["intensity"]) if row.get("intensity") else None,
         "pace_min_km": pace_min_km,
         "speed_kmh": speed_kmh,
+    }
+
+
+#: Wie eine Aufzeichnung entstanden ist. Der Quellenname in den Rohdaten sagt,
+#: über welchen Weg die Einheit in intervals kam.
+ORIGINS = {
+    "WAHOO": "Wahoo",
+    "OAUTH_CLIENT": "Health Sync",
+    "GARMIN_CONNECT": "Garmin Connect",
+    "ZEPP": "Zepp",
+    "STRAVA": "Strava",
+}
+
+
+def zone_seconds(raw: dict[str, Any]) -> list[float]:
+    """Zeit je Herzfrequenzzone, so wie die Quelle sie führt.
+
+    intervals liefert `icu_hr_zone_times` (fünf bis sieben Zonen), Garmin
+    `hrTimeInZone_1…5`. Beides ist die Verteilung der Aufzeichnung selbst — sie
+    liegt schon in der Datenbank, es muss nichts nachgeladen werden.
+    """
+    intervals = raw.get("icu_hr_zone_times")
+    if isinstance(intervals, list) and intervals:
+        return [float(value or 0) for value in intervals]
+    garmin = [raw.get(f"hrTimeInZone_{index}") for index in range(1, 6)]
+    if any(value is not None for value in garmin):
+        return [float(value or 0) for value in garmin]
+    return []
+
+
+def unit_payload(row: dict[str, Any]) -> dict[str, Any]:
+    """Eine erledigte Einheit mit dem, was die Aufzeichnung weiß.
+
+    Kein Verlaufsprofil: die Datenbank hält keine Sekundenwerte, ein gezeichneter
+    Verlauf wäre erfunden. Was sie hält, ist die Zeit je Zone — die einzige
+    echte Verteilung, die ohne einen weiteren Abruf auskommt.
+    """
+    raw: dict[str, Any] = {}
+    if row.get("raw"):
+        try:
+            geladen = json.loads(row["raw"])
+        except ValueError:
+            geladen = None
+        if isinstance(geladen, dict):
+            raw = geladen
+
+    base = activity_payload(row)
+    zones = zone_seconds(raw)
+    total_zones = sum(zones)
+    distance = row.get("distance_m") or 0
+    moving = row.get("moving_s") or row.get("duration_s") or 0
+    family = plan.sport_family(row.get("sport"))
+    return {
+        **base,
+        "elevation_m": round(row["elevation_m"]) if row.get("elevation_m") else None,
+        "calories": round(row["calories"]) if row.get("calories") else None,
+        "pace_100m": (
+            round((moving / 60) / (distance / 100), 1)
+            if family == "swim" and distance > 0 and moving > 0
+            else None
+        ),
+        "origin": "Garmin" if row.get("source") == "garmin" else ORIGINS.get(str(raw.get("source")), "intervals.icu"),
+        "zones": [
+            {"zone": index + 1, "seconds": int(seconds), "share": round(seconds / total_zones, 4)}
+            for index, seconds in enumerate(zones)
+        ]
+        if total_zones
+        else [],
+        "zone_source": ("Garmin" if not raw.get("icu_hr_zone_times") else "intervals.icu")
+        if total_zones
+        else None,
     }
 
 

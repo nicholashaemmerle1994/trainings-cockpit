@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { api } from "../api";
 import { fmtDate, fmtKm, fmtLiters, fmtMinutes, fmtNumber } from "../format";
 import type { SessionDetail } from "../types";
-import { IconBack, IconClose } from "./icons";
 import { SessionProfile } from "./SessionProfile";
+import { Sheet } from "./Sheet";
 
 function approx(value: string, estimated: boolean): string {
   return estimated ? `≈ ${value}` : value;
@@ -31,47 +30,12 @@ export function SessionSheet({ id, onClose }: { id: number; onClose: () => void 
     };
   }, [id]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-    };
-  }, [onClose]);
-
-  // Ein Portal ans Ende des Dokuments: `.page` trägt eine Eintritts-Animation
-  // und damit einen eigenen Stapelkontext — darin läge das Blatt unter der
-  // Tableiste und wäre an die Seite statt an das Fenster gebunden.
-  return createPortal(
-    <div className="sheet-backdrop" onClick={onClose} role="presentation">
-      <div
-        className="sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label={data ? data.name : "Einheit"}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="sheet-top">
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Zurück">
-            <IconBack size={18} />
-          </button>
-          <span className="sheet-crumb">Einheit</span>
-          <button type="button" className="icon-btn sheet-close" onClick={onClose} aria-label="Schließen">
-            <IconClose size={18} />
-          </button>
-        </div>
-
-        {error && <p className="sheet-error">{error}</p>}
-        {!data && !error && <div className="sheet-loading" />}
-        {data && <Body data={data} />}
-      </div>
-    </div>,
-    document.body,
+  return (
+    <Sheet crumb="Einheit" label={data ? data.name : "Einheit"} onClose={onClose}>
+      {error && <p className="sheet-error">{error}</p>}
+      {!data && !error && <div className="sheet-loading" />}
+      {data && <Body data={data} />}
+    </Sheet>
   );
 }
 

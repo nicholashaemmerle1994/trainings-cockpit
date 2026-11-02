@@ -677,12 +677,18 @@ h2 {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
   padding: 9px 0;
+  border: 0;
   border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
   font-size: 13px;
+  text-align: left;
 }
 
-.week-row:first-of-type {
+.week-strip + .week-row {
   margin-top: 12px;
 }
 
@@ -696,8 +702,27 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
-.week-row:last-of-type {
+.week-row:last-child {
   border-bottom: 0;
+}
+
+/* Die zwei Zeilen, hinter denen eine Liste steckt: ganzflächig antippbar,
+   mindestens 44 px hoch, mit einem Pfeil als Hinweis. */
+.week-row-link {
+  min-height: 44px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.week-row-link:hover span:first-child {
+  color: var(--text);
+}
+
+.week-row span.week-caret {
+  margin-left: 6px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text-3);
 }
 
 .plan-head {
@@ -1783,6 +1808,41 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 }
 
 .sheet-cell .l {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* Zeit in den Zonen: ein Balken, kein Diagramm — die Verteilung der Einheit. */
+.zones {
+  margin: 20px 0 0;
+}
+
+.zones-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--raised);
+}
+
+.zones-part {
+  display: block;
+  min-width: 2px;
+  background: var(--accent);
+}
+
+.zones-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.zones-src {
+  margin: 6px 0 0;
   font-size: 11px;
   color: var(--text-3);
 }

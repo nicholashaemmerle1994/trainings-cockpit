@@ -176,3 +176,49 @@ def test_vendor_score_rejects_bad_input(client: TestClient) -> None:
         == 400
     )
     assert client.post("/api/vendor-score", params={"day": "2026-10-31", "score": 140}).status_code
+
+
+def test_week_lists_the_units_of_the_last_seven_days(client: TestClient) -> None:
+    payload = client.get("/api/week").json()
+
+    assert payload["seconds"] == 1800
+    assert payload["load"] == 40
+    assert payload["units"][0]["name"] == "Testlauf"
+    assert payload["units"][0]["row_id"] > 0
+
+
+def test_unit_zeigt_zonen_und_quelle(client: TestClient) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_activities(
+        conn,
+        [
+            {
+                "id": "i2",
+                "start_date_local": f"{date.today().isoformat()}T06:00:00",
+                "type": "Ride",
+                "name": "Testfahrt",
+                "moving_time": 3600,
+                "elapsed_time": 4000,
+                "distance": 30000,
+                "icu_training_load": 60,
+                "icu_hr_zone_times": [0, 0, 1800, 1800, 0, 0, 0],
+                "source": "WAHOO",
+            }
+        ],
+    )
+    row_id = conn.execute("SELECT id FROM activity WHERE source_id = 'i2'").fetchone()["id"]
+    conn.close()
+
+    payload = client.get(f"/api/unit/{row_id}").json()
+
+    assert payload["name"] == "Testfahrt"
+    assert payload["origin"] == "Wahoo"
+    assert payload["zone_source"] == "intervals.icu"
+    assert [zone["zone"] for zone in payload["zones"] if zone["share"] > 0] == [3, 4]
+    assert payload["total_min"] == 67
+
+
+def test_unit_kennt_keine_unbekannte_zeile(client: TestClient) -> None:
+    assert client.get("/api/unit/999999").status_code == 404

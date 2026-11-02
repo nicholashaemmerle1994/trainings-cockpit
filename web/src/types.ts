@@ -185,6 +185,35 @@ export interface ActivitiesResponse {
   total: number;
 }
 
+/** Eine erledigte Einheit in der Liste der letzten sieben Tage. */
+export interface WeekUnit extends Activity {
+  row_id: number;
+  total_min: number | null;
+}
+
+export interface WeekResponse {
+  from: string;
+  to: string;
+  seconds: number;
+  load: number;
+  units: WeekUnit[];
+}
+
+export interface ZoneShare {
+  zone: number;
+  seconds: number;
+  share: number;
+}
+
+export interface UnitDetail extends WeekUnit {
+  elevation_m: number | null;
+  calories: number | null;
+  pace_100m: number | null;
+  origin: string;
+  zones: ZoneShare[];
+  zone_source: string | null;
+}
+
 export interface FuelEntry {
   minute: number;
   kind: "trinken" | "essen";

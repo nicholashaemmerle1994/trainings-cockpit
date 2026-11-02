@@ -142,6 +142,7 @@ def test_week_summaries_aggregate_sports() -> None:
 def test_activity_payload_formats_pace() -> None:
     payload = metrics.activity_payload(
         {
+            "id": 7,
             "source_id": "i1",
             "date": "2026-10-27",
             "start_local": "2026-10-27T07:00:00",

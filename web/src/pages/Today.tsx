@@ -2,7 +2,9 @@ import { useState } from "react";
 import { RecoveryDial } from "../components/RecoveryDial";
 import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
-import { IconBike, IconRun, IconSwim, IconWeights } from "../components/icons";
+import { UnitSheet } from "../components/UnitSheet";
+import { WeekSheet } from "../components/WeekSheet";
+import { sportIcon } from "../components/sportIcon";
 import { fmtClock, fmtDate, fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
 import type { Overview, RecoveryComponent, SessionRow } from "../types";
 
@@ -31,6 +33,8 @@ function driverPlain(value: number | null | undefined, unit: string): string {
 export function Today({ data }: { data: Overview }) {
   const { today } = data;
   const [openSession, setOpenSession] = useState<number | null>(null);
+  const [weekOpen, setWeekOpen] = useState(false);
+  const [openUnit, setOpenUnit] = useState<number | null>(null);
 
   const recovery = today.recovery;
   const drivers = recovery.components.filter((component) => component.key !== "resp");
@@ -150,18 +154,28 @@ export function Today({ data }: { data: Overview }) {
 
           <WeekStrip series={data.series.load} today={today.date} />
 
-          <div className="week-row">
+          <button type="button" className="week-row week-row-link" onClick={() => setWeekOpen(true)}>
             <span>Umfang</span>
-            <span>{fmtSpan(today.load.week_seconds)}</span>
-          </div>
+            <span>
+              {fmtSpan(today.load.week_seconds)}
+              <span className="week-caret" aria-hidden="true">
+                ›
+              </span>
+            </span>
+          </button>
           <div className="week-row">
             <span>Belastung</span>
             <span>{fmtNumber(today.load.week_load)}</span>
           </div>
-          <div className="week-row">
+          <button type="button" className="week-row week-row-link" onClick={() => setWeekOpen(true)}>
             <span>Einheiten</span>
-            <span>{today.load.week_sessions}</span>
-          </div>
+            <span>
+              {today.load.week_sessions}
+              <span className="week-caret" aria-hidden="true">
+                ›
+              </span>
+            </span>
+          </button>
           <div className="week-row">
             <span>Belastungsverhältnis</span>
             <span>{fmtNumber(today.load.acwr, 2)}</span>
@@ -172,23 +186,19 @@ export function Today({ data }: { data: Overview }) {
       {openSession != null && (
         <SessionSheet id={openSession} onClose={() => setOpenSession(null)} />
       )}
+      {weekOpen && (
+        <WeekSheet
+          onOpen={setOpenUnit}
+          onClose={() => setWeekOpen(false)}
+          top={openUnit == null}
+        />
+      )}
+      {weekOpen && openUnit != null && (
+        <UnitSheet rowId={openUnit} onClose={() => setOpenUnit(null)} />
+      )}
     </div>
   );
 }
-
-const SPORT_ICONS: Record<string, typeof IconRun> = {
-  Ride: IconBike,
-  VirtualRide: IconBike,
-  EBikeRide: IconBike,
-  GravelRide: IconBike,
-  MountainBikeRide: IconBike,
-  Run: IconRun,
-  VirtualRun: IconRun,
-  TrailRun: IconRun,
-  Swim: IconSwim,
-  OpenWaterSwim: IconSwim,
-  WeightTraining: IconWeights,
-};
 
 function sessionMeta(session: SessionRow): string {
   const duration = `${session.estimated === "dauer" ? "≈ " : ""}${fmtMinutes(session.minutes)}`;
@@ -214,7 +224,7 @@ function TrainingCard({
       : `${count} ${count === 1 ? "Einheit" : "Einheiten"} · ${fmtMinutes(totalMinutes)}`;
 
   const row = (session: SessionRow) => {
-    const Icon = SPORT_ICONS[session.sport] ?? IconRun;
+    const Icon = sportIcon(session.sport);
     return (
       <button
         type="button"

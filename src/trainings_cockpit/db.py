@@ -340,6 +340,16 @@ def events_on(conn: sqlite3.Connection, day: date) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def activity_by_row_id(conn: sqlite3.Connection, row_id: int) -> dict[str, Any] | None:
+    """Eine gespeicherte Einheit über ihren Zeilenschlüssel.
+
+    Nicht über `source_id`: die kommt zweimal vor, wenn dieselbe Einheit über
+    zwei Wege kam, und dann wäre nicht klar, welche Zeile gemeint ist.
+    """
+    row = conn.execute("SELECT * FROM activity WHERE id = ?", (row_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def event_by_id(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM event WHERE id = ?", (event_id,)).fetchone()
     return dict(row) if row else None
