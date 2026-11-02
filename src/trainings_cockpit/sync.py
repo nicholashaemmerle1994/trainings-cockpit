@@ -29,28 +29,29 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             settings.intervals_key, settings.intervals_athlete, settings.base_url
         ) as client:
             athlete = client.athlete()
-            activities = dedupe.entdoppeln(client.activities(oldest, today))
+            activities = client.activities(oldest, today)
             wellness = client.wellness(oldest, today)
             events = client.events(oldest, events_until)
             sport_settings = client.sport_settings()
 
-        n_activities = db.upsert_activities(conn, activities)
-
         # Läufe und Schwimmen kommen direkt von Garmin – mit den Feldern aus der
         # Originalaufzeichnung und einer Last, die an intervals kalibriert ist.
+        garmin_rows, garmin_note = _garmin_activities(settings, oldest, today)
         n_direkt = 0
-        garmin_note = ""
-        if settings.garmin_key:
-            try:
-                cache = settings.ensure_data_dir() / "garmin" / "bearer-token.json"
-                cache.parent.mkdir(parents=True, exist_ok=True)
-                dump = fetch_garmin(settings.garmin_key, oldest, today, token_cache=cache)
-                garmin_rows = actor_rows(dump)
-                n_direkt = db.upsert_activities(conn, garmin_rows, mapped=True)
-                if dump.errors:
-                    garmin_note = " garmin=" + ",".join(sorted(dump.errors))[:80]
-            except GarminUnavailable as exc:
-                garmin_note = f" garmin=aus ({str(exc)[:40]})"
+
+        # Eine Einheit nur einmal, auch wenn sie über zwei Quellen kommt. Die
+        # Entscheidung fällt vor dem Schreiben: sonst legt jeder Sync die
+        # Dublette neu an und räumt sie gleich wieder ab. Gespeicherte Zeilen
+        # zählen mit, weil intervals eine Aufzeichnung auch zurückziehen kann —
+        # die bessere Zeile bleibt dann stehen, statt jeden Morgen neu zu
+        # entstehen und wieder zu verschwinden.
+        bleibt = dedupe.behalten([*activities, *garmin_rows, *dedupe.aus_datenbank(conn)])
+        activities = [a for a in activities if str(a.get("id")) in bleibt]
+        garmin_rows = [g for g in garmin_rows if g["source_id"] in bleibt]
+
+        n_activities = db.upsert_activities(conn, activities)
+        if garmin_rows:
+            n_direkt = db.upsert_activities(conn, garmin_rows, mapped=True)
 
         n_doppelt = dubletten_entfernen(conn)
         n_wellness = db.upsert_wellness(conn, wellness)
@@ -89,6 +90,22 @@ def dubletten_entfernen(conn: Any) -> int:
     rows = dedupe.aus_datenbank(conn)
     weg = [str(verlierer.get("id")) for _, verlierer in dedupe.paare(rows) if verlierer.get("id")]
     return db.delete_activities(conn, weg)
+
+
+def _garmin_activities(
+    settings: Settings, oldest: date, today: date
+) -> tuple[list[dict[str, Any]], str]:
+    """Läufe und Schwimmen aus der Personal-API, dazu eine Notiz fürs Sync-Log."""
+    if not settings.garmin_key:
+        return [], ""
+    try:
+        cache = settings.ensure_data_dir() / "garmin" / "bearer-token.json"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        dump = fetch_garmin(settings.garmin_key, oldest, today, token_cache=cache)
+    except GarminUnavailable as exc:
+        return [], f" garmin=aus ({str(exc)[:40]})"
+    note = " garmin=" + ",".join(sorted(dump.errors))[:80] if dump.errors else ""
+    return actor_rows(dump), note
 
 
 def _sport_profile(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

@@ -460,6 +460,37 @@ Versicherung: dann schiebt das Cockpit selbst, ohne intervals dazwischen.
 
 ---
 
+### E-34 · Der Athlet sah die Doppelte, das Cockpit nicht (02.11.2026)
+
+Bevel zeigte für die letzten sieben Tage andere Stunden als das Cockpit. Der
+Verdacht des Athleten war präzise: **die Long Ride vom 1. November liegt zweimal
+in der Datenbank.**
+
+| Aufzeichnung | Start | bewegt | gesamt | Strecke | Last |
+|---|---|---|---|---|---|
+| `i204257493` „Long Ride" (WAHOO) | 08:05:03 | 9.796 s | 10.007 s | 73,7 km | 154 |
+| `i204634552` „Morning Virtual Ride" (Health Sync) | 08:05:03 | 7.320 s | 10.007 s | 77,0 km | 112 |
+
+Dieselbe Uhr, dieselbe Aufzeichnung, zwei Wege in intervals. Die Regel aus D-23
+verlangt **Dauer ± 2 min und Distanz ± 400 m** — hier weichen beide ab (41
+Minuten, 3,4 km), also blieb das Paar stehen. Die Wochenkarte zählte 15,1 statt
+13,1 Stunden.
+
+Der zweite blinde Fleck liegt quer über die Quellen: 18 Einheiten liegen als
+intervals- **und** als Garmin-Aufzeichnung vor (April bis Oktober, vor allem
+Schwimmen). Dort stimmt die Strecke, aber die Bewegungszeit nicht — Garmin zieht
+Pausen anders ab (23.10.: 2.050 m, 3.024 s gegen 2.542 s). Auch das fiel durch.
+
+- Was beim Wiederveröffentlichen **gleich bleibt**, ist die Uhr der Aufzeichnung:
+  `elapsed_time` steht in beiden Zeilen der Long Ride auf 10.007 s. Bewegungszeit
+  und Strecke rechnet jede Plattform neu, die Gesamtzeit nicht.
+- Die Erkennung braucht deshalb zwei Wege statt einer Und-Verknüpfung: gleicher
+  Start **und** (gleiche Gesamtzeit **oder** gleiche Strecke bei ähnlicher Dauer).
+- Der Athlet liest die Zahl am Telefon. Eine Stunde zu viel ist schlimmer als eine
+  fehlende, weil sie eine ganze Woche falsch aussehen lässt.
+
+---
+
 ## 3. Entscheidungen
 
 | ID | Datum | Entscheidung | Begründung | Konsequenz |
@@ -498,6 +529,7 @@ Versicherung: dann schiebt das Cockpit selbst, ohne intervals dazwischen.
 | D-32 | 01.11.2026 | **Die bessere Aufzeichnung gewinnt, die Last bleibt bei intervals.** Von einer Einheit, die mehrfach ankommt, bleibt die aussagekräftigere: Garmin Connect vor Health Sync, dann die vollständigere, dann die längere. Die Trainingslast wird **nicht** selbst gerechnet: Garmins `activityTrainingLoad` liegt im Median 2,64× über intervals' Last (Spanne 0,29–8,64 über 66 Paare) und würde Fitness und Müdigkeit unbrauchbar machen. | Ein zweites Lastmaß würde die Historie unvergleichbar machen; die Aufzeichnung selbst darf trotzdem die bessere sein. | Läufe und Schwimmen kommen künftig als Garmin-Aufzeichnung, Kraft und Rad aus intervals (Bevel, Wahoo). Health Sync verliert die Berechtigung; Strava bleibt außen vor, weil es keine Zusatzinformation liefert, die intervals nicht schon hat. |
 | D-33 | 01.11.2026 | **Läufe und Schwimmen kommen über Garmins Personal API, Kraft und Rad über intervals.** Garmin hat bei intervals keine Berechtigung mehr, also liefert nur die Personal API die Aufzeichnung. Weil dort keine intervals-Last mehr entsteht, rechnet das Cockpit sie selbst: `Last = Stunden × Faktor × (Puls/160)²`, Faktor 75 für Läufe, 70 für Schwimmen — kalibriert an der historischen intervals-Last (R² = 0,974 über 37 Läufe). Garmins eigene `activityTrainingLoad` wird **nicht** übernommen. | Ein zweites Lastmaß würde Fitness und Müdigkeit unvergleichbar machen; die kalibrierte Formel trifft die alte Skala. | Neues Modul `load.py`, Garmin-Aktivitäten in `sources/garmin.py`, Sync schreibt beide Quellen und räumt Dubletten (Garmin schlägt Health Sync). Erster Lauf: 17 Läufe/Schwimmen direkt, Wochenstunden sinken um die Pausen, die Health Sync mitzählte. |
 | D-40 | 01.11.2026 | **Herzfrequenz steht in Schlägen, nicht in Prozent.** Der Plan nennt HF-Ziele als Prozent der Maximalfrequenz oder als Zone; angezeigt wird der Bereich in bpm („133–142 bpm"), die Achse des Profils läuft in bpm. Grundlage sind `max_hr` und `hr_zones` je Sportart aus den Einstellungen von intervals, die der Sync als `hr_profile` ablegt. Zonen kommen aus den Zonengrenzen, Prozente aus `max_hr × p/100`; die untere Grenze von Zone 1 ist die halbe Maximalfrequenz, weil intervals sie nicht führt. Dasselbe für die Leistung: `% FTP` wird zu Watt über die FTP aus denselben Einstellungen (195 W draußen, 185 W auf dem Ergometer bei `Virtual*`). | „70–75 %" muss man im Kopf umrechnen, „133–142 bpm" steht so auf der Uhr. Der Athlet liest die Einheit morgens am Telefon, nicht am Rechner mit Taschenrechner. | Neue Einstellung `sport_profile` (aus `/api/athlete/{id}/sport-settings`), `plan.py` übersetzt vor der Anzeige. Fehlt das Profil, bleibt es beim Prozentwert — der Plan verliert nichts, die Anzeige bleibt nur ungenauer. |
+| D-41 | 02.11.2026 | **Eine Einheit ist doppelt, wenn der Start doppelt ist.** Gleiche Sportart und Start innerhalb von fünf Minuten **und** mindestens eine übereinstimmende Spur: gleiche Gesamtzeit (± 5 min), gleiche Bewegungszeit (± 2 min, bei langen Einheiten ± 20 %) oder gleiche Strecke (± 400 m) bei ähnlicher Dauer. Die Auswahl passiert **vor** dem Schreiben, über beide Quellen hinweg; gespeicherte Dubletten räumt weiter `tc dedupe` und jeder Sync. Der Gewinner bleibt wie in D-32, mit einer Präzisierung: **Personal API vor Garmin Connect**, danach die vollständigere, dann die längere Aufzeichnung. | Die alte Regel verlangte Dauer **und** Strecke — dadurch stand die Long Ride vom 1. November doppelt in der Woche (15,1 statt 13,1 Stunden), weil Wahoo und Health Sync Strecke und Pausenzeit unterschiedlich rechnen. Die Gesamtzeit ist der einzige Wert, den keine Plattform neu berechnet. Die Personal API gibt die Bewegungszeit des Geräts weiter, während intervals sie bei der Zeile über Garmin Connect einmal als Gesamtzeit übernommen hat (250 m in 43 Minuten, April). | `dedupe.py` prüft drei Spuren statt einer Und-Verknüpfung, `sync.py` entdoppelt intervals- und Garmin-Zeilen gemeinsam vor dem Schreiben, 18 gespeicherte Paare werden entfernt. |
 | D-38 | 01.11.2026 | **Die Startseite hat sieben Zeilen:** Datum mit letztem Sync, Ziele, Erholung, Training, letzte 7 Tage. Die drei Kennzahlenkarten (Schlaf, HRV, Ruhepuls) entfallen, weil die Erholungskarte dieselben Werte als Treiberzeile zeigt und darunter in einem Satz erklärt. Der Knopf „Aktualisieren" fällt aus dem Kopf: am Handy zieht man, am Rechner steht er in der Seitenleiste. Der **Bevel-Abgleich** verschwindet ebenfalls. | Die Karten wiederholten, was die Treiberzeile schon sagte, und schoben das Training unter den Bildschirmrand. Der Bevel-Abgleich war für die Kalibrierung gedacht (D-22): dafür liegen **zwei** Paare vor, und nach dem Sensorwechsel am 4. November (D-31) würde die Referenz zwei Geräte mischen. Die Frage, für die er gedacht war, ist inzwischen anders beantwortet. | `Today.tsx` ohne Kennzahlen und ohne Bevel-Formular, `StatCard` entfällt, `Sidebar` bekommt den Sync-Knopf. Das Feld `readiness_vendor` und `POST /api/vendor-score` bleiben im Backend — die zwei Paare gehen nicht verloren, eine Rückkehr wäre eine Karte. |
 | D-39 | 01.11.2026 | **Der Tab „Aktivitäten" entfällt vorerst.** Die Seite bleibt im Code liegen und wird nicht mehr verlinkt; Navigation ist Heute und Verpflegung. | Der Athlet plant und liest seine Einheiten künftig auf „Heute"; die Liste ist für später gedacht, wenn eigene Planung und Wirkungsanalyse kommen. Ein leerer Tab kostet nur Pflege. | `Tab` kennt nur noch `today` und `fuel`, die Tableiste hat zwei Einträge. `pages/Activities.tsx` bleibt unangetastet. |
 
@@ -607,3 +639,4 @@ Versicherung: dann schiebt das Cockpit selbst, ohne intervals dazwischen.
 | 01.11.2026 | E-33: Garmin-Programm in drei Stufen, Ziffer 5.1(o) trifft den Datenabfluss, nicht den Workout-Versand, Abrechnung ab 01.04.2027 |
 | 01.11.2026 | E-32 und D-35 bis D-37: Startseite zeigt das Training, Einheit als Blatt mit Profil, Mobil-first verbindlich |
 | 01.11.2026 | D-29: Richtung B+ gebaut und auf dem Server — neue Rampe, Serif/Mono-Schriften selbst gehostet, Instrument-Uhr, Wochenstreifen, Tabellen, recharts entfernt |
+| 02.11.2026 | E-34 und D-41: Long Ride doppelt in der Woche (Wahoo + Health Sync), Erkennung über Gesamtzeit, Bewegungszeit oder Strecke, 18 Paare entfernt |
