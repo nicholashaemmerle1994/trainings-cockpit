@@ -282,3 +282,34 @@ def test_atemuebung_zaehlt_nicht_als_einheit(client: TestClient) -> None:
     assert payload["today"]["load"]["week_sessions"] == 1
     assert payload["today"]["load"]["week_seconds"] == 1800
     assert [unit["name"] for unit in week["units"]] == ["Testlauf"]
+
+
+def _set_epoch(days_ago: int) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.set_wellness_epoch(conn, date.today() - timedelta(days=days_ago))
+    conn.close()
+
+
+def test_bevel_feld_erscheint_waehrend_die_referenz_entsteht(client: TestClient) -> None:
+    _set_epoch(2)
+
+    payload = client.get("/api/overview").json()
+
+    assert payload["today"]["recovery"]["vendor_prompt"] is True
+
+
+def test_bevel_feld_verschwindet_nach_dem_vergleichsfenster(client: TestClient) -> None:
+    """Eine Woche nach voller Referenz ist der Abgleich vorbei (D-52)."""
+    _set_epoch(40)
+
+    payload = client.get("/api/overview").json()
+
+    assert payload["today"]["recovery"]["vendor_prompt"] is False
+
+
+def test_ohne_sensorwechsel_kein_bevel_feld(client: TestClient) -> None:
+    payload = client.get("/api/overview").json()
+
+    assert payload["today"]["recovery"]["vendor_prompt"] is False

@@ -117,6 +117,14 @@ input {
   color: inherit;
 }
 
+/* Eingabefelder mindestens 16 px (D-27): darunter zoomt Safari beim
+   Fokussieren in die Seite hinein und erst beim Neuladen wieder heraus. */
+input[type="number"],
+input[type="text"],
+input[type="search"] {
+  font-size: 16px;
+}
+
 button {
   cursor: pointer;
 }
@@ -613,6 +621,54 @@ h2 {
   width: 2px;
   height: 10px;
   background: var(--text);
+}
+
+/* Bevel-Wert: eine stille Zeile, kein zweites helles Element (D-52). */
+.vendor {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.vendor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.vendor-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.vendor-row input {
+  width: 72px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.vendor-row input:focus {
+  outline: none;
+  border-color: var(--line-strong);
+}
+
+.vendor-note {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  text-align: right;
+}
+
+.vendor-note-bad {
+  color: var(--bad);
 }
 
 .note {

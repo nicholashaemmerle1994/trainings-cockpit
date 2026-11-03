@@ -3,6 +3,7 @@ import { RecoveryDial } from "../components/RecoveryDial";
 import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
 import { UnitSheet } from "../components/UnitSheet";
+import { VendorScore } from "../components/VendorScore";
 import { WeekSheet } from "../components/WeekSheet";
 import { sportIcon } from "../components/sportIcon";
 import { fmtClock, fmtDate, fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
@@ -138,6 +139,10 @@ export function Today({ data }: { data: Overview }) {
           )}
 
           <p className="note">{recovery.explanation}</p>
+
+          {recovery.vendor_prompt && (
+            <VendorScore day={today.date} initial={today.vendor} score={recovery.score} />
+          )}
           </div>
       </article>
 

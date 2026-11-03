@@ -30,6 +30,8 @@ export interface Recovery {
   missing?: string[];
   reference?: RecoveryReference | null;
   explanation: string;
+  /** Solange das Vergleichsfenster läuft: Feld für den Bevel-Wert (D-52). */
+  vendor_prompt?: boolean;
 }
 
 export interface Activity {

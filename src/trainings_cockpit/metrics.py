@@ -33,6 +33,9 @@ WEIGHTS = {"hrv": 35.0, "rhr": 20.0, "sleep": 30.0, "resp": 5.0, "spo2": 5.0}
 #: Nächten ist der Maßstab um vier Score-Punkte unsicher, mit 21 um zwei — der
 #: Unterschied zwischen "eine Zahl" und "eine belastbare Zahl".
 REFERENCE_MIN_NIGHTS = BASELINE_DAYS
+#: Solange die Referenz entsteht und eine Woche danach, lässt sich der Score der
+#: Vergleichs-App (Bevel) eintragen: erst Paare sammeln, dann vergleichen (D-52).
+VENDOR_COMPARE_DAYS = 7
 #: Ohne diese Signale gibt es keinen Score. SpO2 fehlt hier, weil es nur abzieht.
 REQUIRED_SIGNALS = {
     "hrv": "die HRV",
@@ -759,6 +762,16 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
             if point.get("score") is not None and (since is None or point["date"] >= since)
         ]
         recovery["reference"]["average"] = round(mean(recent)) if recent else None
+
+    # Das Feld für den Vergleichswert erscheint, solange die Referenz entsteht,
+    # und eine Woche darüber hinaus (D-52): erst Paare sammeln, dann vergleichen.
+    referenz = recovery.get("reference") or {}
+    naechte = referenz.get("nights")
+    recovery["vendor_prompt"] = bool(
+        referenz
+        and naechte is not None
+        and naechte < (referenz.get("minimum") or 0) + VENDOR_COMPARE_DAYS
+    )
 
     # Die letzten sieben Tage: heute und die sechs davor. Ein rollierendes
     # Fenster, keine Kalenderwoche — sonst springt der Wert am Montag.
