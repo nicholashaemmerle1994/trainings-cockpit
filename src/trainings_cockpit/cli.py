@@ -187,8 +187,6 @@ def _baseline(settings: Settings, args: argparse.Namespace) -> int:
         state = (
             "Referenz wird aufgebaut"
             if nights < metrics.REFERENCE_MIN_NIGHTS
-            else "Referenz im Aufbau"
-            if nights < metrics.BASELINE_DAYS
             else "Referenz steht"
         )
         console.print(

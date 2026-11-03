@@ -237,7 +237,8 @@ def test_ein_fehlendes_signal_ergibt_keinen_score() -> None:
     assert "Atmung" in recovery["explanation"]
 
 
-def test_neuer_sensor_wartet_auf_sieben_naechte() -> None:
+def test_neuer_sensor_wartet_auf_die_volle_referenz() -> None:
+    """Der erste Wert kommt erst mit vollständiger Referenz (D-51)."""
     today = date(2026, 11, 9)
     wellness = _wellness(90, today)
     days = metrics.daily_days(wellness, [], today - timedelta(days=89), today)
@@ -251,19 +252,20 @@ def test_neuer_sensor_wartet_auf_sieben_naechte() -> None:
     assert recovery["components"] == []
     assert recovery["reference"]["nights"] == 3
     assert recovery["reference"]["minimum"] == metrics.REFERENCE_MIN_NIGHTS
-    assert "3 von 7" in recovery["explanation"]
+    assert metrics.REFERENCE_MIN_NIGHTS == metrics.BASELINE_DAYS
+    assert "3 von 21" in recovery["explanation"]
 
 
 def test_neuer_sensor_ignoriert_die_alte_referenz() -> None:
     today = date(2026, 11, 9)
     wellness = _wellness(90, today)
     # Die alte Zeit hat eine ganz andere HRV – sie darf die neue Referenz nicht prägen.
+    epoch = today - timedelta(days=metrics.BASELINE_DAYS)
     for row in wellness:
-        if row["date"] < (today - timedelta(days=10)).isoformat():
+        if row["date"] < epoch.isoformat():
             row["hrv"] = 90.0
 
     days = metrics.daily_days(wellness, [], today - timedelta(days=89), today)
-    epoch = today - timedelta(days=10)
     recovery = metrics.compute_recovery(days, len(days) - 1, epoch)
 
     hrv = next(c for c in recovery["components"] if c["key"] == "hrv")

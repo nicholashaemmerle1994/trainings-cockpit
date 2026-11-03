@@ -29,7 +29,10 @@ VALID_RANGES = {
 WEIGHTS = {"hrv": 35.0, "rhr": 20.0, "sleep": 30.0, "resp": 5.0, "spo2": 5.0}
 #: Ein neuer Sensor misst anders. Nach einem Gerätewechsel beginnt die Referenz
 #: neu, sonst mischt sie zwei Sensoren und zeigt eine Erholung, die es nicht gibt.
-REFERENCE_MIN_NIGHTS = 7
+#: Der erste Wert kommt erst, wenn die Referenz vollständig ist (D-51): Mit sieben
+#: Nächten ist der Maßstab um vier Score-Punkte unsicher, mit 21 um zwei — der
+#: Unterschied zwischen "eine Zahl" und "eine belastbare Zahl".
+REFERENCE_MIN_NIGHTS = BASELINE_DAYS
 #: Ohne diese Signale gibt es keinen Score. SpO2 fehlt hier, weil es nur abzieht.
 REQUIRED_SIGNALS = {
     "hrv": "die HRV",
