@@ -28,6 +28,9 @@ class FakeIntervals:
     def activities(self, oldest: date, newest: date) -> list[dict]:
         return []
 
+    def streams(self, activity_id: str) -> list[dict]:
+        return []
+
     def events(self, oldest: date, newest: date) -> list[dict]:
         return []
 
@@ -120,3 +123,65 @@ def test_nur_naechte_seit_dem_sensorwechsel(settings: Settings, monkeypatch) -> 
 
     assert alt_row == []
     assert neu_row[0]["rhr"] == 54.0
+
+
+class FakeIntervalsMitFahrt(FakeIntervals):
+    """intervals führt genau eine Fahrt — eine gelöschte Zeile fehlt hier."""
+
+    def activities(self, oldest: date, newest: date) -> list[dict]:
+        return [
+            {
+                "id": "i-neu",
+                "start_date_local": "2026-11-03T06:08:56",
+                "type": "VirtualRide",
+                "name": "Morning Virtual Ride",
+                "moving_time": 3840,
+                "elapsed_time": 3900,
+                "distance": 28000.0,
+                "icu_training_load": 71.0,
+            }
+        ]
+
+
+def test_was_intervals_nicht_mehr_fuehrt_fliegt_raus(tmp_path, monkeypatch) -> None:
+    """Eine in intervals gelöschte Zeile darf die lebende nicht verdrängen (D-54)."""
+    settings = Settings(
+        intervals_key="test",
+        intervals_athlete="0",
+        garmin_key=None,
+        data_dir=tmp_path,
+        base_url="https://example.invalid/api/v1",
+    )
+    monkeypatch.setattr(sync_mod, "IntervalsClient", FakeIntervalsMitFahrt)
+    monkeypatch.setattr(sync_mod, "fetch_garmin", lambda *a, **k: GarminDump())
+
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_activities(
+        conn,
+        [
+            {
+                "id": "i-alt",
+                "start_date_local": "2026-11-03T06:08:56",
+                "type": "VirtualRide",
+                "name": "Morning Virtual Ride",
+                "moving_time": 3840,
+                "elapsed_time": 3900,
+                "distance": 28000.0,
+            }
+        ],
+    )
+    alt_id = conn.execute("SELECT id FROM activity WHERE source_id = 'i-alt'").fetchone()[0]
+    db.upsert_stream(conn, alt_id, {"t": [0, 5], "watts": [200, 210]}, 2)
+    conn.close()
+
+    ergebnis = sync_mod.sync(settings, days=30, today=date(2026, 11, 3))
+
+    conn = db.connect(settings.db_path)
+    ids = [row["source_id"] for row in conn.execute("SELECT source_id FROM activity")]
+    verlauf = conn.execute("SELECT COUNT(*) FROM activity_stream").fetchone()[0]
+    conn.close()
+
+    assert ergebnis["orphans"] == 1
+    assert ids == ["i-neu"]
+    assert verlauf == 0

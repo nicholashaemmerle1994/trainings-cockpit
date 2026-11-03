@@ -297,6 +297,32 @@ def delete_activities(conn: sqlite3.Connection, source_ids: list[str]) -> int:
     return len(source_ids)
 
 
+def delete_unlisted(
+    conn: sqlite3.Connection,
+    source: str,
+    start: date,
+    end: date,
+    listed: set[str],
+) -> int:
+    """Zeilen löschen, die die Quelle in diesem Zeitraum nicht mehr führt.
+
+    intervals ist für Rad und Kraft die Quelle: wird eine Einheit dort gelöscht,
+    verschwindet sie auch hier — sonst bliebe eine Zeile stehen, die niemand mehr
+    nachliefern kann, und die Dublettenprüfung hielte sie für die bessere
+    Aufzeichnung (D-54). Verlässt die Quelle den Zeitraum nicht, bleibt alles.
+    """
+    rows = conn.execute(
+        "SELECT id, source_id FROM activity WHERE source = ? AND date BETWEEN ? AND ?",
+        (source, start.isoformat(), end.isoformat()),
+    ).fetchall()
+    weg = [(int(row["id"]),) for row in rows if str(row["source_id"]) not in listed]
+    if not weg:
+        return 0
+    conn.executemany("DELETE FROM activity WHERE id = ?", weg)
+    conn.commit()
+    return len(weg)
+
+
 def upsert_events(conn: sqlite3.Connection, rows: Iterable[dict[str, Any]]) -> int:
     now = datetime.now().isoformat(timespec="seconds")
     count = 0

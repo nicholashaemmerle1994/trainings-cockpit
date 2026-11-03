@@ -58,6 +58,13 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         # zählen mit, weil intervals eine Aufzeichnung auch zurückziehen kann —
         # die bessere Zeile bleibt dann stehen, statt jeden Morgen neu zu
         # entstehen und wieder zu verschwinden.
+        # Was intervals im gesyncten Zeitraum aber gar nicht mehr führt, fliegt
+        # vorher raus: eine gelöschte Zeile kann keinen Verlauf mehr liefern und
+        # würde bei der Dublettenprüfung die lebende Aufzeichnung verdrängen
+        # (D-54).
+        n_verwaist = db.delete_unlisted(
+            conn, "intervals", oldest, today, {str(a.get("id")) for a in activities}
+        )
         bleibt = dedupe.behalten([*activities, *garmin_rows, *dedupe.aus_datenbank(conn)])
         activities = [a for a in activities if str(a.get("id")) in bleibt]
         garmin_rows = [g for g in garmin_rows if g["source_id"] in bleibt]
@@ -99,6 +106,7 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             f"activities={n_activities} direkt={n_direkt} wellness={n_wellness} events={n_events}"
             f" streams={n_streams}"
             + (f" dubletten={n_doppelt}" if n_doppelt else "")
+            + (f" verwaist={n_verwaist}" if n_verwaist else "")
             + garmin.note
             + verlauf_note,
         )
@@ -108,6 +116,7 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             "wellness": n_wellness,
             "events": n_events,
             "streams": n_streams,
+            "orphans": n_verwaist,
             "athlete": _pretty_name(athlete.get("name")),
             "range": [oldest.isoformat(), today.isoformat()],
         }
