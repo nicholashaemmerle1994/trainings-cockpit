@@ -4,6 +4,7 @@ import { fmtDate, fmtKm, fmtLiters, fmtMinutes, fmtNumber } from "../format";
 import type { SessionDetail } from "../types";
 import { SessionProfile } from "./SessionProfile";
 import { Sheet } from "./Sheet";
+import { WorkoutChart } from "./WorkoutChart";
 
 function approx(value: string, estimated: boolean): string {
   return estimated ? `≈ ${value}` : value;
@@ -149,6 +150,7 @@ function Body({ data }: { data: SessionDetail }) {
               {data.actual.intensity ? `${data.actual.intensity} %` : "—"}
             </span>
           </div>
+          {data.actual.series && <WorkoutChart series={data.actual.series} />}
         </section>
       )}
 

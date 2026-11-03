@@ -186,6 +186,15 @@ class IntervalsClient:
             params={"intervals": str(intervals).lower()},
         )
 
+    def streams(self, activity_id: str) -> list[dict[str, Any]]:
+        """Sekundenwerte einer Einheit — Sekunde für Sekunde, wie aufgezeichnet.
+
+        Nicht jede Einheit hat welche: was ohne Aufzeichnung in intervals landete,
+        liefert eine leere Liste. Das ist kein Fehler, sondern ein Befund.
+        """
+        payload = self._request("GET", f"/activity/{activity_id}/streams")
+        return payload if isinstance(payload, list) else []
+
     def upsert_events(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Idempotentes Anlegen/Aktualisieren über external_id."""
         return self._request(

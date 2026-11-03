@@ -652,9 +652,9 @@ def zone_seconds(raw: dict[str, Any]) -> list[float]:
 def unit_payload(row: dict[str, Any]) -> dict[str, Any]:
     """Eine erledigte Einheit mit dem, was die Aufzeichnung weiß.
 
-    Kein Verlaufsprofil: die Datenbank hält keine Sekundenwerte, ein gezeichneter
-    Verlauf wäre erfunden. Was sie hält, ist die Zeit je Zone — die einzige
-    echte Verteilung, die ohne einen weiteren Abruf auskommt.
+    Zonen, Dauer, Distanz, Last — alles, was ohne einen weiteren Abruf in der
+    Zeile steht. Der Verlauf kommt aus `streams.payload` und wird vom Aufrufer
+    angehängt (D-53): diese Funktion kennt keine Datenbank.
     """
     raw: dict[str, Any] = {}
     if row.get("raw"):

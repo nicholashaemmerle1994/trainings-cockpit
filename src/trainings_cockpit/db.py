@@ -80,6 +80,13 @@ CREATE TABLE IF NOT EXISTS setting (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS activity_stream (
+    row_id     INTEGER PRIMARY KEY REFERENCES activity(id) ON DELETE CASCADE,
+    points     INTEGER NOT NULL,
+    series     TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -385,6 +392,53 @@ def event_by_id(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | Non
     return dict(row) if row else None
 
 
+def upsert_stream(
+    conn: sqlite3.Connection,
+    row_id: int,
+    series: dict[str, list[Any]],
+    points: int,
+) -> None:
+    """Den Verlauf einer Einheit ablegen — eine Reihe je Einheit.
+
+    Eine leere Reihe ist auch ein Ergebnis: die Quelle hat keine Sekundenwerte.
+    Sie wird trotzdem geschrieben, damit nicht jeder Sync dieselbe Einheit
+    erneut abfragt.
+    """
+    now = datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        """
+        INSERT INTO activity_stream (row_id, points, series, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(row_id) DO UPDATE SET
+            points=excluded.points, series=excluded.series, updated_at=excluded.updated_at
+        """,
+        (row_id, points, json.dumps(series, ensure_ascii=False), now),
+    )
+    conn.commit()
+
+
+def stream_for(conn: sqlite3.Connection, row_id: int) -> dict[str, list[Any]] | None:
+    """Der gespeicherte Verlauf einer Einheit, oder None."""
+    row = conn.execute("SELECT series FROM activity_stream WHERE row_id = ?", (row_id,)).fetchone()
+    if row is None:
+        return None
+    try:
+        geladen = json.loads(row["series"])
+    except (TypeError, ValueError):
+        return None
+    return geladen if isinstance(geladen, dict) else None
+
+
+def streams_between(conn: sqlite3.Connection, start: date, end: date) -> set[int]:
+    """Welche Einheiten eines Zeitraums schon einen Verlauf haben."""
+    rows = conn.execute(
+        "SELECT s.row_id FROM activity_stream s JOIN activity a ON a.id = s.row_id "
+        "WHERE a.date BETWEEN ? AND ?",
+        (start.isoformat(), end.isoformat()),
+    ).fetchall()
+    return {int(row["row_id"]) for row in rows}
+
+
 def events_between(conn: sqlite3.Connection, start: date, end: date) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM event WHERE date BETWEEN ? AND ? AND COALESCE(category, 'WORKOUT') = 'WORKOUT' ORDER BY date, id",
@@ -402,10 +456,12 @@ def upcoming_events(conn: sqlite3.Connection, today: date, limit: int = 3) -> li
 
 
 def counts(conn: sqlite3.Connection) -> dict[str, int]:
+    mit_verlauf = "SELECT COUNT(*) FROM activity_stream WHERE points > 0"
     return {
         "activities": conn.execute("SELECT COUNT(*) FROM activity").fetchone()[0],
         "wellness": conn.execute("SELECT COUNT(*) FROM wellness").fetchone()[0],
         "events": conn.execute("SELECT COUNT(*) FROM event").fetchone()[0],
+        "streams": conn.execute(mit_verlauf).fetchone()[0],
     }
 
 

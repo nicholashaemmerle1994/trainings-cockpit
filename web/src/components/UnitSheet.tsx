@@ -3,16 +3,18 @@ import { api } from "../api";
 import { fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtPace } from "../format";
 import type { UnitDetail } from "../types";
 import { Sheet } from "./Sheet";
+import { WorkoutChart } from "./WorkoutChart";
 
 /** „08:05" aus dem Zeitstempel der Aufzeichnung. */
 function clock(start: string): string {
   return start.slice(11, 16);
 }
 
-function pace100(seconds: number | null): string {
-  if (seconds == null) return "—";
-  const min = Math.floor(seconds / 60);
-  return `${min}:${String(Math.round(seconds - min * 60)).padStart(2, "0")} /100 m`;
+/** „2:15 /100 m" — die Zahl kommt in Minuten je 100 m, nicht in Sekunden. */
+function pace100(minutes: number | null): string {
+  if (minutes == null) return "—";
+  const seconds = Math.round(minutes * 60);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} /100 m`;
 }
 
 export function UnitSheet({ rowId, onClose }: { rowId: number; onClose: () => void }) {
@@ -48,11 +50,13 @@ export function UnitSheet({ rowId, onClose }: { rowId: number; onClose: () => vo
 /** Nur, was die Aufzeichnung wirklich hergibt — leere Zeilen sagen nichts. */
 function facts(data: UnitDetail): [string, string][] {
   const rows: [string, string][] = [];
-  if (data.avg_hr) {
+  // Was der Verlauf zeigt, steht in seiner eigenen Zeile; hier bleibt der Rest.
+  const charted = data.series != null;
+  if (data.avg_hr && !charted) {
     const max = data.max_hr ? ` · ${fmtNumber(data.max_hr)} max` : "";
     rows.push(["Puls", `${fmtNumber(data.avg_hr)} bpm${max}`]);
   }
-  if (data.pace_min_km != null) rows.push(["Tempo", fmtPace(data.pace_min_km)]);
+  if (data.pace_min_km != null && !charted) rows.push(["Tempo", fmtPace(data.pace_min_km)]);
   if (data.pace_100m != null) rows.push(["Tempo", pace100(data.pace_100m)]);
   if (data.speed_kmh != null && data.pace_min_km == null && data.pace_100m == null) {
     rows.push(["Schnitt", `${fmtNumber(data.speed_kmh, 1)} km/h`]);
@@ -79,7 +83,7 @@ function Body({ data }: { data: UnitDetail }) {
         <span className="chip">Erledigt</span>
       </div>
 
-      {data.zones.length > 0 && <ZoneBar zones={data.zones} source={data.zone_source} />}
+      {data.series && <WorkoutChart series={data.series} />}
 
       <div className="sheet-cells">
         <div className="sheet-cell">
@@ -95,6 +99,8 @@ function Body({ data }: { data: UnitDetail }) {
           <span className="l">Last</span>
         </div>
       </div>
+
+      {data.zones.length > 0 && <ZoneBar zones={data.zones} source={data.zone_source} />}
 
       {facts(data).length > 0 && (
         <section className="sheet-sec">

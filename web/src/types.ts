@@ -150,6 +150,7 @@ export interface SessionFuel {
 }
 
 export interface SessionActual {
+  row_id: number;
   activity_id: string;
   name: string;
   minutes: number | null;
@@ -157,6 +158,8 @@ export interface SessionActual {
   load: number | null;
   intensity: number | null;
   hr: number | null;
+  /** Der aufgezeichnete Verlauf, sofern die Quelle Sekundenwerte hat (D-53). */
+  series?: UnitSeries | null;
 }
 
 export interface SessionRow {
@@ -219,6 +222,28 @@ export interface ZoneShare {
   share: number;
 }
 
+/** Ein Punkt des aufgezeichneten Verlaufs: Sekunde, Wert, Puls (D-53). */
+export interface SeriesPoint {
+  t: number;
+  v: number | null;
+  hr: number | null;
+}
+
+/**
+ * Der Verlauf einer erledigten Einheit, so wie die Aufzeichnung ihn hergibt.
+ * `kind` sagt, was die Hauptlinie zeigt: Leistung, Tempo oder Puls.
+ */
+export interface UnitSeries {
+  kind: "power" | "pace" | "hr";
+  unit: string;
+  points: SeriesPoint[];
+  mean: number | null;
+  peak: number | null;
+  pulse: number | null;
+  duration_s: number;
+  reference: number | null;
+}
+
 export interface UnitDetail extends WeekUnit {
   elevation_m: number | null;
   calories: number | null;
@@ -226,6 +251,7 @@ export interface UnitDetail extends WeekUnit {
   origin: string;
   zones: ZoneShare[];
   zone_source: string | null;
+  series: UnitSeries | null;
 }
 
 export interface FuelEntry {

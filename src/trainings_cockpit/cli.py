@@ -15,6 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from . import __version__, db, dedupe, metrics
+from . import streams as streams_mod
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings, mask
 from .security import is_world_readable
@@ -63,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
     gar = sub.add_parser("garmin", help="Läufe und Schwimmen direkt aus der Garmin-Personal-API laden")
     gar.add_argument("--days", type=int, default=365, help="Vergangenheit in Tagen")
 
+    strm = sub.add_parser("streams", help="Verläufe der letzten Tage aus der Aufzeichnung holen")
+    strm.add_argument("--days", type=int, default=14, help="Vergangenheit in Tagen (Default 14)")
+
     base = sub.add_parser("baseline", help="Referenz der Nachtsignale: Stand, Neustart, aus")
     base.add_argument("--start", help="Erste Nacht mit dem neuen Sensor (JJJJ-MM-TT)")
     base.add_argument("--off", action="store_true", help="Neustart-Marke entfernen")
@@ -92,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
             return _dedupe(settings, args.dry_run)
         if args.command == "garmin":
             return _garmin(settings, args.days)
+        if args.command == "streams":
+            return _streams(settings, args.days)
         if args.command == "baseline":
             return _baseline(settings, args)
         if args.command == "serve":
@@ -564,7 +570,24 @@ def _sync(settings: Settings, days: int) -> int:
     table.add_row("Aktivitäten", str(result["activities"]))
     table.add_row("Wellness-Tage", str(result["wellness"]))
     table.add_row("Events", str(result["events"]))
+    table.add_row("Verläufe", str(result.get("streams", 0)))
     table.add_row("Datenbank", str(settings.db_path))
+    console.print(table)
+    return 0
+
+
+def _streams(settings: Settings, days: int) -> int:
+    conn = db.connect(settings.db_path)
+    try:
+        db.init_db(conn)
+        zahlen = streams_mod.fetch_missing(conn, settings, days=days)
+    finally:
+        conn.close()
+
+    table = Table(box=None, show_header=False, padding=(0, 1))
+    table.add_row("Neu", str(zahlen["neu"]))
+    table.add_row("Ohne Sekundenwerte", str(zahlen["leer"]))
+    table.add_row("Fehler", str(zahlen["fehler"]))
     console.print(table)
     return 0
 

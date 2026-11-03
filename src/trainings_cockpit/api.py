@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import db, fuel, metrics, plan
+from . import db, fuel, metrics, plan, streams
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings
 
@@ -88,7 +88,18 @@ def session(event_id: int) -> dict[str, Any]:
         event = db.event_by_id(conn, event_id)
         if not event:
             raise HTTPException(status_code=404, detail="Einheit nicht gefunden")
-        return plan.session(conn, event)
+        data = plan.session(conn, event)
+        _add_series(conn, data)
+        return data
+
+
+def _add_series(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
+    """Den Verlauf der zugehörigen Aufzeichnung an das Ist hängen (D-53)."""
+    actual = data.get("actual")
+    if not isinstance(actual, dict) or actual.get("row_id") is None:
+        return
+    row = db.activity_by_row_id(conn, int(actual["row_id"]))
+    actual["series"] = streams.payload(conn, row) if row else None
 
 
 @app.get("/api/week")
@@ -110,12 +121,14 @@ def week() -> dict[str, Any]:
 
 @app.get("/api/unit/{row_id}")
 def unit(row_id: int) -> dict[str, Any]:
-    """Eine erledigte Einheit mit Zonen, Puls und Quelle."""
+    """Eine erledigte Einheit mit Zonen, Puls, Quelle und Verlauf."""
     with connection() as conn:
         row = db.activity_by_row_id(conn, row_id)
         if not row:
             raise HTTPException(status_code=404, detail="Einheit nicht gefunden")
-        return metrics.unit_payload(row)
+        data = metrics.unit_payload(row)
+        data["series"] = streams.payload(conn, row)
+        return data
 
 
 @app.get("/api/activities")

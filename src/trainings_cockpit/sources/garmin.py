@@ -7,6 +7,8 @@ Key anlegen: Garmin Connect → Settings → Personal API.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -45,6 +47,29 @@ class GarminDump:
     errors: dict[str, str] = field(default_factory=dict)
 
 
+@contextmanager
+def garmin_client(api_key: str, token_cache: Path | None = None) -> Iterator[Any]:
+    """Ein angemeldeter Garmin-Client als `with`-Block.
+
+    Der Bearer-Token liegt im Zwischenspeicher auf der Platte, nicht in der
+    Datenbank: er wechselt und ist kein Messwert.
+    """
+    try:
+        from garmin_personal_api import (  # noqa: PLC0415
+            GarminPersonalApiClient,
+            PersonalApiAuthenticator,
+        )
+    except ImportError as exc:  # pragma: no cover - Umgebungsfehler
+        raise GarminUnavailable(
+            "Paket 'garmin-connect-personal-api-python' fehlt. Installiere es mit `uv sync`."
+        ) from exc
+
+    with PersonalApiAuthenticator(bearer_token_cache_file=token_cache) as authenticator:
+        token = authenticator.obtain_token(api_key)
+    with GarminPersonalApiClient(token.access_token) as client:
+        yield client
+
+
 def fetch_garmin(
     api_key: str,
     oldest: date,
@@ -55,23 +80,9 @@ def fetch_garmin(
     activity_limit: int = 1000,
     token_cache: Path | None = None,
 ) -> GarminDump:
-    try:
-        from garmin_personal_api import (  # noqa: PLC0415
-            GarminPersonalApiClient,
-            PersonalApiAuthenticator,
-        )
-    except ImportError as exc:  # pragma: no cover - Umgebungsfehler
-        raise GarminUnavailable(
-            "Paket 'garmin-connect-personal-api-python' fehlt. "
-            "Installiere es mit `uv sync`."
-        ) from exc
-
     dump = GarminDump()
 
-    with PersonalApiAuthenticator(bearer_token_cache_file=token_cache) as authenticator:
-        token = authenticator.obtain_token(api_key)
-
-    with GarminPersonalApiClient(token.access_token) as client:
+    with garmin_client(api_key, token_cache=token_cache) as client:
         if not only_activities:
             _try(dump, "profile", lambda: client.get_user_profile_settings())
             _windowed(dump, "sleep", client.get_daily_sleep_summaries, oldest, newest)

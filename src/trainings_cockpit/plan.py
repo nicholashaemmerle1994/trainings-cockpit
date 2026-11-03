@@ -490,6 +490,7 @@ def matches(conn: Any, event: dict[str, Any]) -> dict[str, Any] | None:
 def done_payload(row: dict[str, Any]) -> dict[str, Any]:
     moving = row.get("moving_s") or row.get("duration_s") or 0
     return {
+        "row_id": row.get("id"),
         "activity_id": row.get("source_id"),
         "name": row.get("name") or "",
         "minutes": round(moving / 60) if moving else None,

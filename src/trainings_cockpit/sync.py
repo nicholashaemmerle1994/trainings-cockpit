@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from . import db, dedupe
+from . import db, dedupe, streams
 from .config import Settings
 from .sources.garmin import GarminDump, GarminUnavailable, actor_rows, fetch_garmin, wellness_rows
 from .sources.intervals import IntervalsClient
@@ -75,6 +75,18 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         )
         n_events = db.upsert_events(conn, events)
 
+        # Verläufe sind Zugabe: ein fehlender Verlauf kostet ein Bild, nicht den
+        # Sync. Geholt wird nur, was fehlt und nicht älter als zwei Wochen ist.
+        verlauf_note = ""
+        n_streams = 0
+        try:
+            zahlen = streams.fetch_missing(conn, settings, today)
+            n_streams = zahlen["neu"]
+            if zahlen["fehler"]:
+                verlauf_note = f" streams(fehler={zahlen['fehler']})"
+        except Exception as exc:  # noqa: BLE001 - Verläufe dürfen den Sync nicht kippen
+            verlauf_note = f" streams=aus ({str(exc)[:40]})"
+
         db.set_setting(conn, "sport_profile", json.dumps(_sport_profile(sport_settings)))
         db.set_setting(conn, "athlete_name", _pretty_name(athlete.get("name")))
         db.set_setting(conn, "athlete_id", str(athlete.get("id") or ""))
@@ -85,14 +97,17 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             started,
             "ok",
             f"activities={n_activities} direkt={n_direkt} wellness={n_wellness} events={n_events}"
+            f" streams={n_streams}"
             + (f" dubletten={n_doppelt}" if n_doppelt else "")
-            + garmin.note,
+            + garmin.note
+            + verlauf_note,
         )
 
         return {
             "activities": n_activities + n_direkt,
             "wellness": n_wellness,
             "events": n_events,
+            "streams": n_streams,
             "athlete": _pretty_name(athlete.get("name")),
             "range": [oldest.isoformat(), today.isoformat()],
         }
