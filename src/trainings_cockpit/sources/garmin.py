@@ -38,6 +38,7 @@ class GarminDump:
     activities: list[dict[str, Any]] = field(default_factory=list)
     sleep: list[dict[str, Any]] = field(default_factory=list)
     hrv: list[dict[str, Any]] = field(default_factory=list)
+    summaries: list[dict[str, Any]] = field(default_factory=list)
     weight: list[dict[str, Any]] = field(default_factory=list)
     fit_zip_bytes: int = 0
     fit_activity_id: int | None = None
@@ -75,6 +76,7 @@ def fetch_garmin(
             _try(dump, "profile", lambda: client.get_user_profile_settings())
             _windowed(dump, "sleep", client.get_daily_sleep_summaries, oldest, newest)
             _windowed(dump, "hrv", client.get_daily_hrv_summaries, oldest, newest)
+            _windowed(dump, "summaries", client.get_daily_summaries, oldest, newest)
             _windowed(dump, "weight", client.get_weight_measurements, oldest, newest)
         _try(
             dump,
@@ -161,6 +163,68 @@ def actor_rows(dump: GarminDump) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def wellness_rows(dump: GarminDump) -> list[dict[str, Any]]:
+    """Die Nachtsignale aus Garmin — Schlaf, HRV, Ruhepuls, Atmung, Gewicht.
+
+    Drei Endpunkte liefern je Tag ein Stück: `sleep` die Dauer mit Score und
+    Atmung, `hrv` den rMSSD der letzten Nacht, `summaries` den Ruhepuls und die
+    Tagesatmung. Hier wird daraus **eine** Zeile je Tag in der Form, die
+    `db.map_wellness` versteht — so bleibt der Weg in die Datenbank derselbe.
+
+    Fehlt ein Wert, bleibt das Feld leer. Ein Tag mit halben Daten ist besser
+    als kein Tag: ob die Erholung damit rechnet, entscheidet `metrics` (D-26),
+    nicht der Import.
+    """
+    tage: dict[str, dict[str, Any]] = {}
+
+    def tag(day: str) -> dict[str, Any]:
+        return tage.setdefault(day, {"id": day})
+
+    for eintrag in dump.sleep:
+        day = _day(eintrag)
+        if not day:
+            continue
+        zeile = tag(day)
+        if eintrag.get("sleepTimeSeconds") is not None:
+            zeile["sleepSecs"] = eintrag["sleepTimeSeconds"]
+        score = (eintrag.get("sleepScores") or {}).get("overall") or {}
+        if score.get("value") is not None:
+            zeile["sleepScore"] = score["value"]
+        if eintrag.get("averageRespirationValue") is not None:
+            zeile["respiration"] = eintrag["averageRespirationValue"]
+
+    for eintrag in dump.hrv:
+        day = _day(eintrag)
+        if day and eintrag.get("lastNightAvg") is not None:
+            tag(day)["hrv"] = eintrag["lastNightAvg"]
+
+    for eintrag in dump.summaries:
+        day = _day(eintrag)
+        if not day:
+            continue
+        zeile = tag(day)
+        rhr = (eintrag.get("heartRate") or {}).get("restingValue")
+        if rhr:
+            zeile["restingHR"] = rhr
+        atmung = (eintrag.get("respiration") or {}).get("avgValue")
+        if atmung and zeile.get("respiration") is None:
+            zeile["respiration"] = atmung
+
+    for eintrag in dump.weight:
+        day = _day(eintrag)
+        gramm = eintrag.get("weight")
+        if day and gramm:
+            tag(day)["weight"] = round(float(gramm) / 1000, 1)
+
+    return [zeile for zeile in tage.values() if len(zeile) > 1]
+
+
+def _day(eintrag: dict[str, Any]) -> str | None:
+    """Der Tag, dem ein Messwert gehört — Garmin nennt ihn `calendarDate`."""
+    tag = eintrag.get("calendarDate") or eintrag.get("date")
+    return str(tag)[:10] if tag else None
 
 
 def _all_activities(

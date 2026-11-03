@@ -215,6 +215,13 @@ def upsert_activities(
 
 
 def upsert_wellness(conn: sqlite3.Connection, rows: Iterable[dict[str, Any]]) -> int:
+    """Nächte schreiben. Ein fehlender Wert löscht keinen gespeicherten.
+
+    Ein Sync kennt nicht immer alle Signale: Garmin hat den Ruhepuls aus der
+    Tageszusammenfassung, aber den Schlaf erst, wenn die Uhr ihn übertragen hat.
+    Ohne `COALESCE` würde der zweite Lauf die halbe Nacht überschreiben — und
+    eine fehlende Messung ist keine Messung von null.
+    """
     now = datetime.now().isoformat(timespec="seconds")
     count = 0
     for raw in rows:
@@ -226,13 +233,18 @@ def upsert_wellness(conn: sqlite3.Connection, rows: Iterable[dict[str, Any]]) ->
             VALUES (:date, :hrv, :rhr, :sleep_s, :sleep_score, :respiration, :spo2,
                 :stress, :weight_kg, :readiness_vendor, :ctl, :atl, :updated_at)
             ON CONFLICT(date) DO UPDATE SET
-                hrv=excluded.hrv, rhr=excluded.rhr, sleep_s=excluded.sleep_s,
+                hrv=COALESCE(excluded.hrv, wellness.hrv),
+                rhr=COALESCE(excluded.rhr, wellness.rhr),
+                sleep_s=COALESCE(excluded.sleep_s, wellness.sleep_s),
                 sleep_score=COALESCE(excluded.sleep_score, wellness.sleep_score),
-                respiration=excluded.respiration,
-                spo2=excluded.spo2, stress=excluded.stress, weight_kg=excluded.weight_kg,
+                respiration=COALESCE(excluded.respiration, wellness.respiration),
+                spo2=COALESCE(excluded.spo2, wellness.spo2),
+                stress=COALESCE(excluded.stress, wellness.stress),
+                weight_kg=COALESCE(excluded.weight_kg, wellness.weight_kg),
                 readiness_vendor=COALESCE(excluded.readiness_vendor, wellness.readiness_vendor),
-                ctl=excluded.ctl,
-                atl=excluded.atl, updated_at=excluded.updated_at
+                ctl=COALESCE(excluded.ctl, wellness.ctl),
+                atl=COALESCE(excluded.atl, wellness.atl),
+                updated_at=excluded.updated_at
             """,
             {**row, "updated_at": now},
         )

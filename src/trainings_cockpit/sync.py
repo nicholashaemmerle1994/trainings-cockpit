@@ -1,15 +1,27 @@
-"""Sync: intervals.icu → lokale SQLite-Datenbank."""
+"""Sync: Plan von intervals, Aktivitäten und Nächte von Garmin.
+
+Die Aufteilung (D-50, D-49 ausgesetzt):
+
+- **intervals.icu** liefert Plan (`event`), Sport-Einstellungen und bis auf
+  Weiteres die Aktivitäten für Rad und Kraft.
+- **Garmin (Personal API)** liefert die Aktivitäten der Uhr (Läufe, Schwimmen)
+  und die Nachtsignale: Schlaf, HRV, Ruhepuls, Atmung.
+
+Fehlt Garmin, fehlen die Nächte — dann steht die Erholung auf „Keine Daten"
+(D-26), statt dass eine fremde Quelle einspringt.
+"""
 
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
 from . import db, dedupe
 from .config import Settings
-from .sources.garmin import GarminUnavailable, actor_rows, fetch_garmin
+from .sources.garmin import GarminDump, GarminUnavailable, actor_rows, fetch_garmin, wellness_rows
 from .sources.intervals import IntervalsClient
 
 
@@ -30,13 +42,14 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         ) as client:
             athlete = client.athlete()
             activities = client.activities(oldest, today)
-            wellness = client.wellness(oldest, today)
             events = client.events(oldest, events_until)
             sport_settings = client.sport_settings()
 
-        # Läufe und Schwimmen kommen direkt von Garmin – mit den Feldern aus der
-        # Originalaufzeichnung und einer Last, die an intervals kalibriert ist.
-        garmin_rows, garmin_note = _garmin_activities(settings, oldest, today)
+        # Aktivitäten der Uhr und die Nächte kommen direkt von Garmin: die
+        # Felder stammen aus der Originalaufzeichnung, die Last rechnet das
+        # Cockpit selbst, und die Nachtsignale sind die des neuen Sensors.
+        garmin = _garmin_data(settings, oldest, today)
+        garmin_rows = garmin.activities
         n_direkt = 0
 
         # Eine Einheit nur einmal, auch wenn sie über zwei Quellen kommt. Die
@@ -54,7 +67,12 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             n_direkt = db.upsert_activities(conn, garmin_rows, mapped=True)
 
         n_doppelt = dubletten_entfernen(conn)
-        n_wellness = db.upsert_wellness(conn, wellness)
+        # Seit dem Sensorwechsel zählt nur, was der neue Sensor gemessen hat.
+        # Sonst mischten sich beim Jahresimport alte intervals-Werte unter die
+        # neuen Nächte, und "üblich" wäre ein Maßstab aus zwei Geräten (D-31).
+        n_wellness = db.upsert_wellness(
+            conn, _seit_epoche(garmin.wellness, db.wellness_epoch(conn))
+        )
         n_events = db.upsert_events(conn, events)
 
         db.set_setting(conn, "sport_profile", json.dumps(_sport_profile(sport_settings)))
@@ -68,7 +86,7 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             "ok",
             f"activities={n_activities} direkt={n_direkt} wellness={n_wellness} events={n_events}"
             + (f" dubletten={n_doppelt}" if n_doppelt else "")
-            + garmin_note,
+            + garmin.note,
         )
 
         return {
@@ -92,20 +110,43 @@ def dubletten_entfernen(conn: Any) -> int:
     return db.delete_activities(conn, weg)
 
 
-def _garmin_activities(
-    settings: Settings, oldest: date, today: date
-) -> tuple[list[dict[str, Any]], str]:
-    """Läufe und Schwimmen aus der Personal-API, dazu eine Notiz fürs Sync-Log."""
+@dataclass(frozen=True)
+class GarminDaten:
+    """Was Garmin je Sync liefert: Einheiten der Uhr und die Nächte."""
+
+    activities: list[dict[str, Any]]
+    wellness: list[dict[str, Any]]
+    note: str
+
+
+def _garmin_data(settings: Settings, oldest: date, today: date) -> GarminDaten:
+    """Aktivitäten und Nachtsignale aus der Personal-API."""
     if not settings.garmin_key:
-        return [], ""
+        return GarminDaten([], [], " garmin=aus (kein Key)")
     try:
         cache = settings.ensure_data_dir() / "garmin" / "bearer-token.json"
         cache.parent.mkdir(parents=True, exist_ok=True)
         dump = fetch_garmin(settings.garmin_key, oldest, today, token_cache=cache)
     except GarminUnavailable as exc:
-        return [], f" garmin=aus ({str(exc)[:40]})"
-    note = " garmin=" + ",".join(sorted(dump.errors))[:80] if dump.errors else ""
-    return actor_rows(dump), note
+        return GarminDaten([], [], f" garmin=aus ({str(exc)[:40]})")
+    return GarminDaten(
+        activities=actor_rows(dump),
+        wellness=wellness_rows(dump),
+        note=_garmin_note(dump),
+    )
+
+
+def _seit_epoche(rows: list[dict[str, Any]], epoch: date | None) -> list[dict[str, Any]]:
+    """Nur Nächte ab dem Sensorwechsel. Ohne Marke zählt jede Nacht."""
+    if epoch is None:
+        return rows
+    grenze = epoch.isoformat()
+    return [row for row in rows if str(row["id"]) >= grenze]
+
+
+def _garmin_note(dump: GarminDump) -> str:
+    """Was Garmin nicht geliefert hat, steht im Sync-Log."""
+    return " garmin=" + ",".join(sorted(dump.errors))[:80] if dump.errors else ""
 
 
 def _sport_profile(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

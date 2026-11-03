@@ -70,3 +70,18 @@ def test_events_and_settings(tmp_path) -> None:
     db.set_setting(conn, "athlete_name", "Nicholas Pahr")
     assert db.get_setting(conn, "athlete_name") == "Nicholas Pahr"
     assert db.counts(conn)["events"] == 1
+
+
+def test_fehlender_wert_loescht_keine_gespeicherte_nacht(tmp_path) -> None:
+    """Ein Sync ohne Schlaf überschreibt keinen Schlaf (D-50)."""
+    conn = db.connect(tmp_path / "test.db")
+    db.init_db(conn)
+
+    db.upsert_wellness(conn, [{"id": "2026-11-04", "hrv": 46, "sleepSecs": 27_600}])
+    # Zweiter Lauf: nur der Ruhepuls kam an, der Schlaf noch nicht übertragen.
+    db.upsert_wellness(conn, [{"id": "2026-11-04", "restingHR": 54}])
+
+    row = db.wellness_between(conn, date(2026, 11, 4), date(2026, 11, 4))[0]
+    assert row["rhr"] == 54.0
+    assert row["hrv"] == 46.0
+    assert row["sleep_s"] == 27_600
