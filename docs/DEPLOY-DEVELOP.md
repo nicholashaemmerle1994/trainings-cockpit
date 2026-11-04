@@ -35,18 +35,20 @@ TC_PORT=8101 docker compose -p cockpit-exp \
 
 ## Aktualisieren
 
-Der Stand kommt per `rsync` vom Arbeitsrechner (der Server hat keinen
-GitHub-Zugang):
+Der Server hat keinen GitHub-Zugang, und `rsync` ist dort nicht installiert.
+Der Stand geht deshalb als Archiv über `ssh`:
 
 ```bash
-# auf dem Mac, aus dem Repository
-rsync -az --delete \
+# auf dem Mac, im Repository auf dem Stand von develop
+COPYFILE_DISABLE=1 tar czf - \
   --exclude '.git' --exclude 'data' --exclude '.env' \
   --exclude '.venv' --exclude 'node_modules' --exclude 'web/node_modules' \
-  ./ homeserver:~/docker/compose/cockpit-exp/
+  --exclude 'web/dist' . \
+| ssh homeserver 'tar xzf - -C ~/docker/compose/cockpit-exp'
 ```
 
-Danach auf dem Server neu bauen (siehe oben).
+Danach auf dem Server neu bauen (siehe oben). `data/`, `.env` und `.venv`
+bleiben dabei unangetastet, weil sie nicht im Archiv liegen.
 
 ## Daten
 
