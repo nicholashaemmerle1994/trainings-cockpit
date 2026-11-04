@@ -35,7 +35,16 @@ TC_PORT=8101 docker compose -p cockpit-exp \
 
 ## Aktualisieren
 
-Der Server hat keinen GitHub-Zugang, und `rsync` ist dort nicht installiert.
+Ein Befehl vom Arbeitsrechner aus, im Repository auf dem gewünschten Stand:
+
+```bash
+tools/deploy-develop.sh
+```
+
+Er überträgt die Dateien und baut neu. `--no-build` überträgt nur.
+
+Was der Befehl tut: der Server hat keinen GitHub-Zugang, und `rsync` ist dort
+nicht installiert.
 Der Stand geht deshalb als Archiv über `ssh`:
 
 ```bash
