@@ -1,27 +1,37 @@
 #!/usr/bin/env bash
-# Rollt den aktuellen Stand als Vorschau-Instanz auf den Homeserver aus.
+# Rollt einen Stand als Vorschau-Instanz auf den Homeserver aus.
 #
-#   tools/deploy-develop.sh            # ausrollen und neu bauen
+#   tools/deploy-develop.sh            # develop ausrollen und neu bauen
+#   tools/deploy-develop.sh main       # einen anderen Stand ausrollen
 #   tools/deploy-develop.sh --no-build # nur Dateien übertragen
 #
-# Erwartet den ssh-Host `homeserver` (siehe ~/.ssh/config) und ein
-# Repository auf dem Stand, der ausgerollt werden soll.
+# Wichtig: Ausgerollt wird der genannte Branch, NICHT der ausgecheckte
+# Arbeitsbaum. So kann parallel ein Ticket-Agent auf einem Feature-Branch
+# arbeiten, ohne dass dessen Zwischenstand auf dem Server landet.
 set -euo pipefail
 
 HOST="${TC_DEPLOY_HOST:-homeserver}"
 REMOTE="${TC_DEPLOY_DIR:-\$HOME/docker/compose/cockpit-exp}"
+REF="develop"
 BUILD=1
-[[ "${1:-}" == "--no-build" ]] && BUILD=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --no-build) BUILD=0 ;;
+    -*) echo "Unbekannte Option: $arg" >&2; exit 2 ;;
+    *) REF="$arg" ;;
+  esac
+done
 
 cd "$(dirname "$0")/.."
+git rev-parse --verify --quiet "$REF" >/dev/null || { echo "Ref '$REF' existiert nicht" >&2; exit 1; }
+SHA="$(git rev-parse --short "$REF")"
 
-echo "→ Dateien nach $HOST:$REMOTE"
-COPYFILE_DISABLE=1 tar czf - \
-  --exclude '.git' --exclude 'data' --exclude '.env' \
-  --exclude '.venv' --exclude 'node_modules' --exclude 'web/node_modules' \
-  --exclude 'web/dist' --exclude '.DS_Store' --exclude '__pycache__' \
-  --exclude '.pytest_cache' --exclude '.ruff_cache' . \
-  | ssh "$HOST" "tar xzf - -C $REMOTE"
+echo "→ $REF ($SHA) nach $HOST:$REMOTE"
+# Alte Dateien der ausgelieferten Bereiche entfernen, damit gelöschte Dateien
+# nicht im Image zurückbleiben. data/ und .env liegen daneben und bleiben.
+ssh "$HOST" "mkdir -p $REMOTE && cd $REMOTE && rm -rf src web tests tools docs"
+git archive --format=tar "$REF" | ssh "$HOST" "tar xf - -C $REMOTE"
 
 if [[ "$BUILD" == "1" ]]; then
   echo "→ Bauen und starten"

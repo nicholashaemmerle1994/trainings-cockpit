@@ -15,15 +15,21 @@ Ausprobieren: das, was ein Ticket gebaut hat, soll dort landen, bevor es nach
 
 ## Erreichbarkeit
 
-Die Vorschau hängt am Tailnet, nicht im Internet:
+Die Vorschau hängt nur im Tailnet, erreichbar über die Adresse des Servers:
 
-```bash
-tailscale serve --bg --https=8443 http://127.0.0.1:8101
+```
+http://100.92.2.97:8101
 ```
 
-Aufruf danach: `https://<hostname>.<tailnet>.ts.net:8443`. Über HTTPS lässt
-sich die Seite auf dem iPhone über „Zum Home-Bildschirm" als App ablegen
-(Manifest und Icons liegen in `web/public/`).
+Bewusst **ohne** den `*.ts.net`-Namen und ohne HTTPS: dieser Name löst im
+Browser nicht über MagicDNS, sondern über das öffentliche DNS auf die
+Funnel-Ingress-Adresse auf — dort ist Port 8443 nicht offen, und der Browser
+meldet `ERR_CONNECTION_CLOSED`. Die reine Tailnet-IP umgeht das.
+
+Für „Zum Home-Bildschirm" auf dem iPhone reicht HTTP; die App hat keinen
+Service Worker und braucht keinen sicheren Kontext.
+
+Der Funnel für die Bibliothek (`/` → 8083) bleibt davon unberührt.
 
 ## Bauen und Starten
 
@@ -35,26 +41,18 @@ TC_PORT=8101 docker compose -p cockpit-exp \
 
 ## Aktualisieren
 
-Ein Befehl vom Arbeitsrechner aus, im Repository auf dem gewünschten Stand:
+Ein Befehl vom Arbeitsrechner aus:
 
 ```bash
-tools/deploy-develop.sh
+tools/deploy-develop.sh          # develop ausrollen
+tools/deploy-develop.sh main     # anderen Stand ausrollen
 ```
 
-Er überträgt die Dateien und baut neu. `--no-build` überträgt nur.
-
-Was der Befehl tut: der Server hat keinen GitHub-Zugang, und `rsync` ist dort
-nicht installiert.
-Der Stand geht deshalb als Archiv über `ssh`:
-
-```bash
-# auf dem Mac, im Repository auf dem Stand von develop
-COPYFILE_DISABLE=1 tar czf - \
-  --exclude '.git' --exclude 'data' --exclude '.env' \
-  --exclude '.venv' --exclude 'node_modules' --exclude 'web/node_modules' \
-  --exclude 'web/dist' . \
-| ssh homeserver 'tar xzf - -C ~/docker/compose/cockpit-exp'
-```
+Ausgerollt wird ein **Branch aus dem Repository**, nicht der ausgecheckte
+Arbeitsbaum. Das ist Absicht: während ein Ticket-Agent auf seinem
+Feature-Branch arbeitet, darf dessen Zwischenstand nicht auf dem Server
+landen. Das Skript nimmt `git archive`, überträgt per `ssh` und baut neu.
+`--no-build` überträgt nur.
 
 Danach auf dem Server neu bauen (siehe oben). `data/`, `.env` und `.venv`
 bleiben dabei unangetastet, weil sie nicht im Archiv liegen.
