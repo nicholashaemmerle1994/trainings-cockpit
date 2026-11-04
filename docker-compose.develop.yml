@@ -1,0 +1,14 @@
+# Vorschau-Instanz (develop) auf dem Homeserver.
+#
+# Wird zusätzlich zur normalen docker-compose.yml verwendet:
+#   docker compose -p cockpit-exp --env-file .env \
+#     -f docker-compose.yml -f docker-compose.develop.yml up -d --build
+#
+# Eigenes Image, eigener Port, eigenes Compose-Projekt — damit ein Neubau der
+# Vorschau nicht das laufende Cockpit auf 8100 ersetzt.
+
+services:
+  cockpit:
+    image: trainings-cockpit:develop
+    ports: !override
+      - "${TC_PORT:-8101}:8000"
