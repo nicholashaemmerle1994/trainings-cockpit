@@ -26,7 +26,7 @@ COPYFILE_DISABLE=1 tar czf - \
 if [[ "$BUILD" == "1" ]]; then
   echo "→ Bauen und starten"
   ssh "$HOST" "cd $REMOTE && TC_PORT=8101 docker compose -p cockpit-exp \
-    -f docker-compose.yml -f docker-compose.develop.yml up -d --build"
+    -f docker-compose.yml -f docker-compose.develop.yml up -d --build --force-recreate"
   echo "→ Health"
   ssh "$HOST" "curl -sS -m 5 http://127.0.0.1:8101/api/health"
   echo

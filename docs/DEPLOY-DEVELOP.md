@@ -59,6 +59,9 @@ COPYFILE_DISABLE=1 tar czf - \
 Danach auf dem Server neu bauen (siehe oben). `data/`, `.env` und `.venv`
 bleiben dabei unangetastet, weil sie nicht im Archiv liegen.
 
+Wichtig ist `--force-recreate`: ohne das kann Compose einen laufenden Container
+stehen lassen, obwohl ein neues Image gebaut wurde.
+
 ## Daten
 
 `data/` ist eine Kopie der Produktivdaten, damit die Vorschau echte Zahlen
