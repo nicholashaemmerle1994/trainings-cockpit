@@ -122,8 +122,8 @@ Verläufe über Flächen, keine Sparklines in Kennzahlen, Sentence case, 4-px-Ra
 - **Drei Schriften, selbst gehostet.** Instrument Serif für Titel und
   Countdown-Zahlen, Plex Sans für Text, Plex Mono für alles Zählbare
   (`web/public/fonts/`, 97 kB zusammen, kein Aufruf an Google).
-- **Ein Akzent.** Wörthersee-Teal markiert Aktion, Auswahl und den heutigen Tag.
-  Grün, Gelb, Orange, Rot erscheinen nur als Befund der Erholung.
+- **Ein Akzent.** Ziegelrot (#c8675f) markiert Aktion, Auswahl und den heutigen Tag.
+  Die Ampel der Erholung (Grün, Gelb, Orange, Befund-Rot) bleibt davon getrennt.
 - **Die Uhr ist ein Instrument.** Zonenring, Referenzmarke auf den
   21-Tage-Schnitt, Skalen in den Treiberzeilen.
 - **Kein Diagramm-Paket.** Die Lastkurve ist von Hand als SVG gezeichnet;
