@@ -27,7 +27,10 @@ if [[ "$BUILD" == "1" ]]; then
   echo "→ Bauen und starten"
   ssh "$HOST" "cd $REMOTE && TC_PORT=8101 docker compose -p cockpit-exp \
     -f docker-compose.yml -f docker-compose.develop.yml up -d --build --force-recreate"
-  echo "→ Health"
-  ssh "$HOST" "curl -sS -m 5 http://127.0.0.1:8101/api/health"
-  echo
+  echo "→ Health (bis 45 s)"
+  ssh "$HOST" 'for i in $(seq 1 15); do
+    if curl -fsS -m 3 http://127.0.0.1:8101/api/health; then echo; exit 0; fi
+    sleep 3
+  done
+  echo "Vorschau antwortet nicht"; exit 1'
 fi
