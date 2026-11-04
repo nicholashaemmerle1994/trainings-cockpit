@@ -56,11 +56,9 @@
   --text-2: #a3a9b8;
   --text-3: #7a8296;
 
-  --accent: #c8675f;
-  --accent-soft: rgba(200, 103, 95, 0.14);
-  --accent-line: rgba(200, 103, 95, 0.5);
-  --accent-hover: #d4776f;
-  --on-accent: #170707;
+  --accent: #3f9e8f;
+  --accent-soft: rgba(63, 158, 143, 0.14);
+  --on-accent: #04100e;
 
   --good: #4cc38a;
   --mid: #d0a54e;
@@ -348,7 +346,7 @@ h1 {
 }
 
 .btn:hover {
-  background: var(--accent-hover);
+  background: #4bb0a0;
 }
 
 .btn:active {
@@ -924,7 +922,7 @@ table.list .load {
 }
 
 .mode-option.active {
-  border-color: var(--accent-line);
+  border-color: rgba(63, 158, 143, 0.5);
   background: var(--accent-soft);
 }
 
