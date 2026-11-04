@@ -41,26 +41,18 @@ TC_PORT=8101 docker compose -p cockpit-exp \
 
 ## Aktualisieren
 
-Ein Befehl vom Arbeitsrechner aus, im Repository auf dem gewünschten Stand:
+Ein Befehl vom Arbeitsrechner aus:
 
 ```bash
-tools/deploy-develop.sh
+tools/deploy-develop.sh          # develop ausrollen
+tools/deploy-develop.sh main     # anderen Stand ausrollen
 ```
 
-Er überträgt die Dateien und baut neu. `--no-build` überträgt nur.
-
-Was der Befehl tut: der Server hat keinen GitHub-Zugang, und `rsync` ist dort
-nicht installiert.
-Der Stand geht deshalb als Archiv über `ssh`:
-
-```bash
-# auf dem Mac, im Repository auf dem Stand von develop
-COPYFILE_DISABLE=1 tar czf - \
-  --exclude '.git' --exclude 'data' --exclude '.env' \
-  --exclude '.venv' --exclude 'node_modules' --exclude 'web/node_modules' \
-  --exclude 'web/dist' . \
-| ssh homeserver 'tar xzf - -C ~/docker/compose/cockpit-exp'
-```
+Ausgerollt wird ein **Branch aus dem Repository**, nicht der ausgecheckte
+Arbeitsbaum. Das ist Absicht: während ein Ticket-Agent auf seinem
+Feature-Branch arbeitet, darf dessen Zwischenstand nicht auf dem Server
+landen. Das Skript nimmt `git archive`, überträgt per `ssh` und baut neu.
+`--no-build` überträgt nur.
 
 Danach auf dem Server neu bauen (siehe oben). `data/`, `.env` und `.venv`
 bleiben dabei unangetastet, weil sie nicht im Archiv liegen.
