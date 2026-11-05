@@ -17,7 +17,8 @@ Zahlen kommen aus intervals.icu und Garmin, die Bewertung steht im Vault
   (siehe `docs/DEPLOY-DEVELOP.md`).
 - Jedes Ticket arbeitet auf `feature/<ticket-id>-<slug>`, abgezweigt von `main`.
 - Gemerged wird nach `develop`, wenn das Ticket nach `ready-for-deployment`
-  geht. Nach `main` kommt ein Stand erst nach der Abnahme durch den Menschen.
+  geht. Nach `main` kommt ein Stand erst nach der Abnahme durch den Menschen —
+  dann über den **Release**-Knopf im Board (D-56).
 
 ## Vor der ersten Änderung lesen
 
