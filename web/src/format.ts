@@ -2,11 +2,11 @@ import type { Band } from "./types";
 
 export const BAND_COLORS: Record<Band, string> = {
   "green-top": "var(--band-top)",
-  green: "#4cc38a",
-  amber: "#d0a54e",
-  orange: "#d8763f",
-  red: "#cf5b5b",
-  unknown: "#7a8296",
+  green: "var(--band-good)",
+  amber: "var(--band-mid)",
+  orange: "var(--band-low)",
+  red: "var(--band-bad)",
+  unknown: "var(--text-muted)",
 };
 
 export const SPORT_LABELS: Record<string, string> = {

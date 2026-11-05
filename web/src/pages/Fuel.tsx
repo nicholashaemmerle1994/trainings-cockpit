@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { Card } from "../components/ui";
+import { ScreenHeader } from "../components/ScreenHeader";
+import { DashboardCard } from "../components/ui";
 import { fmtDuration, fmtNumber } from "../format";
 import type { FuelPlan } from "../types";
 
@@ -65,12 +66,7 @@ export function Fuel() {
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>Was du mitnimmst</h1>
-          <p className="meta">Richtwerte, keine Vorschrift</p>
-        </div>
-      </header>
+      <ScreenHeader title="Was du mitnimmst" meta="Richtwerte, keine Vorschrift" />
 
       {error && <div className="banner">{error}</div>}
 
@@ -250,7 +246,7 @@ export function Fuel() {
           </section>
 
           <section className="grid-2">
-            <Card title="Zeitplan" subtitle="Wann was in die Hand">
+            <DashboardCard title="Zeitplan" subtitle="Wann was in die Hand">
               {plan.schedule.length === 0 ? (
                 <p className="note">Für diese Dauer braucht es nichts — Wasser reicht.</p>
               ) : (
@@ -268,9 +264,9 @@ export function Fuel() {
                   ))}
                 </div>
               )}
-            </Card>
+            </DashboardCard>
 
-            <Card title="Herrichten" subtitle="Was am Abend davor bereitsteht">
+            <DashboardCard title="Herrichten" subtitle="Was am Abend davor bereitsteht">
               <div className="prep">
                 {!plan.syrup && (
                   <div className="prep-row">
@@ -338,11 +334,11 @@ export function Fuel() {
                   </span>
                 </div>
               </div>
-            </Card>
+            </DashboardCard>
           </section>
 
           {plan.surrounding.length > 0 && (
-            <Card title="Drumherum" subtitle="Vortag, Frühstück und die erste Stunde danach">
+            <DashboardCard title="Drumherum" subtitle="Vortag, Frühstück und die erste Stunde danach">
               <div className="surround">
                 {plan.surrounding.map((item) => (
                   <div className="surround-row" key={item.key}>
@@ -352,7 +348,7 @@ export function Fuel() {
                   </div>
                 ))}
               </div>
-            </Card>
+            </DashboardCard>
           )}
 
           {plan.notes.length > 0 && (

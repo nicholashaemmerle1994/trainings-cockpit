@@ -149,6 +149,8 @@ Tokens **einmal zentral** definieren und in Komponenten verwenden. Keine verstre
 - Detailansichten eröffnen **keinen neuen Haupttab**. Navigation erfolgt über Unterseiten mit klarer Zurückfunktion.
 - Browser-Back (PWA), direkte URLs und Wiederherstellung der ausgewählten Seite dürfen nicht brechen.
 
+**Desktop-Variante:** Ab 1001 px erscheint dieselbe Navigation als ruhige Seitenleiste (248 px). Sie nutzt dieselbe Liste und denselben Iconstil; der aktive Zustand ist auch dort nur Akzent-Icon und helles Label. Die Bottom-Tabbar bleibt die mobile Hauptnavigation.
+
 ### 3.3 Responsive
 
 - **Mobile:** einspaltig, ca. 320–430 px breit; bei 320 px Zweizeiler und Overflow bewusst prüfen.
