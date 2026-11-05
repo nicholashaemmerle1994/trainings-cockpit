@@ -108,9 +108,9 @@ mit dem Stand vor diesem Ticket. Die Referenz bildet diesen Zustand nicht ab.
 
 ### 2.4 Puls-Icon
 
-**Jetzt gleich:** `IconPulse` in `web/src/icons.tsx` ist ein Outline-Icon im
-24er-Raster, Strichstärke 1.5 wie alle anderen Icons, ohne Füllung. Es sitzt
-mittig im Score-Ring (24 × 24 CSS-px) und folgt dem Akzent.
+**Jetzt gleich:** `IconPulse` in `web/src/components/icons.tsx` ist ein
+Outline-Icon im 24er-Raster, Strichstärke 1.5 wie alle anderen Icons, ohne
+Füllung. Es sitzt mittig im Score-Ring (24 × 24 CSS-px) und folgt dem Akzent.
 
 **Noch abweichend:** Die Referenz zeichnet das Icon mit einem weichen Schein.
 Wir bleiben beim ruhigen Akzentstrich; der dezente Schein liegt am Ring, nicht
