@@ -96,17 +96,18 @@ kommt in einer späteren Etappe.
 
 `main` ist der Stand, der auf Port 8100 läuft. Freigegeben wird aus `develop`,
 nachdem die Vorschau geprüft wurde: Knopf **Release** im Ticket-Board. Er merged
-`develop` nach `main` (`--no-ff`), setzt den Tag `vJJJJ.MM.TT`, pusht beides und
-rollt die Produktion mit `tools/deploy-main.sh` aus. Danach zieht `develop` auf
-`main` nach, damit die beiden Linien nicht auseinanderlaufen.
+`develop` nach `main` (`--no-ff`), setzt den nächsten fortlaufenden Tag —
+`v0.1.0` beim ersten Mal, danach `v0.2.0`, `v0.3.0` … —, pusht beides und rollt
+die Produktion mit `tools/deploy-main.sh` aus. Danach zieht `develop` auf `main`
+nach, damit die beiden Linien nicht auseinanderlaufen.
 
 Von Hand ist es derselbe Weg:
 
 ```bash
 git checkout develop && git pull --ff-only
 git checkout main && git pull --ff-only
-git merge --no-ff develop -m "Release v2026.11.05"
-git tag -a v2026.11.05 -m "Release v2026.11.05"
+git merge --no-ff develop -m "Release v0.2.0"
+git tag -a v0.2.0 -m "Release v0.2.0"
 git push origin main --tags
 git checkout develop && git merge --ff-only main && git push
 tools/deploy-main.sh
