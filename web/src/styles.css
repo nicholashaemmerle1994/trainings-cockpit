@@ -73,10 +73,13 @@
   --on-warning: #1c1406;
   --accent-line: rgba(53, 220, 197, 0.45);
   --accent-wash: rgba(53, 220, 197, 0.045);
-  /* Nur die Erholungskarte trägt den kräftigen Verlauf (D-63); der Ring
-     bekommt einen dezenten inneren Schein, andere Karten bleiben neutral. */
-  --recovery-wash: rgba(53, 220, 197, 0.28);
-  --recovery-wash-end: rgba(53, 220, 197, 0.05);
+  /* Erholungskarte: fast schwarze, leicht kühle Basis und ein schwacher,
+     lokal begrenzter Lichtschein oben (D-64). Die Deckkraft wird nur auf der
+     dekorativen Ebene reduziert — nie auf der Karte oder ihren Inhalten. */
+  --recovery-surface: #080d11;
+  --recovery-glow: rgba(53, 220, 197, 0.36);
+  --recovery-glow-soft: rgba(53, 220, 197, 0.08);
+  --recovery-glow-opacity: 0.5;
   --recovery-ring-glow: rgba(53, 220, 197, 0.3);
   --backdrop: rgba(3, 6, 9, 0.72);
   --bg-app-blur: rgba(5, 9, 13, 0.94);
@@ -615,15 +618,32 @@ h2 {
 }
 
 .recovery {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  background-image: linear-gradient(
-    180deg,
-    var(--recovery-wash) 0%,
-    var(--recovery-wash-end) 52%,
-    transparent 82%
-  );
+  background-color: var(--recovery-surface);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
+}
+
+/* Der Lichtschein liegt auf einer eigenen dekorativen Ebene hinter dem Inhalt.
+   Nur ihre Deckkraft wird gedimmt; Karte und Inhalte bleiben voll deckend.
+   Der Schein ist lokal oben und läuft weich in vollständige Transparenz aus,
+   unterhalb des oberen Drittels dominiert die dunkle Fläche (D-64). */
+.recovery::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(
+    100% 52% at 50% 0%,
+    var(--recovery-glow) 0%,
+    var(--recovery-glow-soft) 45%,
+    transparent 72%
+  );
+  opacity: var(--recovery-glow-opacity);
+  pointer-events: none;
 }
 
 /* Desktop: der Hero löst sich auf, Ring und Seite stehen im Kartenraster.
