@@ -1,20 +1,26 @@
 import type { ReactNode } from "react";
 
-export function Card({
+type CardTag = "section" | "article" | "aside";
+
+/** Die Karte des Designsystems: Fläche, Kopf und ein Kindbereich. */
+export function DashboardCard({
+  as = "section",
   title,
   subtitle,
   action,
   children,
   className,
 }: {
+  as?: CardTag;
   title?: string;
   subtitle?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
+  const Tag = as;
   return (
-    <section className={`card ${className ?? ""}`}>
+    <Tag className={["card", className].filter(Boolean).join(" ")}>
       {(title || action) && (
         <div className="card-head">
           <div>
@@ -25,8 +31,69 @@ export function Card({
         </div>
       )}
       {children}
-    </section>
+    </Tag>
   );
+}
+
+/** Eine Zeile „Label links, Wert rechts" — als Text oder als ganze Schaltfläche. */
+export function MetricRow({
+  label,
+  value,
+  onClick,
+  compact = false,
+  className,
+}: {
+  label: string;
+  value: ReactNode;
+  onClick?: () => void;
+  compact?: boolean;
+  className?: string;
+}) {
+  const classes = [
+    "metric-row",
+    compact ? "metric-row--compact" : "",
+    onClick ? "metric-row--button" : "",
+    className ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const content = (
+    <>
+      <span className="metric-row__label">{label}</span>
+      <span className="metric-row__value">
+        {value}
+        {onClick && (
+          <span className="metric-row__caret" aria-hidden="true">
+            ›
+          </span>
+        )}
+      </span>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button type="button" className={classes} onClick={onClick}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={classes}>{content}</div>;
+}
+
+export type BadgeTone = "neutral" | "positive" | "warning" | "negative";
+
+/** Ein kleiner Statuschip; die Farbe sagt dasselbe wie der Text. */
+export function StatusBadge({
+  tone = "neutral",
+  children,
+}: {
+  tone?: BadgeTone;
+  children: ReactNode;
+}) {
+  return <span className={`badge badge--${tone}`}>{children}</span>;
 }
 
 export function Skeleton({ height = 120 }: { height?: number }) {

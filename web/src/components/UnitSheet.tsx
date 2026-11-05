@@ -3,6 +3,7 @@ import { api } from "../api";
 import { fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtPace } from "../format";
 import type { UnitDetail } from "../types";
 import { Sheet } from "./Sheet";
+import { MetricRow, StatusBadge } from "./ui";
 import { WorkoutChart } from "./WorkoutChart";
 
 /** „08:05" aus dem Zeitstempel der Aufzeichnung. */
@@ -80,7 +81,7 @@ function Body({ data }: { data: UnitDetail }) {
         {data.sport_label} · {date} · {clock(data.start)}
       </p>
       <div className="sheet-state">
-        <span className="chip">Erledigt</span>
+        <StatusBadge tone="positive">Erledigt</StatusBadge>
       </div>
 
       {data.series && <WorkoutChart series={data.series} />}
@@ -106,10 +107,7 @@ function Body({ data }: { data: UnitDetail }) {
         <section className="sheet-sec">
           <h2>Zahlen</h2>
           {facts(data).map(([label, value]) => (
-            <div className="sheet-kv" key={label}>
-              <span>{label}</span>
-              <span>{value}</span>
-            </div>
+            <MetricRow key={label} compact label={label} value={value} />
           ))}
         </section>
       )}
