@@ -16,7 +16,7 @@ Gelesen wurden `README.md`, `DESIGN.md`, `docs/KONZEPT.md`, `docs/UI-REGELN.md` 
 - **Reihenfolge der Startseite entspricht bereits dem Zielbild:** Kopf → Countdowns → Erholung → Training → Letzte 7 Tage → (mobil) Tabs.
 - **Der kritische Zustand ist korrekt:** Solange die Referenz läuft, zeigt die Karte „Referenz wird aufgebaut", 2 von 21 Nächten und **keinen Score**. Dieser Zustand ist in jeder Phase zu schützen.
 - **Größte technische Schulden:** eine Monolith-CSS-Datei mit überlagernden Regeln, vier Varianten derselben Kennzahlenzeile, zwei Navigationslisten, zwei Farbsysteme (CSS und `format.ts`), keine Frontend-Tests.
-- **Empfehlung:** fünf kleine Phasen nach `AGENT_MIGRATION.md`; Phase 1 beginnt mit einer **Alias-Schicht** auf den bestehenden Tokens, nicht mit dem Umbenennen von 264 `var(--…)`-Verwendungen.
+- **Empfehlung:** fünf kleine Phasen nach `AGENT_MIGRATION.md`; Phase 1 beginnt mit einer **Alias-Schicht** auf den bestehenden Tokens, nicht mit dem Umbenennen von 273 `var(--…)`-Verwendungen.
 
 ---
 
@@ -44,7 +44,7 @@ Gelesen wurden `README.md`, `DESIGN.md`, `docs/KONZEPT.md`, `docs/UI-REGELN.md` 
 ### 1.2 Styling-Ansatz
 
 - **Globales CSS, keine Module.** Alle Klassen sind global; Komponenten tragen ihre Gestalt über Klassennamen (`.card`, `.dial`, `.train-row`, `.sheet-kv`). Das macht die Datei einfach zu lesen, aber anfällig für Kaskadenfehler (siehe 2.2).
-- **Tokens nur teilweise:** `:root` (`styles.css:45-75`) definiert Farben, drei Schriftfamilien, `--ease` und zwei Radien (`--r-card: 14px`, `--r-control: 8px`). **Es gibt keine Abstands-, Typografie- oder Höhen-Tokens**; Padding, Schriftgrößen und Breakpoints stehen als Zahlen in den Regeln. `var(--…)` wird 264-mal verwendet.
+- **Tokens nur teilweise:** `:root` (`styles.css:45-75`) definiert Farben, drei Schriftfamilien, `--ease` und zwei Radien (`--r-card: 14px`, `--r-control: 8px`). **Es gibt keine Abstands-, Typografie- oder Höhen-Tokens**; Padding, Schriftgrößen und Breakpoints stehen als Zahlen in den Regeln. `var(--…)` wird 273-mal verwendet.
 - **Zwei Farbsysteme:** Die Erholungsfarben stehen als `--good/--mid/--low/--bad` im CSS (`styles.css:63-66`) **und** als Hex-Werte in `BAND_COLORS` (`web/src/format.ts:3-9`). `RecoveryDial` benutzt für die Zonen zusätzlich `var(--bad/--low/--mid/--good)` (`RecoveryDial.tsx:10-15`).
 - **Inline-Styles nur für Dynamik** (6 Stellen): Position im Treiber-Track, Pull-to-Refresh, Ring-Transition, Skeleton-Höhe, Balkenhöhe, Zonenbreite. Das ist vertretbar; statische Gestaltung gehört ins CSS.
 - **Responsive:** Breakpoints bei **1180 px** (Split stapeln), **1001 px** (Desktop-Seitenleiste), **1000 px** (Mobil, Tableiste, Listen umbauen), **720 px** (Blatt als Dialog). Die mobile Sammelregel liegt mitten in der Datei (Z. 1572–1742), danach folgen weitere Komponenten (Training, Blatt). Spätere Regeln überschreiben frühere — genau das passiert bei `.chip`.
@@ -101,8 +101,8 @@ Gelesen wurden `README.md`, `DESIGN.md`, `docs/KONZEPT.md`, `docs/UI-REGELN.md` 
 7. **`@keyframes shimmer` doppelt** — `styles.css:1415` und `2140` (identisch). Die zweite Definition ist toter Ballast.
 8. **Drei Kopf-Idiome** — `.page-head` (Seiten), `.sheet-top`/`.sheet-title`/`.sheet-kind` (Blätter), Marke + Vorschau (Seitenleiste bzw. mobil im Inhalt). Ein `ScreenHeader` für die Seiten reicht; die Blätter behalten ihren eigenen Kopf.
 9. **Fokus inkonsistent** — `:focus-visible` nur für `.btn`, `.nav button`, `.chip`, `.link-btn` (`styles.css:401-407`). Es fehlen u. a. `.train-row`, `.week-row-link`, `.mode-option`, `.tabbar button`, `.icon-btn`, `.side-sync`, die Range- und Zahlenfelder.
-10. **Touchflächen unter 44 px** — `.nav button` 34 px (`styles.css:223`), `.side-sync` 34 px (`265`), `.chip` effektiv 24 px, `.week-row` ca. 35 px. `DESIGN.md` 2.4/6 verlangt mindestens 44 × 44.
-11. **Zwei Zeitformate nebeneinander** — `fmtClock` und `fmtHours` liefern dasselbe (`format.ts:30-42`); `fmtMinutes`, `fmtDuration` und `fmtSpan` überschneiden sich. `DESIGN.md` 5 will ein Format je Bedeutung.
+10. **Touchflächen unter 44 px** — `.nav button` 34 px (`styles.css:223`), `.side-sync` 34 px (`263`), `.chip` effektiv 24 px, `.week-row` ca. 35 px. `DESIGN.md` 2.4/6 verlangt mindestens 44 × 44.
+11. **Zwei Zeitformate nebeneinander** — `fmtClock` und `fmtHours` formatieren dieselbe Uhrzeit, nur `fmtHours` hängt die Einheit an (`format.ts:30-42`); `fmtMinutes`, `fmtDuration` und `fmtSpan` überschneiden sich. `DESIGN.md` 5 will ein Format je Bedeutung.
 12. **Keine Abstands-Tokens** — `padding: 20px`, `gap: 16px`, `font-size: 12.5px` usw. stehen über die Datei verteilt; das 4-px-Raster ist eingehalten, aber nicht zentral änderbar.
 
 ---
@@ -135,7 +135,7 @@ Die API liefert vier unterscheidbare Fälle (`metrics.py:172-323`); die Oberflä
 | **Vollständig** | `score`, `band`, `label` („Gut erholt", „Solide", „Erholungsbedarf", „Ruhetag"), Treiber, `reference` | Score im Ring, Bandfarbe, Treibertabelle (heute/Schnitt/üblich), Referenzmarke, Erklärsatz, ggf. Bevel-Abgleich | Treiberzeile und Erklärung sind der Wert; die Zahl allein reicht nicht. |
 | **Einzelwert fehlt** innerhalb der Nachtwerte | `null` je Feld | „—" je Zeile (`valueWithUnit`) | Nicht auffüllen, nicht schätzen. |
 
-**Visuelles Risiko:** `RecoveryDial` zeichnet die vier farbigen Zonenbögen **immer** (`RecoveryDial.tsx:60-75`, Deckkraft 0,3), auch ohne Score. Zusammen mit dem farbigen Label könnte das wie ein Status wirken. `DESIGN.md` 4.4 verlangt ohne Referenz ein neutrales Ringskelett. Das ist in Phase 3b zu lösen — ohne die Zahl zu erfinden.
+**Visuelles Risiko:** `RecoveryDial` zeichnet die vier farbigen Zonenbögen **immer** (`RecoveryDial.tsx:60-75`, Deckkraft 0,3), auch ohne Score. Die farbigen Bögen allein könnten wie ein Status wirken. `DESIGN.md` 4.4 verlangt ohne Referenz ein neutrales Ringskelett. Das ist in Phase 3b zu lösen — ohne die Zahl zu erfinden.
 
 **Referenztext:** `Today.tsx:59-67` leitet den Text in fünf Zweigen aus `reference` und dem 21-Tage-Schnitt ab. Das ist korrekt, aber fragil; Kandidat für eine kleine, getestete Hilfsfunktion in Phase 2.
 
@@ -163,7 +163,7 @@ Die API liefert vier unterscheidbare Fälle (`metrics.py:172-323`); die Oberflä
 - `prefers-reduced-motion` ist für `.page` (`styles.css:335-339`) und `.skeleton` (`1424-1428`) gesetzt. **Nicht** abgedeckt: Ring-Transition (`RecoveryDial.tsx:91`, 700 ms inline), `.sheet-loading` (`2131-2138`), `.popup` (`1514`), `.pull` (`1548`). `DESIGN.md` 6/8 will eine globale Regel.
 - `aria-current="page"` fehlt an beiden Navigationsflächen; die Tabbar-Buttons haben kein zusätzliches Label (Text ist sichtbar, das genügt).
 - Diagramme: `RecoveryDial`, `SessionProfile`, `WorkoutChart` haben `role="img"` und ein Label; `WeekStrip` hat **nur** `title` an den Balken, keine zugängliche Zusammenfassung.
-- Blätter: `role="dialog"`, `aria-modal`, Escape und Fokus auf den Schließen-Knopf fehlen teilweise (Fokus wird nicht gesetzt/gefangen). Für Phase 4 vormerken.
+- Blätter: `role="dialog"`, `aria-modal` und Escape sind vorhanden; der Fokus wird nicht auf den Schließen-Knopf gesetzt und nicht im Blatt gefangen. Für Phase 4 vormerken.
 
 ---
 
@@ -176,7 +176,7 @@ Reihenfolge nach `AGENT_MIGRATION.md`: Tokens → Bausteine → Startseite → N
 **Ziel:** `DESIGN.md`-Werte zentral verfügbar machen, ohne Layout oder Markup zu ändern.
 
 **Dateien:**
-- `web/src/styles.css` — `:root` um `--space-1…8`, `--radius-*`, `--bg-app/--bg-surface/…` ergänzen; **Alias-Schicht** `--bg: var(--bg-app)`, `--card: var(--bg-surface)`, `--raised: …`, `--line: …`, `--text: …`, `--text-2/3: …`, `--accent: …`. Bestehende Namen bleiben zunächst stehen, damit die 264 Verwendungen nicht brechen.
+- `web/src/styles.css` — `:root` um `--space-1…8`, `--radius-*`, `--bg-app/--bg-surface/…` ergänzen; **Alias-Schicht** `--bg: var(--bg-app)`, `--card: var(--bg-surface)`, `--raised: …`, `--line: …`, `--text: …`, `--text-2/3: …`, `--accent: …`. Bestehende Namen bleiben zunächst stehen, damit die 273 Verwendungen nicht brechen.
 - `web/src/format.ts` — `BAND_COLORS` auf `var(--positive/--warning/…)` umstellen (wird als Inline-`stroke`/`color` benutzt, `var()` funktioniert dort).
 - `web/index.html` — `theme-color` an `--bg-app` angleichen.
 - Schriften: Entscheidung vor der Umsetzung (siehe 6, Punkt 1). Bei „System-UI + Serif" nur die Font-Stacks in `:root` ändern, `@font-face` und Dateien vorerst behalten.
