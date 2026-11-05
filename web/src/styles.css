@@ -76,8 +76,10 @@
   --backdrop: rgba(3, 6, 9, 0.72);
   --bg-app-blur: rgba(5, 9, 13, 0.94);
 
-  /* Erholungs-Skala, vier Stufen. Grün/Gelb/Rot sind die Statusfarben;
-     Orange ist die zusätzliche Stufe für „Erholungsbedarf" (35–49). */
+  /* Erholungs-Skala, fünf Stufen. Grün/Gelb/Rot sind die Statusfarben;
+     Orange ist die zusätzliche Stufe für „Erholungsbedarf" (35–49),
+     Mint die fünfte für „Sehr gut erholt" (ab 85). */
+  --band-top: #7ef0c0;
   --band-good: var(--positive);
   --band-mid: var(--warning);
   --band-low: #e8925f;

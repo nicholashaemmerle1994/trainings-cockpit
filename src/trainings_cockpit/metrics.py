@@ -44,6 +44,7 @@ REQUIRED_SIGNALS = {
     "resp": "die Atmung",
 }
 BANDS = (
+    (85, "green-top", "Sehr gut erholt"),
     (70, "green", "Gut erholt"),
     (50, "amber", "Solide"),
     (35, "orange", "Erholungsbedarf"),
@@ -51,6 +52,7 @@ BANDS = (
 )
 
 BAND_SENTENCES = {
+    "green-top": "Du bist heute sehr gut erholt.",
     "green": "Du bist heute gut erholt.",
     "amber": "Du bist heute solide erholt, aber nicht ganz frisch.",
     "orange": "Dein Körper zeigt Erholungsbedarf.",
@@ -300,10 +302,10 @@ def compute_recovery(
 
     total_weight = sum(component["weight"] for component in components)
     score = sum(c["score"] * c["weight"] for c in components) / total_weight
-    band, label = _band(score)
+    displayed, band, label = _score_band(score)
 
     return {
-        "score": round(score),
+        "score": displayed,
         "band": band,
         "label": label,
         # Alle Pflichtsignale sind da, sonst gäbe es diesen Zweig nicht.
@@ -409,6 +411,13 @@ def _band(score: float) -> tuple[str, str]:
         if score >= threshold:
             return band, label
     return "red", "Ruhetag"
+
+
+def _score_band(score: float) -> tuple[int, str, str]:
+    """Das Band gehört zu der Zahl, die auf dem Ring steht."""
+    displayed = round(score)
+    band, label = _band(displayed)
+    return displayed, band, label
 
 
 def _explanation(

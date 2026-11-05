@@ -51,6 +51,73 @@ def test_daily_days_filters_sentinel_values() -> None:
     assert today_point.sleep_h is None
 
 
+@pytest.mark.parametrize(
+    ("score", "band"),
+    [
+        (100, "green-top"),
+        (85, "green-top"),
+        (84, "green"),
+        (70, "green"),
+        (69, "amber"),
+        (50, "amber"),
+        (49, "orange"),
+        (35, "orange"),
+        (34, "red"),
+        (0, "red"),
+    ],
+)
+def test_band_boundaries(score: float, band: str) -> None:
+    assert metrics._band(score)[0] == band
+
+
+def test_green_top_sentence() -> None:
+    assert metrics.BAND_SENTENCES["green-top"] == "Du bist heute sehr gut erholt."
+
+
+def test_band_uses_displayed_score() -> None:
+    # Der Ring zeigt ganze Zahlen; ein Rohwert knapp unter 85 darf nicht als
+    # „85" mit dem Band „Gut erholt" erscheinen.
+    assert metrics._score_band(84.4) == (84, "green", "Gut erholt")
+    assert metrics._score_band(84.6) == (85, "green-top", "Sehr gut erholt")
+    assert metrics._score_band(85.4) == (85, "green-top", "Sehr gut erholt")
+    assert metrics._score_band(69.5) == (70, "green", "Gut erholt")
+
+
+def test_recovery_score_and_band_agree_at_85() -> None:
+    today = date(2026, 10, 30)
+    rows = []
+    for offset in range(30, 0, -1):
+        day = today - timedelta(days=offset)
+        rows.append(
+            {
+                "date": day.isoformat(),
+                "hrv": 39.0 if offset % 2 else 41.0,
+                "rhr": 54.0 if offset % 2 else 56.0,
+                "sleep_s": 7.0 * 3600,
+                "sleep_score": 75.0,
+                "respiration": 13.0 if offset % 2 else 15.0,
+                "spo2": 98.0,
+            }
+        )
+    rows.append(
+        {
+            "date": today.isoformat(),
+            "hrv": 40.88,
+            "rhr": 40.0,
+            "sleep_s": 8.0 * 3600,
+            "sleep_score": 65.0,
+            "respiration": 16.2,
+            "spo2": 99.0,
+        }
+    )
+    days = metrics.daily_days(rows, [], today - timedelta(days=29), today)
+    recovery = metrics.compute_recovery(days, len(days) - 1, epoch=today - timedelta(days=100))
+
+    # Rohwert 84,94: früher „score": 85 mit Band „green".
+    assert recovery["score"] == 85
+    assert recovery["band"] == "green-top"
+
+
 def test_recovery_is_in_range_and_explained() -> None:
     today = date(2026, 10, 30)
     wellness = _wellness(90, today)
@@ -59,7 +126,7 @@ def test_recovery_is_in_range_and_explained() -> None:
 
     assert recovery["score"] is not None
     assert 0 <= recovery["score"] <= 100
-    assert recovery["band"] in {"green", "amber", "orange", "red"}
+    assert recovery["band"] in {"green-top", "green", "amber", "orange", "red"}
     assert {component["key"] for component in recovery["components"]} == {
         "hrv",
         "rhr",
