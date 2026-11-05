@@ -4,9 +4,9 @@ Lokales Dashboard für Training und Erholung. Garmin und Amazfit/Zepp laufen in
 intervals.icu zusammen; das Cockpit bewertet die Erholung, zeigt Belastung und
 Form in verständlicher Sprache und begleitet die Saisonziele.
 
-**Stand:** Etappe 2d — Oberfläche neu gebaut (Richtung B+ nach *unslop*, D-29),
-Erholung nur aus vollständigen Daten von heute (D-26), Verpflegungsrechner,
-iPhone-taugliche Web-App. Läuft auf dem Homeserver.
+**Stand:** v0.2.0 — Premium-Oberfläche nach [DESIGN.md](DESIGN.md) (D-59),
+Erholungskarte mit lokalem Lichtschein (D-64), zwei Bereiche: Heute und
+Verpflegung. Stabil auf Port 8100, Vorschau auf 8101.
 
 ![Heute](docs/img/today.png)
 
@@ -14,12 +14,11 @@ iPhone-taugliche Web-App. Läuft auf dem Homeserver.
 
 | Seite | Inhalt |
 |---|---|
-| **Heute** | Erholung mit Klartext-Erklärung, Treibern (heute / Schnitt / üblich), Schlaf, HRV, Ruhepuls, Frische, Countdowns, Bevel-Abgleich, letzte 7 Tage, geplante Einheiten |
-| **Verpflegung** | Kohlenhydratrechner für zwei Modi: Locker (Long Run, Zone 2) und Wettkampf. Ergebnis in Gramm je Stunde, Getränk, Gels, Wasser, Salz, Zeitplan und Einkaufsliste |
-| **Aktivitäten** | alle Einheiten mit Filter nach Sportart, Dauer, Distanz, Pace, Belastung |
+| **Heute** | Erholungskarte mit Ring — Score erst ab 21 Nächten, vorher „Referenz wird aufgebaut". HRV, Ruhepuls und Schlaf mit Delta zur eigenen Referenz, Countdowns, Training für heute und morgen, Letzte 7 Tage mit Umfang, Belastung, Einheiten und Belastungsverhältnis |
+| **Verpflegung** | Kohlenhydratrechner für Locker und Wettkampf: Gramm je Stunde, Getränk, Gels oder Ahornsirup, Wasser, Salz, Zeitplan, Herrichten und Drumherum |
 
-Dazu: Dark UI, mobiles Layout, installierbar auf dem iPhone (PWA),
-Sync-Knopf, Saison-Countdowns.
+Dazu: dunkle Oberfläche, mobiles Layout, installierbar auf dem iPhone (PWA),
+Sync per Ziehen nach unten, Saison-Countdowns.
 
 <p>
   <img src="docs/img/fuel.png" width="76%" alt="Verpflegung" />
@@ -115,20 +114,25 @@ Siehe E-19 in [docs/ENTSCHEIDUNGEN.md](docs/ENTSCHEIDUNGEN.md).
 
 ## Oberfläche
 
-Die Gestaltung folgt den Regeln in [docs/UI-REGELN.md](docs/UI-REGELN.md)
-(übernommen aus *unslop* von Damir Sokolovsky, CC BY 4.0): ein helles Element je
-Bildschirm, ruhiger Rahmen, eine getönte Neutralrampe, ein Akzent, keine
-Verläufe über Flächen, keine Sparklines in Kennzahlen, Sentence case, 4-px-Raster.
+Die Gestaltung folgt [DESIGN.md](DESIGN.md) (D-59), hervorgegangen aus den Regeln
+von *unslop* von Damir Sokolovsky (CC BY 4.0): eine dunkle, neutrale Fläche,
+genau ein lokaler Lichtschein, ein Akzent, ruhige Navigation, keine Verläufe
+über Karten, keine Sparklines in Kennzahlen, Sentence case, 4-px-Raster.
 
-- **Drei Schriften, selbst gehostet.** Instrument Serif für Titel und
-  Countdown-Zahlen, Plex Sans für Text, Plex Mono für alles Zählbare
-  (`web/public/fonts/`, 97 kB zusammen, kein Aufruf an Google).
-- **Ein Akzent.** Wörthersee-Teal markiert Aktion, Auswahl und den heutigen Tag.
-  Grün, Gelb, Orange, Rot erscheinen nur als Befund der Erholung.
-- **Die Uhr ist ein Instrument.** Zonenring, Referenzmarke auf den
-  21-Tage-Schnitt, Skalen in den Treiberzeilen.
-- **Kein Diagramm-Paket.** Die Lastkurve ist von Hand als SVG gezeichnet;
-  recharts ist raus, das Bündel liegt bei 251 kB.
+- **System-UI-Schrift, ein Serif-Moment.** Alles steht in der Systemschrift;
+  die Serif bleibt dem Datum im Kopf vorbehalten. Zahlen laufen mit
+  `tabular-nums`, nicht in einer zweiten Schrift.
+- **Ein Akzent.** Türkis `#35DCC5` markiert den Ring, die aktive Navigation und
+  die ausgewählte Interaktion. Grün, Gelb, Orange und Rot bleiben Statusfarben
+  für Erholung, erledigte Einheiten und Fehler — nie Dekoration.
+- **Anthrazit statt Petrol.** Standardkarten liegen auf `#0B1318`, die
+  Erholungskarte noch dunkler; der Seitenhintergrund ist dunkler als alle
+  Karten. Unterschieden wird über Helligkeit und 1-px-Rand, nicht über Farbe.
+- **Genau ein Lichtschein.** Er liegt lokal und weich auf der Erholungskarte;
+  alle anderen Karten bleiben flach.
+- **Kein Diagramm-Paket.** Wochenstreifen und Verlaufsdiagramme sind ohne
+  Chart-Bibliothek gebaut; recharts ist raus, das Bündel liegt bei 266,82 kB
+  JavaScript und 35,55 kB CSS.
 
 ## Datenquellen
 
@@ -203,7 +207,7 @@ uv run pytest
 cd web && npm run build
 ```
 
-70 Backend-Tests: Metriken, DB-Upserts, API, intervals-Client,
+148 Backend-Tests: Metriken, DB-Upserts, API, intervals-Client,
 Garmin-Normalisierung, Verpflegungsrechner.
 
 ## Struktur
@@ -224,7 +228,7 @@ src/trainings_cockpit/
 DESIGN.md                Designsystem, verbindlich für jede Oberfläche
 docs/UI-REGELN.md        ersetzt, nur noch Herkunftsnachweis (unslop, CC BY 4.0)
 web/src/
-  pages/                 Heute, Verpflegung, Aktivitäten
+  pages/                 Heute, Verpflegung
   components/            Uhr, Diagramm, Wochenstreifen, Tabelle, Karten
   styles.css             Tokens, Layout, Komponenten
 web/public/fonts/        Plex Sans, Plex Mono, Instrument Serif (selbst gehostet)
