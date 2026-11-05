@@ -4,6 +4,8 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+ARG VITE_APP_VARIANT=stable
+ENV VITE_APP_VARIANT=$VITE_APP_VARIANT
 RUN npm run build
 
 FROM python:3.12-slim

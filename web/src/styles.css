@@ -184,6 +184,32 @@ a {
   border-color: var(--text-3);
 }
 
+/* Vorschau: offener Ring im Akzent und eine Plakette, die es benennt. */
+.brand-mark.preview {
+  border-width: 2px;
+  border-color: var(--accent);
+  border-right-color: transparent;
+  transform: rotate(-45deg);
+}
+
+.brand-mark.preview.large {
+  border-width: 2.5px;
+}
+
+.brand-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
 .nav {
   display: flex;
   flex-direction: column;
@@ -273,6 +299,19 @@ a {
   max-width: 1360px;
   margin: 0 auto;
   padding: 32px 32px 64px;
+}
+
+/* Auf dem Handy fehlt die Seitenleiste; dort steht die Plakette im Inhalt. */
+.preview-brand {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.preview-name {
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .page {
@@ -1388,6 +1427,12 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   font-size: 32px;
 }
 
+.splash .brand-tag {
+  height: 24px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
 .splash .muted {
   margin: 0;
   font-size: 12.5px;
@@ -1491,6 +1536,9 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   }
   .main {
     padding: calc(20px + env(safe-area-inset-top)) 20px calc(88px + env(safe-area-inset-bottom));
+  }
+  .preview-brand {
+    display: flex;
   }
   .page {
     gap: 16px;
