@@ -5,7 +5,7 @@ import { IconPulse } from "./icons";
 const SIZE = 220;
 const CENTER = SIZE / 2;
 const RING = 92;
-const STROKE = 6;
+const STROKE = 8;
 const CIRCUMFERENCE = 2 * Math.PI * RING;
 
 function polar(radius: number, percent: number): [number, number] {
