@@ -1,384 +1,279 @@
-# DESIGN.md — Cockpit Design System
+# DESIGN.md — Trainings-Cockpit
 
-> **Status:** Verbindliche Gestaltungsrichtlinie · **Version:** 1.0 · **Stand:** 05.11.2026  
-> **Produkt:** Persönliches Trainings-, Erholungs- und Verpflegungs-Dashboard (mobile-first PWA)  
-> **Visuelle Referenz:** `cockpit-premium-reference.png` (abgestimmtes Premium-Redesign vom 05.11.2026)
+> **Status:** verbindlich · **Version:** 2.0 · **Stand:** 05.11.2026
+>
+> **Gilt für:** alle neuen und geänderten Oberflächen — Seiten, Tabs, Karten, Blätter, Dialoge, Diagramme und Zustände
+>
+> **Bezug:** D-59 (dieses Dokument ist das Designsystem), D-63 (Erholungskarte), D-64 (dunkle Fläche, lokaler Lichtschein), D-65 (Ringstrich 8), D-66 (Kartenrampe, gedämpfte Statuslabels, ruhige Navigation), D-67 (Label und Trendtexte teilen den Text-Token)
+>
+> **Optische Referenz:** `docs/design/cockpit-premium-reference.png` — Stilvorlage, keine Datenquelle
 
-## 0. Zweck und Geltungsbereich
+> **Leitsatz:** Lokaler Lichtschein auf neutraler, dunkler Oberfläche — kein türkis eingefärbter Kartenhintergrund.
 
-Dieses Dokument ist die **Single Source of Truth für UI/UX**. Es gilt für **alle** aktuellen und zukünftigen Screens, Tabs, Komponenten, Dialoge, Diagramme und Zustände. Es legt die *visuelle und interaktive Sprache* fest, nicht die Fachlogik oder API-Verträge.
+## 1. Geltung
 
-**Prioritätsregel:** Ein neues Feature passt sich dem Designsystem an — nicht umgekehrt. Bestehende Tokens und Komponenten werden wiederverwendet. Abweichungen sind nur nach bewusster Designentscheidung zulässig und müssen hier dokumentiert werden.
+Dieses Dokument ist die **einzige verbindliche Vorgabe für Oberflächen**. `docs/UI-REGELN.md` ist abgelöst (D-59) und bleibt nur als Herkunftsnachweis stehen (unslop, CC BY 4.0).
 
-**Grundidee:** *Calm performance.* Eine fast schwarze, elegante Oberfläche, die den Fokus durch Kontrast, großzügige Abstände, klare Typografie und **sparsam eingesetztes, sattes Türkis** auf die wichtigsten Informationen lenkt. Hochwertig, präzise, sportlich, nicht verspielt. Kein WHOOP-/Bevel-Klon.
+- Es gilt für **neue und geänderte** Oberflächen. Keine Komponente weicht ohne dokumentierte Entscheidung (`D-xx` in `docs/ENTSCHEIDUNGEN.md`) ab.
+- Ein neues Feature passt sich dem System an, nicht umgekehrt. Wiederverwenden geht vor neu bauen.
+- Abschnitt 10 ist der **Ist-Stand** von `web/src/styles.css`, keine Wunschliste. Weicht der Code ab, gilt der Code — und die Tabelle wird sofort nachgezogen.
+- Es gibt **keine Tokens außerhalb von Abschnitt 10**. Keine Hex-Werte, Freihand-Abstände oder komponenteneigenen Farbsysteme.
+- Geregelt sind Aussehen und Interaktion, nicht Fachlogik, API-Verträge, Berechnungen oder Sync.
 
-**Visueller Referenzumfang:** Die Referenz ist eine **Stil- und Layoutvorlage**. Ihre Zahlen und Zustände sind Mock-Daten und dürfen **niemals** die echten Daten der App ersetzen. Insbesondere darf ein Recovery-Wert **nicht** angezeigt werden, solange die erforderliche Sensorreferenz fehlt.
+## 2. Prinzipien
 
----
+1. **Information vor Dekoration.** Jedes Element muss Orientierung, Lesbarkeit, Interaktion oder eine Aussage über Daten verbessern.
+2. **Ein Fokus pro Abschnitt.** Eine Karte, ein Diagramm, ein Blatt: genau ein dominanter Blickpunkt. Details liegen hinter der Übersicht, nicht daneben.
+3. **Echte Daten vor schönen Daten.** Fehlt ein Wert, bleibt er leer und wird benannt — nicht geschätzt, nicht aufgefüllt, nicht erfunden.
+4. **Mobile first.** Entworfen und geprüft wird auf 390 × 844; der breite Schirm zeigt dasselbe größer, nicht anders.
+5. **Barrierefreiheit als Standard.** Lesbarer Kontrast, semantische Labels, Tastaturbedienung, reduzierte Bewegung.
+6. **Fläche ist neutral, Licht ist lokal.** Die Fläche trägt keine Farbe; Farbe kommt als Licht von oben, eng begrenzt, oder als Akzent an einer Stelle.
+7. **Gleiches Verhalten überall.** Laden, Leer, Fehler, Baseline und veralteter Sync sehen auf jeder Seite gleich aus.
 
-## 1. Nicht verhandelbare Prinzipien
+## 3. Flächen und Licht
 
-1. **Information vor Dekoration.** Jedes visuelle Element muss Orientierung, Lesbarkeit, Interaktion oder Datenauswertung verbessern.
-2. **Premium durch Zurückhaltung.** Wenige Akzente, viel Luft, harmonische Radien und klare Hierarchie statt Neon, Glow-Flächen, übertriebener Schatten oder bunter Kacheln.
-3. **Ein Fokus pro Abschnitt.** Eine Karte bekommt höchstens einen dominanten visuellen Fokus (z. B. Erholungsring, Trainingssession oder Hauptdiagramm).
-4. **Echte Daten vor schönen Daten.** Nicht verfügbare Metriken bleiben nicht verfügbar; keine fiktiven Werte, Scores, Trendpfeile oder positiven Statuslabels.
-5. **Gleiches Verhalten überall.** Einheitliche Navigations-, Lade-, Fehler-, Leer-, Detail- und Interaktionsmuster.
-6. **Mobile first.** Optimiert für einhändige Nutzung auf iPhones, ebenso verwendbar als Android-PWA und auf Desktop.
-7. **Barrierefreiheit als Standard.** Lesbarer Kontrast, semantische Labels, Tastaturbedienung, reduzierte Bewegung.
-8. **Progressive Disclosure.** Die Startseite liefert den Überblick; Details und Erläuterungen liegen auf dedizierten Seiten oder nach explizitem Öffnen.
+**Flächen.** Seitenhintergrund `--bg-app`, Standardkarten `--bg-surface`, hervorgehobene Zeilen `--bg-surface-raised`, interaktive Flächen `--bg-surface-interactive`. Alle sind nahezu schwarz bis anthrazit mit leichter kühler Tönung. Unterschieden wird über **Helligkeit und 1-px-Rand** (`--border-subtle`, betont `--border-strong`), nicht über Farbe.
 
----
+Die Erholungskarte ist die wichtigste Fläche und liegt auf der fast schwarzen, leicht kühlen Basis `--recovery-surface`. Ihre Tiefe entsteht nur aus diesem Unterschied und dem Lichtschein, nicht aus einer Füllung.
 
-## 2. Design Tokens
+**Licht.** Höchstens **ein** lokaler Lichtschein pro Bildschirm, oben, weich in vollständige Transparenz auslaufend, ausschließlich auf einer eigenen dekorativen Ebene (`::before`) hinter dem Inhalt. Gedimmt wird **nur diese Ebene** (`--recovery-glow-opacity`), nie die Karte oder ihre Inhalte.
 
-Tokens **einmal zentral** definieren und in Komponenten verwenden. Keine verstreuten Hex-Werte, Freihand-Abstände oder komponentenspezifischen Farbsysteme. Die Werte unten sind der verbindliche Ausgangspunkt; nach Screenshot-Vergleich dürfen nur die **zentralen Tokens**, nicht einzelne Komponenten willkürlich, feinjustiert werden.
+- Verlauf: `radial-gradient(100% 52% at 50% 0%, var(--recovery-glow) 0%, var(--recovery-glow-soft) 45%, transparent 72%)`.
+- Ab 72 % des Radius — rund 37 % der Kartenhöhe — ist das Licht vollständig transparent. **Unterhalb des oberen Drittels dominiert die Grundfläche.**
+- Der Schein darf keine sichtbare Kante haben, keine Fläche einfärben und nicht auf andere Karten wandern. Der Ring-Schein (`--recovery-ring-glow`) gehört zum Ring, nicht zur Fläche, und zählt nicht als zweiter Lichtschein.
+- Ein neuer Bildschirm bekommt keinen zusätzlichen Schein. Braucht er einen, ist das eine `D-xx`-Entscheidung — und es bleibt der einzige auf diesem Bildschirm.
 
-### 2.1 Farben — Dark Mode (primär)
+**Verboten:** flächige Türkis- oder Petrolverläufe als Kartenhintergrund, grünliche oder petrolfarbene Grundfüllungen, leuchtende Kartenumrandungen, türkis eingefärbte Trennlinien oder Sekundärflächen im Kartenraster, Schein auf normalen Karten. `--accent-line` ist eine **interaktive Kontur** (Auswahl, Sync-Knopf), keine Fläche; `--accent-wash` ist nur noch für Kleinteile erlaubt und derzeit ungenutzt — nie als Kartenfläche.
 
-| Token | Hex | Verwendung |
+Schatten nur, wo sie Tiefe liefern; derzeit allein die Erholungskarte (`0 10px 30px rgba(0, 0, 0, 0.14)`).
+
+## 4. Akzente
+
+Türkis (`--accent`) ist kein Dekor, sondern Bedeutung. Es erscheint gezielt für:
+
+- den **Erholungsring** und seinen dezenten Schein (`--recovery-ring-glow`),
+- den **aktiven Diagrammtag**,
+- die **aktive Navigation** (Icon),
+- die **ausgewählte Interaktion** (gewählter Modus, Fokusring, Primäraktion).
+
+**Hierarchie:** Ring und Kennzahlen tragen sie. Titel, Werte und die große Zahl bleiben `--text-primary`. Sekundärtext bleibt neutral (`--text-secondary`, `--text-muted`) und wird weder abgedunkelt noch grünlich getönt. Pro Abschnitt ein Akzentelement; Statuslabels zählen als Status, nicht als zweiter Akzent — sie sind gedämpft (Abschnitt 5).
+
+## 5. Statuslabels
+
+Statuslabels sind kleine Pillen (`.badge`, Höhe 24, `--radius-pill`, 12 px/500). Jede trägt eine **gedämpfte, semantisch passende Hintergrundtönung** mit kontrastreicher Schrift:
+
+- positive Bedeutung: `--positive-soft` mit `--positive`,
+- Hinweis: `--warning-soft` mit `--warning`,
+- kritisch: `--negative-soft` mit `--negative`,
+- ohne Bewertung: `--bg-surface-raised` mit `--text-secondary`.
+
+Die Tönungen liegen bei 12 % der Statusfarbe (Ist-Wert: `--positive-soft`, `--warning-soft`, `--negative-soft`, `--band-top-soft`, `--band-low-soft` = `rgba(..., 0.12)`); die Schrift steht in der vollen Statusfarbe. Statusfarben bleiben semantisch, nicht dekorativ; die Bedeutung steht immer auch im Text („Gut", „Geplant", „Erledigt", „Zusätzlich").
+
+**Gleicher Token für Text und Trend.** „Positive Trendtexte und positive Statuslabels verwenden dieselbe semantische Textfarbe. Statuslabels ergänzen lediglich eine dunkle, zurückhaltend getönte Hintergrundfläche." Deshalb liest `.badge--band-good` („Gut") direkt `--positive` wie `.night-delta--good`; den Weg über den Band-Alias gibt es nur noch für die Skala.
+
+**Erholungsband.** Die Stufe des Erholungsstatus kommt aus der Band-Skala, nicht aus dem Akzent: `--band-top-soft`/`--band-top`, `--positive-soft`/`--positive` (Band `--band-good: var(--positive)`), `--warning-soft`/`--band-mid`, `--band-low-soft`/`--band-low`, `--negative-soft`/`--band-bad`. Auch das „Gut" der Erholungskarte ist eine gedämpfte Pille; die vollflächig gefüllte Akzentpille entfällt damit als Statuslabel überall. Die gemessenen Kontraste liegen bei 5,9:1 bis 11,1:1 (Nachweis: `docs/design/karten-status-navigation.md`).
+
+Die Abzeichen der Bauvariante (`.brand-tag` „Vorschau" und „Demo") sind **keine Statuslabels**; sie bleiben gefüllt, weil sie die Herkunft des Baus markieren (D-56, D-60).
+
+## 6. Navigation
+
+Zwei Formen, eine Sprache: Seitenleiste ab 1001 px, Tab-Leiste darunter (≤ 1000 px).
+
+- **Aktiv:** türkises Icon, helle Beschriftung (`--text-primary`, 500); inaktiv `--text-muted`, 400. Seitenleiste und Tab-Leiste folgen denselben Werten.
+- Ein sehr schwacher Schein unmittelbar am Icon ist optional (maximal ca. 6 px Blur, 8–12 % Deckkraft). **Derzeit trägt kein Navigationselement einen Schein.**
+- Kein Balken, kein Halo, keine eingefärbte Navigationsfläche, kein farbiger Volltab.
+- Icon 18 px, Touchfläche mindestens 44 × 44 CSS-px, gleiche Ausrichtung und derselbe Iconstil für alle Einträge.
+- Die Tab-Leiste ist fixiert, halbtransparent (`--bg-app-blur`, `backdrop-filter: blur(16px)`) mit oberer 1-px-Kante und `env(safe-area-inset-bottom)`.
+- Nur dauerhafte Hauptbereiche bekommen einen Tab (derzeit Heute und Verpflegung). Details öffnen ein Blatt, keinen neuen Tab; `aria-current="page"` markiert den aktiven Eintrag, Browser-Zurück bleibt funktionsfähig.
+
+## 7. Typografie
+
+| Rolle | Schrift | Größe / Zeilenhöhe | Gewicht |
+|---|---|---|---|
+| Datum im Kopf (einziger Serif-Moment) | `--font-editorial` | 36 px, mobil 32 px / 1,05 | 400 |
+| Seitentitel | `--font-ui` | 26 px / 1,25 | 600 |
+| Kartentitel | `--font-ui` | 20 px / 1,3 | 600 |
+| Große Kennzahl (Score, Verpflegung) | `--font-ui` | 56 px, mobil bis 44 px / 0,95–1,0 | 600 |
+| Kennzahl (Nachtwerte, Countdown) | `--font-ui` | 23–26 px / 1,0–1,1 | 600 |
+| Fließtext | `--font-ui` | 15 px / 1,5 | 400 |
+| Label, Untertitel | `--font-ui` | 13 px / 1,5 | 400–500 |
+| Mikro (Metadaten, Achsen) | `--font-ui` | 12 px / 1,3–1,5 | 400–500 |
+
+- Zwei Familien: System-UI für alles, Serif **nur** fürs Datum. `--font-numeric` ist die UI-Schrift; die Klassen `.mono`/`.n` erzeugen **keine** Monospace-Schrift, sondern `tabular-nums`.
+- `font-variant-numeric: tabular-nums` für alle Zahlen; Einheit kleiner als die Zahl (`62 ms`, `46 bpm`, `6:50 h`).
+- Große Zahlen mit `letter-spacing: -0.01em` bis `-0.02em`; keine Versalien für Überschriften, Sentence case.
+- Keine Emojis als Icons, keine dritte Schrift, keine Systemschrift-Vergrößerung abschneiden.
+
+## 8. Raster und Formen
+
+- **4-px-Raster**: `--space-1` 4, `--space-2` 8, `--space-3` 12, `--space-4` 16, `--space-5` 20, `--space-6` 24, `--space-8` 32. Keine 17/19/27 px für Standardabstände.
+- Seitenrand mobil 20 px, Desktop 32 px. Kartenabstand 16 px, Karteninhalt 24 px (mobil 20 px), Zeilen mit 7–10 px vertikalem Padding; antippbare Zeilen sind 44 px hoch.
+- Radien: Karte 22 px, eingebettete Fläche 14 px, Bedienelement 12 px, Pille 999 px.
+- **Keine Karte in der Karte in der Karte.** Eine Zeile bleibt eine Zeile mit 1-px-Trenner, keine zweite große Karte.
+- Gruppieren zuerst über Typografie und Abstand, dann über Linien, zuletzt über Container.
+- Touchflächen folgen Abschnitt 13.
+
+## 9. Responsive
+
+| Breite | Verhalten |
+|---|---|
+| ≤ 1180 px | Zweispaltige Startseite wird einspaltig, Seitenrand 24 px |
+| ≤ 1000 px | Mobil: Seitenleiste entfällt, Tab-Leiste erscheint, Karten-Padding 20 px, Datum 32 px |
+| ≤ 360 px | Trainingszeile zweizeilig, Pfeil entfällt |
+| ≥ 720 px | Blätter werden als modaler Dialog mit Rand und Radius gezeigt |
+| ≥ 1001 px | Seitenleiste, Erholungskarte im zweispaltigen Raster |
+
+- Inhalt max. 1200 px, Seitenleiste 248 px, mobil einspaltig.
+- Zuerst mobil bauen, semantisch nach oben skalieren — keine eigene visuelle Sprache pro Gerät.
+- Notch, Safe Areas, iOS-Zoom (Eingabefelder ≥ 16 px) und fehlenden horizontalen Überlauf bei 320 px prüfen.
+
+## 10. Tokens — Ist-Stand
+
+Quelle: `web/src/styles.css` (`:root`), Stand 05.11.2026. Änderungen zuerst im Code, dann hier.
+
+**Flächen, Text, Status**
+
+| Token | Wert |
+|---|---|
+| `--bg-app` | `#05090d` |
+| `--bg-surface` | `#0b1318` |
+| `--bg-surface-raised` | `#0e181e` |
+| `--bg-surface-interactive` | `#121f26` |
+| `--border-subtle` | `#1c272e` |
+| `--border-strong` | `#2a373f` |
+| `--text-primary` | `#f6f8fa` |
+| `--text-secondary` | `#abb8c4` |
+| `--text-muted` | `#82919f` |
+| `--accent` | `#35dcc5` |
+| `--accent-hover` | `#5ce8d5` |
+| `--accent-soft` | `#123831` |
+| `--on-accent` | `#04100e` |
+| `--positive` / `--negative` | `#49dea4` / `#f1787f` |
+| `--warning` | `#f3be6a` |
+| `--info` | `#64bde2` |
+| `--chart-neutral` / `--chart-neutral-strong` | `#465763` / `#78909e` |
+
+**Zusätzliche Töne (abgeleitet, im Code vorhanden)**
+
+| Token | Wert |
+|---|---|
+| `--positive-soft` | `rgba(73, 222, 164, 0.12)` |
+| `--warning-soft` | `rgba(243, 190, 106, 0.12)` |
+| `--negative-soft` | `rgba(241, 120, 127, 0.12)` |
+| `--band-top-soft` | `rgba(126, 240, 192, 0.12)` |
+| `--band-low-soft` | `rgba(232, 146, 95, 0.12)` |
+| `--on-warning` | `#1c1406` |
+| `--accent-line` | `rgba(53, 220, 197, 0.45)` |
+| `--accent-wash` | `rgba(53, 220, 197, 0.045)` — nur Kleinteile, derzeit ungenutzt |
+| `--backdrop` / `--bg-app-blur` | `rgba(3, 6, 9, 0.72)` / `rgba(5, 9, 13, 0.94)` |
+
+**Erholung und Skala**
+
+| Token | Wert |
+|---|---|
+| `--recovery-surface` | `#080d11` |
+| `--recovery-glow` | `rgba(53, 220, 197, 0.36)` |
+| `--recovery-glow-soft` | `rgba(53, 220, 197, 0.08)` |
+| `--recovery-glow-opacity` | `0.5` |
+| `--recovery-ring-glow` | `rgba(53, 220, 197, 0.3)` |
+| `--band-top` | `#7ef0c0` |
+| `--band-good` | `var(--positive)` |
+| `--band-mid` | `var(--warning)` |
+| `--band-low` | `#e8925f` |
+| `--band-bad` | `var(--negative)` |
+
+Jedes Band ist eine semantische Stufe der Erholungsskala (sehr gut, gut, mittel, Erholungsbedarf, Ruhetag) und darf nur dort Farbe tragen.
+
+**Typografie, Raster, Radien**
+
+`--font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Liberation Sans", Arial, sans-serif` · `--font-editorial: "Iowan Old Style", Baskerville, "Instrument Serif", Georgia, serif` · `--font-numeric: var(--font-ui)` · `--text-micro` 12 · `--text-label` 13 · `--text-body` 15 · `--text-card` 20 · `--text-screen` 26 · `--text-editorial` 36 · `--text-editorial-sm` 32 · `--text-hero` 56 · `--space-1` 4 · `--space-2` 8 · `--space-3` 12 · `--space-4` 16 · `--space-5` 20 · `--space-6` 24 · `--space-8` 32 · `--radius-card` 22 · `--radius-inner` 14 · `--radius-control` 12 · `--radius-pill` 999 · `--ease: cubic-bezier(0.22, 1, 0.36, 1)`.
+
+**Übergangs-Aliase (Bestand, nicht für neuen Code)**
+
+`--card` → `--bg-surface`, `--raised` → `--bg-surface-raised`, `--line` → `--border-subtle`, `--text-2` → `--text-secondary`, `--text-3` → `--text-muted`. Ebenso: `--bg`/`--side` → `--bg-app`, `--raised-2` → `--bg-surface-interactive`, `--line-strong` → `--border-strong`, `--text` → `--text-primary`, `--sans`/`--mono`/`--serif` → die Schrift-Tokens, `--r-card`/`--r-control` → die Radius-Tokens. Neuer Code verwendet ausschließlich die kanonischen Tokens, nicht die Aliase.
+
+## 11. Bausteine
+
+**Kopf und Karte.** `ScreenHeader`: Datum serif, Meta-Zeile 12 px `--text-muted`, 1-px-Abschluss. `DashboardCard` (`.card`): `--bg-surface`, 1-px `--border-subtle`, `--radius-card`, 24 px Padding (mobil 20), Titel 20/600 + optionale Untertitelzeile; keine Deko-Icons, kein zweiter Fokus.
+
+**Erholungskarte.** Wichtigste Karte; Ring oder Score ist der eine Schwerpunkt.
+
+- *Mit Score, mobil (≤ 1000 px):* zweispaltig `minmax(0, 1fr) clamp(120px, 38vw, 150px)` — bei 390 px rund 148 px Ring. Links Score 56 px (mobil 44–56) mit `/ 100`, gedämpfte Statusplakette im Bandton (12 %), „Nacht vom …", Referenzzeile; rechts der Ring mit Puls-Icon. Darunter eine Trennlinie und HRV, Ruhepuls, Schlaf **dreispaltig**, je Wert, Einheit und Delta zur eigenen Baseline (aus vorhandenen Feldern gerechnet, nichts erfunden).
+- *Mit Score, Desktop (≥ 1001 px):* Raster `minmax(240px, 300px) minmax(0, 1fr)`; Ring links, rechts die Treibertabelle heute / Schnitt / üblich mit Skalenmarke; die Nachtwerte treten dort nicht zusätzlich auf.
+- *Ohne Score und ohne Treiberzeile:* Der Ring bleibt zentriert, „—" statt Zahl, Label und „x von 21 Nächten"; der Fortschritt ist neutral (`--chart-neutral-strong`), nie grün und nie türkis. Die Nachtwerte treten dreispaltig an die Stelle der Treiberzeile (D-58), ohne Delta. Kein erfundener Score, kein positiver Status.
+- *Ring:* `SIZE` 220 im viewBox, `RING` 92, `STROKE` 8, `strokeLinecap="round"`, Start oben; Spur `--bg-surface-raised`, Fortschritt mit Score `--accent`, ohne Score `--chart-neutral-strong`; Schein nur mit Score: `drop-shadow(0 0 7px var(--recovery-ring-glow))`; Referenzmarke als Linie mit Strichstärke 2 in `--text-muted`. Gerendert mobil: 186 px ohne Score, 148 px mit Score bei 390 px. `role="img"` und sprechendes `aria-label`.
+- Die Karte trägt als einzige den Lichtschein aus Abschnitt 3.
+
+**Training.** Die Karte „Training": Zeile `WorkoutPreview` 56 px hoch, Icon 36 px in `--accent-soft`/`--accent`, Name 15/500, Meta 12 px `--text-muted`, Status rechts. „Nichts geplant" als ruhiger Satz, optional „Morgen" mit Datum. Klick öffnet das Blatt der Einheit.
+
+**Letzte 7 Tage.** `WeekStrip`: sieben Spalten, 84 px hoch, 6 px Abstand; neutrale Balken (`--chart-neutral-strong` → `--chart-neutral`), Spitzenwert `--text-muted` → `--chart-neutral-strong`, **heute** `--accent-hover` → `--accent` samt türkisem Tageslabel. Darunter `MetricRow`s für Umfang, Belastung, Einheiten, Belastungsverhältnis.
+
+**Kennzahlen.** `MetricRow`: Label 13 px `--text-secondary` links, Wert 14 px `--text-primary` mit `tabular-nums` rechts, 1-px-Trenner oben, 44 px hoch wenn antippbar. Keine Kästen, keine Sparklines, keine Icons vor jeder Zahl.
+
+**Diagramme und Blätter.** Von Hand gezeichnete SVGs, kein Diagramm-Paket: Raster `--border-subtle`, Basislinie `--border-strong`, eine Akzentlinie, Achsen 9–12 px `--text-muted`, textliche Zusammenfassung. Blätter (`.sheet`) nutzen dieselben Karten-, Zeilen- und Badge-Regeln; auf ≥ 720 px als Dialog, darunter vollflächig.
+
+**Neues Feature.** Wiederverwenden: `ScreenHeader`, `DashboardCard`, `MetricRow`, `StatusBadge`, `WorkoutPreview`, `WeekStrip`, vorhandene Diagramme. Festlegen: welche Bausteine es nutzt, welchen Zustand es zeigt (Abschnitt 12) und **wo das eine Akzentelement sitzt**. Kein neuer Tab, kein neues Token, keine neue Komponente ohne Not.
+
+## 12. Daten- und Zustandsdesign
+
+Daten werden so gezeigt, wie sie sind — vollständig, benannt und vergleichbar:
+
+- Datum und Uhrzeit deutsch, Zeitzone bewusst; Sync-Zeit, Einheiten-Zeit und Gerätedatum nicht vermischen.
+- Zahlenformat deutsch (`1,28`, `11 h 21 min`), Einheiten konsistent (`ms`, `bpm`, `km`, `W`, `h`); Einheit kleiner als die Zahl.
+- Veränderungen nur mit Vergleichszeitraum oder Bezugsgröße; wo der Bezug nicht aus der Überschrift hervorgeht, wird er benannt („+8 % vs. eigener Basis").
+- Fehlende Werte stehen als „—", nie als `0`; Abkürzungen wie HRV und Belastungsverhältnis bleiben auffindbar erklärt.
+- Ein UI-Indikator begründet keine medizinische Entscheidung; ein hoher Wert ist nicht automatisch positiv.
+
+| Zustand | Verhalten | Verboten |
 |---|---|---|
-| `--bg-app` | `#05090D` | Seitenhintergrund, App-Canvas |
-| `--bg-surface` | `#0D171D` | Standard-Karten |
-| `--bg-surface-raised` | `#102229` | leicht hervorgehobene Zeilen, Training-Preview |
-| `--bg-surface-interactive` | `#132B31` | Hover/Pressed, aktive untergeordnete Elemente |
-| `--border-subtle` | `#203039` | Kartenkontur, Listentrenner |
-| `--border-strong` | `#2D4650` | fokussierte Eingaben, betonte Konturen |
-| `--text-primary` | `#F6F8FA` | Titel, Kernwerte, wichtigste Labels |
-| `--text-secondary` | `#ABB8C4` | Beschreibung, Einheiten, Standardmetadaten |
-| `--text-muted` | `#82919F` | Achsen, Hilfstexte, Nebendaten |
-| `--accent` | `#35DCC5` | aktiver Tab, aktueller Datenpunkt, Interaktion |
-| `--accent-hover` | `#5CE8D5` | Hover und Fokusakzent |
-| `--accent-soft` | `#123831` | kleine ausgewählte Flächen und Badges |
-| `--positive` | `#49DEA4` | positive Veränderung, gute Statuswerte |
-| `--warning` | `#F3BE6A` | Hinweise, mittelmäßiger Zustand |
-| `--negative` | `#F1787F` | kritischer Status, Fehler |
-| `--info` | `#64BDE2` | neutrale Information |
-| `--chart-neutral` | `#465763` | normale Diagrammbalken |
-| `--chart-neutral-strong` | `#78909E` | ausgewählter neutraler Balken |
-
-**Kontrastziel:** Normaler Text mindestens WCAG-AA 4,5:1, große Schrift 3:1; interaktive Elemente und Informationsgrafiken möglichst 3:1. Tokenwerte bei Bedarf **zentral** nach tatsächlichem Kontrasttest anpassen. `--text-muted` ist für beiläufige Labels, nicht für längere Fließtexte.
-
-**Accent-Budget:** Türkis ist keine allgemeine Dekorationsfarbe. Pro Karte normalerweise **maximal ein dominantes Accent-Element**. Zahlen bleiben in der Regel weiß. Weitere Akzente nur bei bedeutungstragenden Datenpunkten, Status oder Interaktion.
-
-**Statusfarben sind semantisch:** Positive/negative Trends nicht allein über Rot/Grün vermitteln: immer auch Text, Vorzeichen, Richtung oder Bezeichnung verwenden. Ein hoher Wert ist nicht automatisch positiv; die Datenlogik bestimmt die Bewertung.
-
-### 2.2 Hintergrund, Verläufe und Glow
-
-- Seitenhintergrund grundsätzlich **nahezu schwarz und ruhig**.
-- Karten dürfen ein **sehr schwaches** vertikales Ton-in-Ton-Farbspiel bekommen (ca. 2–5 % Differenz). Keine sichtbaren, großflächigen bunten Farbwolken.
-- Kartenkontur: 1 px `--border-subtle`, Schatten nur wenn sie tatsächlich Tiefe liefern (z. B. `0 10px 30px rgba(0,0,0,.14)`).
-- **Aktiver Bottom-Tab:** Icon in `--accent`, Label `--text-primary`. Optional ein **sehr kleiner, nahezu unsichtbarer** Akzent unter dem Icon; Blur maximal ca. 6 px, geringe Deckkraft (ca. 8–12 %). **Kein breiter Halo/Hue-Glow, kein leuchtender Balken.**
-- Erholungsring und aktiver Diagrammbalken dürfen klar türkis sein — **ohne** starke Neon-Aura.
-- Farbverläufe ausschließlich für dezente Oberflächentiefe oder fachlich sinnvolle Datenskalen; niemals automatisch pro Karte.
-
-### 2.3 Typografie
-
-| Rolle | Schrift | Größe/Zeilenhöhe | Gewicht | Verwendung |
-|---|---|---|---|---|
-| Editorial-Datum | `Iowan Old Style`, `Baskerville`, `Georgia`, serif | 32/38 px, mobil responsiv 28–36 | 400 | **nur** großes Datum bzw. editorialer Hauptmoment |
-| Screen-Titel | System UI (`-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, sans-serif) | 26/32 px | 600 | normale Seitentitel |
-| Card-Titel | System UI | 20/26 px | 600 | „Erholung“, „Training“, „Letzte 7 Tage“ |
-| Hauptkennzahl | System UI | 50–64/1.0 px | 650 | ein fokussierter Score pro Bereich |
-| Kennzahl | System UI | 23–28/1.2 px | 600 | HRV, Ruhepuls, Umfang |
-| Body | System UI | 15–16/23 px | 400 | Erklärungen, Zeilen |
-| Secondary / Label | System UI | 13–14/19 px | 400–500 | Einheiten, Hilfstexte, Chartlabels |
-| Micro | System UI | 12/16 px | 500 | nur sparsam für kurze Zusatzlabels |
-
-- Keine Emoji-Zeichen als UI-Icons.
-- Maximal **zwei Schriftfamilien**: System-UI plus **ein Serif-Akzent ausschließlich beim Datum**.
-- `font-variant-numeric: tabular-nums` für Kennzahlen und zeilenweise vergleichbare Werte; kein technisch wirkendes Monospace als allgemeine UI-Schrift.
-- Überschriften nicht durchgehend in Versalien; wenn überhaupt nur kurze Metadaten.
-- Große Zahlen: schmale Buchstabenabstände (ca. `-0.02em`); Fließtext normal.
-- Einheit optisch kleiner als Zahl (`62 ms`, `46 bpm`, `6:50 h`), aber noch gut lesbar.
-- Nutzerseitige System-Schriftvergrößerung unterstützen; Zahlen/Zeilen dürfen nicht abgeschnitten werden.
-
-### 2.4 Abstände, Raster, Formen
-
-| Token | Wert | Regel |
-|---|---|---|
-| `--space-1` | 4 px | Miniabstand |
-| `--space-2` | 8 px | zusammengehörige Elemente |
-| `--space-3` | 12 px | kleinere Gruppen |
-| `--space-4` | 16 px | normale innere Gruppen |
-| `--space-5` | 20 px | **Standard-Seitenrand mobil** |
-| `--space-6` | 24 px | Standard-Card-Padding |
-| `--space-8` | 32 px | größerer Abschnittsabstand |
-| `--radius-card` | 22 px | Hauptkarten |
-| `--radius-inner` | 14 px | eingebettete Elemente |
-| `--radius-control` | 12 px | Buttons, kleine Felder |
-| `--radius-pill` | 999 px | Statuschips |
-
-- **4-px-Basisraster**. Keine zufälligen Werte wie 17, 19, 27 px für Standardabstände.
-- Seitenrand mobil: 20 px; bei sehr schmalen Screens 16 px. Kartenabstand: 16–20 px.
-- Karteninhalt: 20–24 px; kompakte Reihen mindestens 12–16 px vertikaler Nutzraum.
-- Inhalt zwischen Sektionen optisch gruppieren: erst Typografie/Spacing, danach Linien und zusätzliche Container.
-- Mobile Touchfläche mindestens 44 × 44 CSS-px; primäre Touchflächen bevorzugt 48 px hoch.
-- **Keine „Card in Card in Card“-Ketten.** Ein eingebetteter Trainingsvorschau-Eintrag darf als subtile Zeile dargestellt werden, nicht als vollwertige zweite große Karte.
-
-### 2.5 Iconografie
-
-- Eine einheitliche Outline-Iconfamilie (z. B. **Lucide**), nicht mehrere Stile mischen.
-- Größen: 18–20 px in Listen und Tabbar; 22–24 px in wichtigen Actions.
-- Stroke meist 1,75–2 px, geometrisch konsistent.
-- Icons nur für Erkennbarkeit/Navigation: sparsam, keine Icons vor **jeder** Kennzahl.
-- Fachicons (Rad, Schlaf, Herz) erhalten Accent nur dann, wenn ausgewählt oder bewusst hervorgehoben.
-- **Keine Emojis**, bunte Illustrationen, Sticker oder generischen Cliparts.
-
----
-
-## 3. Layout und Navigation
-
-### 3.1 Startseite (verbindliche Hierarchie)
-
-1. **Header:** kompakte Produktkennung „Cockpit“ + ggf. Preview/Sync-Status; großes, elegantes Datum mit Serif-Akzent; „Zuletzt synchronisiert …“ als sekundäre Information.
-2. **Wettkampf-Countdowns:** bis zu drei Ziele als ruhige Spalten mit feinen Trennlinien; Tage optisch führend, Wettkampfbezeichnung sekundär.
-3. **Erholung:** wichtigste Hauptkarte; Zustand/Score bzw. Baseline-Aufbau, anschließend Nachtmetriken und nachvollziehbarer Hinweis.
-4. **Training:** Tagesstatus sowie nächste geplante Einheit als übersichtliche, klickbare Vorschau.
-5. **Letzte 7 Tage:** zurückhaltendes Balkendiagramm mit Tag-Markierung und wichtige Summen in Listenform.
-6. **Bottom Navigation:** dauerhaft erreichbar, ruhig und klar.
-
-**Nicht alles muss über der Falz liegen.** Lesbarkeit ist wichtiger als maximale Datenmenge im ersten Bildschirm.
-
-### 3.2 Bottom Navigation
-
-- Für 2–5 wesentliche Hauptbereiche. Aktive Tabs: türkises Outline-Icon + helles Label; inaktive: `--text-muted`.
-- **Sehr dezente** Hinterlegung/Glow für aktiv; möglichst nur der Iconfarbwechsel und die Typografie unterscheiden den Zustand.
-- Keine farbigen vollflächigen Tabs, keine springenden/auffälligen Animationen.
-- Gleicher Iconstil, gleich große Touchfläche und identische vertikale Ausrichtung bei allen Tabs.
-- Fixierte Leiste inklusive `env(safe-area-inset-bottom)`; Scrollinhalt muss unten entsprechend Platz haben.
-- Detailansichten eröffnen **keinen neuen Haupttab**. Navigation erfolgt über Unterseiten mit klarer Zurückfunktion.
-- Browser-Back (PWA), direkte URLs und Wiederherstellung der ausgewählten Seite dürfen nicht brechen.
-
-### 3.3 Responsive
-
-- **Mobile:** einspaltig, ca. 320–430 px breit; bei 320 px Zweizeiler und Overflow bewusst prüfen.
-- **Tablet (ab ca. 768 px):** nutzbare Inhaltsbreite begrenzen, optionale 2 Spalten für sekundäre Karten; Hauptmetrik prominent.
-- **Desktop (ab ca. 1100 px):** Dashboard in begrenztem Container (ca. 1080–1200 px), maximal 2–3 sinnvolle Bereiche nebeneinander; keine extrem breiten Karten/Diagramme.
-- Gestalte zuerst mobil, skaliere semantisch nach oben; keine separate visuelle Sprache je Gerät.
-- Berücksichtige Notch, Dynamic Island, Scrollbars, WebView/PWA-Safe-Areas und iOS-Zoom.
-
----
-
-## 4. Wiederverwendbare Komponenten
-
-### 4.1 `ScreenHeader`
-
-**Aufbau:** Kontext/Product Label → optional Sync-/Preview-Hinweis → großes Datum/Seitentitel → kompakte Statuszeile. Keine unnötigen Grafiken. Das Datum darf als einziges serif gesetzt werden.
-
-### 4.2 `DashboardCard`
-
-- Oberfläche `--bg-surface`, 1-px-Rand, `--radius-card`, 20–24 px Padding.
-- Kopf aus Titel + optionalem Untertitel/Action; keine Standard-Dekoicons in jedem Header.
-- Card-Titel linksbündig, Daten in klarem Raster.
-- Gleiche Abstände für alle Karten; unterschiedliche Höhe ergibt sich aus Inhalt, nicht aus Fantasie-Minheights.
-- Clickable Card nur, wenn die gesamte Card wirklich navigiert; sonst eindeutige interne Actions.
-
-### 4.3 `MetricRow` und `MetricGroup`
-
-- Links ein klares Label, rechts ein gut lesbarer Wert mit Einheit.
-- Optional darunter Trend, Referenzwert und Zeitraum; Veränderungen sind nie ohne Vergleichszeitraum dargestellt.
-- Reihen mit feinen Dividern statt vielen Kästchen.
-- Bei einer kleinen 3er-Metrikgruppe darf die Darstellung horizontal sein, wenn die Werte auf 320–375 px lesbar bleiben; sonst untereinander.
-- Keine farbigen Icons vor HRV, Puls, Schlaf usw., wenn sie nichts zur Interpretation beitragen.
-
-### 4.4 `RecoveryCard` / `RecoveryGauge`
-
-- Die Karte ist das wichtigste Datenelement; Ring oder Score als **ein** visueller Schwerpunkt.
-- **Mit gültiger Referenz:** berechneten Score plus sinnvoll zugeordneten Status und Datenbasis darstellen. Große Zahl; Ring/Progress nur ergänzend.
-- **Ohne gültige Referenz (z. B. 2 von 21 Nächten):** **kein Score, kein positiver Status, keine fiktive Prozentanzeige und kein grüner „fertiger“ Ring**. Stattdessen neutrales Ringskelett/Referenzfortschritt plus „Referenz wird aufgebaut“ und „2 von 21 Nächten“.
-- Letzte Nacht: HRV, Ruhepuls, Schlaf (nur wenn vorhanden) dürfen unabhängig von der Recovery-Kalibrierung angezeigt werden, klar als Nachtwerte beschriftet.
-- Hinweis auf neuen Sensor ist funktional und verständlich, nicht als dominantes Warnfeld.
-- Ringe nie allein durch Farbe verständlich machen; Zahlen/Text ergänzen.
-
-### 4.5 `WorkoutPreview`
-
-- Sportarten-Icon dezent; Workout-Name vorrangig; darunter Dauer, Ziel/Distanz und Status.
-- „Geplant“, „Erledigt“ oder „Ausgefallen“ als kleine semantische Statuschips, nicht riesige Vollflächen.
-- Bei „Heute nichts geplant“ ruhig erklären und optional **morgen** zeigen; keine erzwungene leere Grafik.
-- Klick öffnet Workout-Details; Card verschwindet bei fehlenden Daten nicht ersatzlos, sondern zeigt einen klaren Empty State.
-
-### 4.6 `TrendChart` / `WeeklyActivityChart`
-
-- Bars für nicht ausgewählte Tage in zurückhaltendem Blau-Grau. **Aktueller Tag** in Türkis, aber nur wenn diese Markierung sachlich richtig ist.
-- Keine starken Glows oder 3D-Verläufe. Sehr sanfte vertikale Tiefenabstufung ist erlaubt.
-- Minimale, gut lesbare Achsenbeschriftung. Einheit, Zeitraum und Datenbasis explizit benennen.
-- Fehlende Tage ≠ null Trainingslast. Unvollständige Tage visuell unterscheiden, falls relevant.
-- Ein ausgewählter Balken erhält klar erkennbare Dateninformation/Tooltip oder Detailansicht.
-- Diagramme immer mit textlicher Zusammenfassung bzw. zugänglichem Alternativinhalt anbieten.
-
-### 4.7 `StatusBadge`, `Action`, `Divider`, `Skeleton`, `EmptyState`
-
-- `StatusBadge`: kleine Pill, gedämpfter semantischer Hintergrund; keine grellen Vollflächen.
-- `Action`: Primäraktionen in Türkis nur, wenn tatsächlich handlungsrelevant; Sekundäraktionen zurückhaltend.
-- `Divider`: 1 px `--border-subtle` und ausreichender Luftabstand.
-- `Skeleton`: Form der späteren Inhalte übernehmen, sanftes Shimmer nur ohne `prefers-reduced-motion`.
-- `EmptyState`: konkrete Ursache, mögliche nächste Aktion; niemals erfundene Inhalte.
-
----
-
-## 5. Daten- und Zustandsdesign
-
-Eine Premium-Oberfläche überzeugt durch **Verlässlichkeit**, nicht nur Optik.
-
-| Zustand | UI-Verhalten | Verbot |
-|---|---|---|
-| Laden | Platzhalter in tatsächlicher Layoutform | Layoutsprünge, irreführende Nullen |
-| Keine Daten | „Noch keine Daten vorhanden“ und Datenquelle/Handlung | `0` als Ersatz für `null` |
-| Baseline wird aufgebaut | Fortschritt `x von y Nächten`; neutrale Visualisierung | erfundener Recovery-Score oder „Gut“ |
-| Sync veraltet | Zeitpunkt des letzten erfolgreichen Syncs, optional Refresh | stillschweigend „aktuell“ suggerieren |
-| API-Fehler | freundlich, konkret, mit Wiederholen-Aktion | leere Karten ohne Erklärung |
-| Teilweise Daten | verfügbare Kennzahlen zeigen, fehlende explizit markieren | ganze Karte verstecken oder schätzen |
-| Training nicht geplant | ruhiger Empty State, nächstes Training falls bekannt | Demo-Einheit als echt anzeigen |
-| Offline | letzten bestätigten Datenstand mit Zeitstempel zeigen | so tun, als wären Daten live |
-
-- Datums- und Zeitformat deutsch, Zeitzone bewusst behandeln; kein Vermischen von Sync-Zeit, Workout-Zeit und Gerätedatum.
-- Abkürzungen wie HRV und Belastungsverhältnis sollten eine auffindbare Erläuterung erhalten.
-- Zahlenformat in Deutsch (`1,28`, `11 h 21 min`), Einheiten konsistent (`ms`, `bpm`, `km`, `W`, `h`).
-- Veränderungen nur mit Referenz erklären: `+8 % vs. persönlicher Basiswert`, nicht nur `+8 %`.
-- Bei gesundheitlich wirkenden Scores nicht suggerieren, dass ein UI-Indikator allein eine medizinische Entscheidung begründet.
-
----
-
-## 6. Interaktion, Motion und Accessibility
-
-- Navigation/Interaktionen müssen vorhersehbar sein. Keine Tap-Ziele in Konkurrenz und keine unklaren Klickflächen.
-- Taps visuell unmittelbar quittieren; Pressed-Zustand kann Oberfläche minimal aufhellen.
-- Animationen sparsam: üblicherweise **160–240 ms**, easing `ease-out`; keine springenden Kennzahlen, pulsierenden Glows oder unnötiges Parallax.
-- `prefers-reduced-motion: reduce` konsequent berücksichtigen.
-- Mobile Touchflächen mind. 44×44 CSS-px, genügend Abstand für Fehlertaps.
-- Texte lassen sich vergrößern, Content kann horizontal nicht ungewollt scrollen.
-- Semantische HTML-Elemente, sichtbarer Fokus, Tastaturbedienbarkeit, Screenreader-Beschreibungen für Scores und Charts.
-- Aktive Zustände nicht nur farblich unterscheiden: aktives Tab erhält z. B. helleres Label und `aria-current="page"`.
-- Ohne aktive Eingabe keine dauernd laufenden Animations-/Polling-Effekte im Frontend.
-
----
-
-## 7. Muster für neue Features
-
-**Ein neuer Screen muss aus wiederverwendbaren Bausteinen zusammengesetzt werden:**
-
-1. **ScreenHeader** mit passendem Titel/Zeitraum.
-2. **Eine Hauptinformation** („Hero“), sofern fachlich sinnvoll.
-3. **Sekundäre Kennzahlen** als MetricRows oder kleine MetricGroup.
-4. **Ein sinnvoller Verlauf** bei zeitabhängigen Daten.
-5. **Details / Erklärungen** hinter vertiefender Navigation statt alles auf der Startseite.
-6. **Alle Zustände:** Loading, Empty, Error, Partial, Offline, Success.
-7. **Tabs nur bei dauerhaften Hauptbereichen**, nicht für jede neue Funktion.
-
-**Beispiel „Verpflegung“:** Oben Tagesziel und bisherige Aufnahme als ruhige Hauptkennzahl; danach Kalorien/Kohlenhydrate/Flüssigkeit in derselben Typografie und denselben MetricRows; Einträge als kompakte Liste; Verlauf im gemeinsamen `TrendChart`; türkiser Akzent nur für aktuelle Auswahl oder einen fachlich relevanten Fortschritt — **keine bunten Lebensmittel-Emojis**.
-
-**Beispiel „Trainingsdetail“:** Trainingsname und Status, wesentliche Vorgaben (Sportart/Dauer/Intensität), zeitlicher Verlauf falls vorhanden, Notizen und Quellhinweise; die gleiche Card-, Listen- und Icon-Sprache wie auf dem Dashboard.
-
----
-
-## 8. Technische Umsetzungshinweise (frameworkneutral)
-
-Empfohlene zentrale CSS Custom Properties als Ausgangspunkt:
-
-```css
-:root {
-  color-scheme: dark;
-  --bg-app: #05090d;
-  --bg-surface: #0d171d;
-  --bg-surface-raised: #102229;
-  --bg-surface-interactive: #132b31;
-  --border-subtle: #203039;
-  --border-strong: #2d4650;
-  --text-primary: #f6f8fa;
-  --text-secondary: #abb8c4;
-  --text-muted: #82919f;
-  --accent: #35dcc5;
-  --accent-hover: #5ce8d5;
-  --accent-soft: #123831;
-  --positive: #49dea4;
-  --warning: #f3be6a;
-  --negative: #f1787f;
-  --info: #64bde2;
-  --chart-neutral: #465763;
-  --chart-neutral-strong: #78909e;
-  --radius-card: 22px;
-  --radius-inner: 14px;
-  --radius-control: 12px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-}
-
-body {
-  background: var(--bg-app);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-variant-numeric: tabular-nums;
-}
-
-.dashboard-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card);
-  padding: var(--space-6);
-}
-
-.bottom-nav__item[aria-current="page"] {
-  color: var(--accent);
-  /* Absichtlich KEIN großflächiger Glow. */
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-```
-
-**Framework-Regel:** Bestehendes Framework respektieren (React/Vue/Blazor/Svelte etc.). Tokens an vorhandene CSS- oder Theme-Mechanismen anbinden. Kein Frameworkwechsel nur für das Design.
-
-**Architekturregel:** Fachlogik, API-Clients, Authentifizierung, Persistenz, Synchronisierung und Trainingsberechnungen bleiben vom Designsystem getrennt. Visualisierung bindet an bestehende Datenmodelle; keine hartcodierten Mock-Daten in produktiven Komponenten.
-
----
-
-## 9. Qualitätskontrolle und Definition of Done
-
-Jeder neue Screen und jede wesentlich geänderte Komponente muss diese Checkliste erfüllen:
-
-- [ ] Nutzt ausschließlich zentrale Design Tokens, keine willkürlichen Farben/Abstände.
-- [ ] Verwendet vorhandene `DashboardCard`, `MetricRow`, `StatusBadge`, `TrendChart` etc. wo passend.
-- [ ] Hat nachvollziehbare visuelle Hierarchie: Titel → Hauptwert → Kontext → Details.
-- [ ] Türkis wird gezielt verwendet; aktiver Tab hat **höchstens minimalen** Glow.
-- [ ] Keine Emojis und keine Mischung verschiedener Iconstile.
-- [ ] Karten haben konsistente Radien, Innenabstände, Konturen und Trenner.
-- [ ] Echte Daten und echte Zustände: null, Loading, Error, Baseline, Stale Sync korrekt.
-- [ ] Keine Änderung an Fachlogik, API-Verträgen, Berechnungen oder Auth durch UI-Arbeiten.
-- [ ] Geprüft auf schmalem iPhone (320 px), regulärem iPhone (375–393 px), großem Telefon (430 px), Desktop.
-- [ ] Navigation, Back-Handling, Scrollbereich und Safe Areas funktionieren.
-- [ ] Mindestens AA-Textkontrast (nachgemessen), Tap-Ziele und Screenreader-Labels geprüft.
-- [ ] Screenshots vor/nach der Änderung mit `cockpit-premium-reference.png` verglichen.
-- [ ] Tests/Build laufen; UI-Änderungen und bewusste Abweichungen dokumentiert.
-
-### Gestalterische Verbote (Anti-Patterns)
-
-- Keine Bevel-/WHOOP-Layouts 1:1 übernehmen.
-- Keine farbenfrohen Emojis als Ersatz für Icons.
-- Keine übertriebenen Hue-, Bloom-, Neon- oder Glassmorphism-Effekte.
-- Keine großen türkisen Flächen ohne funktionale Begründung.
-- Keine fünf voneinander unabhängigen Card-Designs auf einer Seite.
-- Keine Dark-Mode-Texte in zu hellem Grau auf zu hellem Dunkelgrau („ausgewaschen“).
-- Keine Mockwerte statt nicht verfügbarer Sensordaten.
-- Kein „alles neu schreiben“, wenn ein schrittweiser Umbau möglich ist.
-
----
-
-## 10. Änderungsprozess für dieses Designsystem
-
-1. Bei einem neuen Feature zuerst dieses Dokument und den Referenzscreen lesen.
-2. Bereits verfügbare Tokens/Komponenten identifizieren.
-3. Wenn ein Muster fehlt: eine kleine, allgemeingültige Komponente vorschlagen; nicht lokal improvisieren.
-4. Designabweichungen **vor** der Umsetzung ausdrücklich begründen und zur Freigabe vorlegen.
-5. Nach Freigabe Token-/Komponentenänderung hier dokumentieren; anschließend alle betroffenen Screens konsistent aktualisieren.
-6. Änderungen als kleine, reviewbare Schritte mit visueller Kontrolle umsetzen.
-
-**Leitfrage für jeden PR:** „Sieht das Feature nach *Cockpit* aus — oder nach einer fremden App, die zufällig im selben Projekt liegt?“
+| Laden | Platzhalter in der späteren Layoutform | Layoutsprünge, Nullen als Ersatz |
+| Keine Daten | „Noch keine Daten" plus Quelle oder Handlung | `0` statt `null` |
+| Baseline wird aufgebaut | „x von 21 Nächten", neutraler Ring, kein Score | erfundener Score, „Gut", grüner Ring |
+| Sync veraltet | Zeitpunkt des letzten erfolgreichen Syncs | „aktuell" suggerieren |
+| Fehler | konkreter Satz, `--negative`, Wiederholen-Aktion | leere Karte ohne Erklärung |
+| Teilweise Daten | vorhandene Werte zeigen, fehlende als „—" | schätzen oder die Karte verstecken |
+| Offline | letzter bestätigter Stand mit Zeitstempel | Daten als live ausgeben |
+
+**Demo-Werte** gibt es ausschließlich im Vorschau-Bau (`VITE_APP_VARIANT=preview`, `?demo=recovery`) und nur mit sichtbarem Abzeichen „Demo". Im stabilen Bau existiert der Zweig nicht; ein Demo-Wert darf nie als echter Wert erscheinen. Während der Referenzaufbau läuft, erscheint **kein** Score.
+
+## 13. Bewegung und Barrierefreiheit
+
+- Übergänge 140–160 ms, `--ease`; Seitenwechsel 380 ms mit 8 px Versatz; Ring füllt in 700 ms; Skeletons 1,4–1,6 s. Keine springenden Zahlen, pulsierenden Glows, kein Parallax.
+- `prefers-reduced-motion: reduce` setzt Animationen und Übergänge global auf 0,01 ms.
+- Sichtbarer Fokus: 2 px `--accent`, außen 2 px Abstand (Tab-Leiste innen). Tastaturbedienung, semantische Elemente, `aria-current`, `aria-label` für Ring und Diagramme.
+- Textkontrast mindestens AA (4,5:1 normal, 3:1 groß); Sekundärtext bleibt lesbar statt abgedunkelt.
+- Tap-Ziele mindestens 44 × 44 CSS-px (ausgenommen die kompakte Kopf-Schaltfläche, 40 px), ausreichend Abstand; Content scrollt nicht ungewollt horizontal.
+
+## 14. Technik
+
+- React 19 + Vite + TypeScript; eine globale `web/src/styles.css`, Tokens in `:root`. Kein CSS-Framework, kein Diagramm-Paket, keine neue Bibliothek ohne Freigabe.
+- `@font-face` für Plex Sans/Mono liegt noch in der Datei; aktiv sind die Token-Stapel: System-UI (`--font-ui`) und der editoriale Serif fürs Datum (`--font-editorial`, mit Instrument Serif als Fallback).
+- Icons: eine Outline-Familie in `web/src/components/icons.tsx`, 18 px in Navigation und Listen, 16–24 px für Aktionen, Strich 1,5 px; keine Emojis, keine gemischten Stile.
+- Gestaltung bleibt von Fachlogik getrennt: keine Mockdaten in produktiven Komponenten, keine Designänderung an API, Berechnung, Datenbank oder Sync.
+
+## 15. Prüfliste vor dem Abschluss
+
+- [ ] Karten wirken dunkel und **nicht grün**; keine Karte hat eine farbige Grundfüllung.
+- [ ] Lichtschein subtil, weich und lokal; höchstens einer pro Bildschirm; nur die dekorative Ebene ist gedimmt.
+- [ ] Ring und Kennzahlen bleiben die Schwerpunkte; der Blick fällt zuerst auf sie.
+- [ ] Normale Karten konkurrieren nicht durch eigene Farbeffekte, Scheine oder Akzentkanten.
+- [ ] Aktiver Tab eindeutig, aber dezent: türkises Icon, helles Label, kein Balken, kein Halo.
+- [ ] Texte und Statuslabels gut lesbar; Sekundärtext neutral, nicht abgedunkelt oder grünlich.
+- [ ] Oberfläche insgesamt nicht grauer oder ausgewaschen.
+- [ ] Layout, Abstände, Größen und Funktionen unverändert (Kartenmaße vor/nach gemessen).
+- [ ] Kein erfundener Wert; Loading, Empty, Error, Baseline und Stale Sync geprüft.
+- [ ] Nur Tokens aus Abschnitt 10; keine Hex-Werte in Komponenten, keine neuen Aliase.
+- [ ] 320, 390, 430 px und Desktop geprüft; kein horizontaler Überlauf, Tap-Ziele belegt.
+- [ ] `prefers-reduced-motion`, sichtbarer Fokus und Screenreader-Labels geprüft.
+- [ ] Bei Code: `uv run pytest` und `npm run build` grün.
+- [ ] Vergleichsbilder bei gleicher dargestellter Kartenbreite vorhanden.
+
+## 16. Änderungsprozess
+
+1. Zuerst dieses Dokument und die Referenz lesen, dann vorhandene Tokens und Bausteine suchen.
+2. Klein und reviewbar ändern — ein Schritt, ein Diff, ein Vorher/nachher.
+3. **Vergleichsbilder bei gleicher dargestellter Kartenbreite**: die Referenz auf die Kartenbreite skalieren, nie verkleinert danebenstellen; Oberkanten bündig.
+4. Jede bewusste Abweichung vor der Umsetzung als **`D-xx`** in `docs/ENTSCHEIDUNGEN.md` festhalten (Grund, Umfang, Fundstellen) und danach die Werte hier nachziehen.
+5. Ändert sich ein Token, zuerst den Code, dann Abschnitt 10 — nie umgekehrt.
+
+**Anti-Patterns.** Türkis oder Petrol als Kartenfläche; flächige Verläufe über Karten; leuchtende Ränder; türkise Trenner oder flächige Sekundärflächen; Licht auf normalen Karten; Dimmen von Karte oder Inhalt statt der dekorativen Ebene; vollflächig gefüllte Statuspillen (auch die Erholung); eingefärbte Navigationsflächen, Balken oder Halos; Neon, Bloom, Glassmorphism; fremde App-Layouts 1:1; Emojis oder gemischte Iconstile; Monospace als UI-Schrift; erfundene Scores, Demo-Werte im stabilen Bau, `0` statt `null`; graue, ausgewaschene Sekundärtexte; ein zweiter Fokus pro Abschnitt.

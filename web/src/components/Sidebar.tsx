@@ -1,12 +1,6 @@
-import { BrandMark, PreviewTag } from "./Brand";
-import { IconFuel, IconSync, IconToday } from "./icons";
-
-export type Tab = "today" | "fuel";
-
-const NAV: { key: Tab; label: string; icon: typeof IconToday }[] = [
-  { key: "today", label: "Heute", icon: IconToday },
-  { key: "fuel", label: "Verpflegung", icon: IconFuel },
-];
+import { TABS, type Tab } from "../tabs";
+import { BrandMark, DemoTag, PreviewTag } from "./Brand";
+import { IconSync } from "./icons";
 
 export function Sidebar({
   tab,
@@ -29,17 +23,19 @@ export function Sidebar({
         <BrandMark />
         Cockpit
         <PreviewTag />
+        <DemoTag />
       </div>
 
       <nav className="nav">
-        {NAV.map(({ key, label, icon: Icon }) => (
+        {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             type="button"
             className={tab === key ? "active" : ""}
+            aria-current={tab === key ? "page" : undefined}
             onClick={() => onTab(key)}
           >
-            <Icon size={16} />
+            <Icon size={18} />
             {label}
           </button>
         ))}

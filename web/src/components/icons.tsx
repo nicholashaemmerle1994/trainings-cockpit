@@ -104,6 +104,15 @@ export function IconWeights({ size = 20, className }: IconProps) {
   );
 }
 
+/** Pulslinie: der ruhige Moment in der Mitte des Erholungsrings. */
+export function IconPulse({ size = 24, className }: IconProps) {
+  return (
+    <svg {...svgProps(size)} className={className}>
+      <path d="M2 12h4.4l2.4-6.8 4.4 13.6 2.4-6.8H22" />
+    </svg>
+  );
+}
+
 export function IconBolt({ size = 20, className }: IconProps) {
   return (
     <svg {...svgProps(size)} className={className}>

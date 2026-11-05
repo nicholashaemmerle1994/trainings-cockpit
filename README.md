@@ -58,7 +58,8 @@ kein Wert von gestern.
 | SpO₂ | 5 % | **nur Abzug** unter 95 % oder ≥ 2 Punkte unter Referenz |
 
 Skala: `68 + 25·z` – ein normaler Tag ergibt 68, +1 SD 93, −1 SD 43.
-Ampel: ≥ 70 gut erholt, 50–69 solide, 35–49 Erholungsbedarf, < 35 Ruhetag.
+Ampel: ≥ 85 sehr gut erholt, 70–84 gut erholt, 50–69 solide, 35–49
+Erholungsbedarf, < 35 Ruhetag.
 Jeder Wert zeigt **heute**, **Schnitt** und **üblich**; darunter erklärt ein Satz
 den Score. Ausreißer (z. B. HRV 255) werden gefiltert. Temperatur fehlt aktuell
 in den Daten und wird ergänzt, sobald sie verfügbar ist.

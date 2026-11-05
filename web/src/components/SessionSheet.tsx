@@ -4,6 +4,7 @@ import { fmtDate, fmtKm, fmtLiters, fmtMinutes, fmtNumber } from "../format";
 import type { SessionDetail } from "../types";
 import { SessionProfile } from "./SessionProfile";
 import { Sheet } from "./Sheet";
+import { MetricRow, StatusBadge } from "./ui";
 import { WorkoutChart } from "./WorkoutChart";
 
 function approx(value: string, estimated: boolean): string {
@@ -52,7 +53,9 @@ function Body({ data }: { data: SessionDetail }) {
         {data.sport_label} · {date}
       </p>
       <div className="sheet-state">
-        <span className="chip">{data.actual ? "Erledigt" : "Geplant"}</span>
+        <StatusBadge tone={data.actual ? "positive" : "neutral"}>
+          {data.actual ? "Erledigt" : "Geplant"}
+        </StatusBadge>
       </div>
 
       {data.axis && data.steps.length > 0 && <SessionProfile axis={data.axis} steps={data.steps} />}
@@ -89,34 +92,21 @@ function Body({ data }: { data: SessionDetail }) {
         <h2>Verpflegung</h2>
         {data.fuel ? (
           <>
-            <div className="sheet-kv">
-              <span>Kohlenhydrate</span>
-              <span>
-                {fmtNumber(data.fuel.carbs_g)} g · {data.fuel.rate} g/h
-              </span>
-            </div>
+            <MetricRow
+              compact
+              label="Kohlenhydrate"
+              value={`${fmtNumber(data.fuel.carbs_g)} g · ${data.fuel.rate} g/h`}
+            />
             {data.fuel.gels > 0 && (
-              <div className="sheet-kv">
-                <span>Gels</span>
-                <span>{data.fuel.gels} × 22 g</span>
-              </div>
+              <MetricRow compact label="Gels" value={`${data.fuel.gels} × 22 g`} />
             )}
-            <div className="sheet-kv">
-              <span>Wasser</span>
-              <span>{fmtLiters(data.fuel.water_ml)}</span>
-            </div>
+            <MetricRow compact label="Wasser" value={fmtLiters(data.fuel.water_ml)} />
             {data.fuel.sodium_mg > 0 && (
-              <div className="sheet-kv">
-                <span>Natrium</span>
-                <span>{fmtNumber(data.fuel.sodium_mg)} mg</span>
-              </div>
+              <MetricRow compact label="Natrium" value={`${fmtNumber(data.fuel.sodium_mg)} mg`} />
             )}
           </>
         ) : (
-          <div className="sheet-kv">
-            <span>Unter 60 Minuten</span>
-            <span>Wasser reicht</span>
-          </div>
+          <MetricRow compact label="Unter 60 Minuten" value="Wasser reicht" />
         )}
       </section>
 

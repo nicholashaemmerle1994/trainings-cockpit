@@ -1,17 +1,38 @@
 import { useState } from "react";
 import { RecoveryDial } from "../components/RecoveryDial";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
 import { UnitSheet } from "../components/UnitSheet";
 import { VendorScore } from "../components/VendorScore";
 import { WeekSheet } from "../components/WeekSheet";
-import { sportIcon } from "../components/sportIcon";
-import { fmtClock, fmtDate, fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
-import type { Overview, RecoveryComponent, SessionRow, UnplannedUnit } from "../types";
+import { WorkoutPreview } from "../components/WorkoutPreview";
+import { DashboardCard, MetricRow, StatusBadge, type BadgeTone } from "../components/ui";
+import {
+  fmtClock,
+  fmtDate,
+  fmtDateLong,
+  fmtKm,
+  fmtMinutes,
+  fmtNumber,
+  fmtSigned,
+  fmtSpan,
+} from "../format";
+import type { Band, Overview, RecoveryComponent, SessionRow, UnplannedUnit } from "../types";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
+
+/** Die Erholungsfarbe kommt aus der Band-Skala, nicht aus dem Akzent (D-66). */
+const BAND_TONES: Record<Band, BadgeTone> = {
+  "green-top": "band-top",
+  green: "band-good",
+  amber: "band-mid",
+  orange: "band-low",
+  red: "band-bad",
+  unknown: "neutral",
+};
 
 function driverPosition(component: RecoveryComponent): number {
   if (!component.baseline || component.today == null) return 50;
@@ -34,6 +55,38 @@ function driverPlain(value: number | null | undefined, unit: string): string {
   return unit === "h" ? fmtClock(value) : fmtNumber(value);
 }
 
+type Delta = { text: string; tone: "good" | "bad" | "flat" };
+
+/** Delta zur eigenen Referenz — gerechnet aus den vorhandenen Feldern, nichts erfunden. */
+function deltaPercent(
+  value: number | null | undefined,
+  baseline: number | null | undefined,
+  average: number | null | undefined,
+): Delta | null {
+  const reference = baseline ?? average;
+  if (value == null || reference == null || reference === 0) return null;
+  return deltaTone(Math.round((value / reference - 1) * 100), true, " %");
+}
+
+function deltaNumber(
+  value: number | null | undefined,
+  baseline: number | null | undefined,
+  average: number | null | undefined,
+  unit: string,
+  higherIsBetter: boolean,
+  scale = 1,
+): Delta | null {
+  const reference = baseline ?? average;
+  if (value == null || reference == null) return null;
+  return deltaTone(Math.round((value - reference) * scale), higherIsBetter, ` ${unit}`);
+}
+
+function deltaTone(delta: number, higherIsBetter: boolean, suffix: string): Delta {
+  const higher = delta > 0;
+  const tone = delta === 0 ? "flat" : higher === higherIsBetter ? "good" : "bad";
+  return { text: `${fmtSigned(delta)}${suffix}`, tone };
+}
+
 export function Today({ data }: { data: Overview }) {
   const { today } = data;
   const [openSession, setOpenSession] = useState<number | null>(null);
@@ -41,14 +94,49 @@ export function Today({ data }: { data: Overview }) {
   const [openUnit, setOpenUnit] = useState<number | null>(null);
 
   const recovery = today.recovery;
+  const hasScore = recovery.score != null;
   const drivers = recovery.components.filter((component) => component.key !== "resp");
-  // Ohne Score fehlt die Treiberzeile – dann bleiben die Nachtwerte sichtbar (D-58).
+  // Mit Score treten die Nachtwerte mobil an die Stelle der Treiberzeile;
+  // ohne Score bleiben sie sichtbar (D-58).
+  const componentFor = (key: string) => recovery.components.find((entry) => entry.key === key);
+  const hrv = componentFor("hrv");
+  const rhr = componentFor("rhr");
+  const sleep = componentFor("sleep");
   const nightly = [
-    { key: "hrv", label: "HRV", value: today.hrv.value, unit: "ms" },
-    { key: "rhr", label: "Ruhepuls", value: today.rhr.value, unit: "bpm" },
-    { key: "sleep", label: "Schlaf", value: today.sleep.hours, unit: "h" },
+    {
+      key: "hrv",
+      label: "HRV",
+      value: today.hrv.value,
+      unit: "ms",
+      delta: deltaPercent(today.hrv.value, hrv?.baseline, hrv?.average),
+    },
+    {
+      key: "rhr",
+      label: "Ruhepuls",
+      value: today.rhr.value,
+      unit: "bpm",
+      delta: deltaNumber(today.rhr.value, rhr?.baseline, rhr?.average, "bpm", false),
+    },
+    {
+      key: "sleep",
+      label: "Schlaf",
+      value: today.sleep.hours,
+      unit: "h",
+      delta: deltaNumber(today.sleep.hours, sleep?.baseline, sleep?.average, "min", true, 60),
+    },
   ];
-  const showNightly = drivers.length === 0 && nightly.some((row) => row.value != null);
+  const showNightly =
+    nightly.some((row) => row.value != null) && (hasScore || drivers.length === 0);
+  const nightText = `Nacht vom ${fmtDate(today.as_of ?? today.date, {
+    day: "numeric",
+    month: "long",
+  })}`;
+  const cardSubtitle =
+    recovery.label === "Referenz wird aufgebaut"
+      ? "Neuer Sensor"
+      : recovery.score == null
+        ? "Wartet auf die Nacht"
+        : nightText;
   const reference = recovery.reference ?? null;
   const recentScores = data.series.recovery.slice(-21);
   const seriesAverage =
@@ -56,9 +144,11 @@ export function Today({ data }: { data: Overview }) {
       ? Math.round(recentScores.reduce((sum, entry) => sum + entry.score, 0) / recentScores.length)
       : null;
   const referenceScore = reference?.average ?? seriesAverage;
+  const baselineProgress =
+    reference && reference.minimum > 0 ? Math.min(1, reference.nights / reference.minimum) : null;
   const referenceText = reference
     ? reference.nights < reference.minimum
-      ? `Referenz ${reference.nights} von ${reference.minimum} Nächten`
+      ? `${reference.nights} von ${reference.minimum} Nächten`
       : referenceScore == null
         ? `Referenz ${reference.nights} von ${reference.target} Nächten`
         : `${reference.nights} von ${reference.target} Nächten · Schnitt ${referenceScore}`
@@ -72,12 +162,7 @@ export function Today({ data }: { data: Overview }) {
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>{fmtDateLong(today.date)}</h1>
-          <p className="meta">Zuletzt synchronisiert {syncTime}</p>
-        </div>
-      </header>
+      <ScreenHeader date={fmtDateLong(today.date)} meta={`Zuletzt synchronisiert ${syncTime}`} />
 
       {data.goals.length > 0 && (
         <section className="countdowns">
@@ -93,32 +178,36 @@ export function Today({ data }: { data: Overview }) {
         </section>
       )}
 
-      <article className="card recovery">
-          <div className="card-head">
-          <div>
-            <h2>Erholung</h2>
-            <p className="card-sub">
-              {recovery.label === "Referenz wird aufgebaut"
-                ? `Neuer Sensor · ${reference?.nights ?? 0} von ${reference?.minimum ?? 7} Nächten`
-                : recovery.score == null
-                  ? "Wartet auf die Nacht"
-                  : `Nacht vom ${fmtDate(today.as_of ?? today.date, {
-                      day: "numeric",
-                      month: "long",
-                    })}`}
-            </p>
-          </div>
-          </div>
+      <DashboardCard
+        as="article"
+        className={hasScore ? "recovery has-score" : "recovery"}
+        title="Erholung"
+        subtitle={cardSubtitle}
+      >
+        <div className="recovery-hero">
+          {recovery.score != null && (
+            <div className="recovery-summary">
+              <p className="recovery-score">
+                <span className="recovery-score__value">{Math.round(recovery.score)}</span>
+                <span className="recovery-score__unit">/ 100</span>
+              </p>
+              <StatusBadge tone={BAND_TONES[recovery.band]}>{recovery.label}</StatusBadge>
+              <p className="recovery-night">{nightText}</p>
+              <p className="recovery-ref">{referenceText}</p>
+            </div>
+          )}
 
           <RecoveryDial
-          score={recovery.score}
-          band={recovery.band}
-          label={recovery.label}
-          referenceText={referenceText}
-          referenceScore={referenceScore}
+            score={recovery.score}
+            band={recovery.band}
+            label={recovery.label}
+            referenceText={referenceText}
+            referenceScore={referenceScore}
+            baselineProgress={baselineProgress}
           />
+        </div>
 
-          <div className="recovery-side">
+        <div className="recovery-side">
           {drivers.length > 0 && (
           <table className="drivers">
             <thead>
@@ -151,13 +240,38 @@ export function Today({ data }: { data: Overview }) {
           {showNightly && (
             <div className="night">
               <p className="night-head">Letzte Nacht</p>
-              <dl className="night-list">
-                {nightly.map((row) => (
-                  <div key={row.key}>
-                    <dt>{row.label}</dt>
-                    <dd>{valueWithUnit(row.value, row.unit)}</dd>
-                  </div>
-                ))}
+              <dl className="night-grid">
+                {nightly.map((row) => {
+                  const text =
+                    row.value == null
+                      ? "—"
+                      : row.unit === "h"
+                        ? fmtClock(row.value)
+                        : fmtNumber(row.value);
+                  const unit = row.value == null ? "" : row.unit;
+                  return (
+                    <div className="night-metric" key={row.key}>
+                      <dt>{row.label}</dt>
+                      <dd>
+                        {text}
+                        {unit && <span className="night-unit">{unit}</span>}
+                        {hasScore && row.delta && (
+                          <span
+                            className={`night-delta${
+                              row.delta.tone === "good"
+                                ? " night-delta--good"
+                                : row.delta.tone === "bad"
+                                  ? " night-delta--bad"
+                                  : ""
+                            }`}
+                          >
+                            {row.delta.text}
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  );
+                })}
               </dl>
             </div>
           )}
@@ -168,7 +282,7 @@ export function Today({ data }: { data: Overview }) {
             <VendorScore day={today.date} initial={today.vendor} score={recovery.score} />
           )}
           </div>
-      </article>
+      </DashboardCard>
 
       <section className="split">
         <TrainingCard
@@ -178,43 +292,22 @@ export function Today({ data }: { data: Overview }) {
           onOpenUnit={setOpenUnit}
         />
 
-        <aside className="card week">
-          <div className="card-head">
-            <div>
-              <h2>Letzte 7 Tage</h2>
-              <p className="card-sub">Umfang und Plan</p>
-            </div>
-          </div>
-
+        <DashboardCard as="aside" className="week" title="Letzte 7 Tage" subtitle="Umfang und Plan">
           <WeekStrip series={data.series.load} today={today.date} />
 
-          <button type="button" className="week-row week-row-link" onClick={() => setWeekOpen(true)}>
-            <span>Umfang</span>
-            <span>
-              {fmtSpan(today.load.week_seconds)}
-              <span className="week-caret" aria-hidden="true">
-                ›
-              </span>
-            </span>
-          </button>
-          <div className="week-row">
-            <span>Belastung</span>
-            <span>{fmtNumber(today.load.week_load)}</span>
-          </div>
-          <button type="button" className="week-row week-row-link" onClick={() => setWeekOpen(true)}>
-            <span>Einheiten</span>
-            <span>
-              {today.load.week_sessions}
-              <span className="week-caret" aria-hidden="true">
-                ›
-              </span>
-            </span>
-          </button>
-          <div className="week-row">
-            <span>Belastungsverhältnis</span>
-            <span>{fmtNumber(today.load.acwr, 2)}</span>
-          </div>
-      </aside>
+          <MetricRow
+            label="Umfang"
+            value={fmtSpan(today.load.week_seconds)}
+            onClick={() => setWeekOpen(true)}
+          />
+          <MetricRow label="Belastung" value={fmtNumber(today.load.week_load)} />
+          <MetricRow
+            label="Einheiten"
+            value={today.load.week_sessions}
+            onClick={() => setWeekOpen(true)}
+          />
+          <MetricRow label="Belastungsverhältnis" value={fmtNumber(today.load.acwr, 2)} />
+        </DashboardCard>
       </section>
 
       {openSession != null && (
@@ -263,61 +356,40 @@ function TrainingCard({
       ? "Nichts geplant"
       : `${count} ${count === 1 ? "Einheit" : "Einheiten"} · ${fmtMinutes(totalMinutes)}`;
 
-  const row = (session: SessionRow) => {
-    const Icon = sportIcon(session.sport);
-    return (
-      <button
-        type="button"
-        className="train-row"
-        key={session.id}
-        onClick={() => onOpen(session.id)}
-      >
-        <span className="train-ico">
-          <Icon size={18} />
-        </span>
-        <span className="train-main">
-          <span className="train-name">{session.name || session.sport_label}</span>
-          <span className="train-meta">{sessionMeta(session)}</span>
-        </span>
-        <span className="train-state">{session.done ? "Erledigt" : "Geplant"}</span>
-      </button>
-    );
-  };
+  const sessionRow = (session: SessionRow) => (
+    <WorkoutPreview
+      key={session.id}
+      sport={session.sport}
+      name={session.name || session.sport_label}
+      meta={sessionMeta(session)}
+      onClick={() => onOpen(session.id)}
+      trailing={
+        <StatusBadge tone={session.done ? "positive" : "neutral"}>
+          {session.done ? "Erledigt" : "Geplant"}
+        </StatusBadge>
+      }
+    />
+  );
 
   // Dazugekommen, ohne im Plan zu stehen: gleiche Zeile, andere Herkunft.
   const extraRow = (unit: UnplannedUnit) => {
-    const Icon = sportIcon(unit.sport);
     const parts = [fmtMinutes(unit.minutes)];
     if (unit.km) parts.push(fmtKm(unit.km));
     return (
-      <button
-        type="button"
-        className="train-row"
+      <WorkoutPreview
         key={`extra-${unit.row_id}`}
+        sport={unit.sport}
+        name={unit.name || unit.sport_label}
+        meta={parts.join(" · ")}
         onClick={() => onOpenUnit(unit.row_id)}
-      >
-        <span className="train-ico">
-          <Icon size={18} />
-        </span>
-        <span className="train-main">
-          <span className="train-name">{unit.name || unit.sport_label}</span>
-          <span className="train-meta">{parts.join(" · ")}</span>
-        </span>
-        <span className="train-state">Zusätzlich</span>
-      </button>
+        trailing={<StatusBadge>Zusätzlich</StatusBadge>}
+      />
     );
   };
 
   return (
-    <article className="card train">
-      <div className="card-head">
-        <div>
-          <h2>Training</h2>
-          <p className="card-sub">{subtitle}</p>
-        </div>
-      </div>
-
-      {count > 0 && today.map(row)}
+    <DashboardCard as="article" className="train" title="Training" subtitle={subtitle}>
+      {count > 0 && today.map(sessionRow)}
       {count === 0 && <p className="train-empty">Für heute steht nichts im Plan.</p>}
       {unplanned.map(extraRow)}
 
@@ -326,9 +398,9 @@ function TrainingCard({
           <p className="train-lab">
             Morgen · {fmtDate(tomorrow[0].date, { weekday: "long", day: "numeric", month: "long" })}
           </p>
-          {tomorrow.map(row)}
+          {tomorrow.map(sessionRow)}
         </>
       )}
-    </article>
+    </DashboardCard>
   );
 }

@@ -3,7 +3,7 @@ import { api } from "../api";
 import { fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
 import type { WeekResponse, WeekUnit } from "../types";
 import { Sheet } from "./Sheet";
-import { sportIcon } from "./sportIcon";
+import { WorkoutPreview } from "./WorkoutPreview";
 
 function meta(unit: WeekUnit): string {
   const parts = [fmtMinutes(unit.duration_min)];
@@ -94,26 +94,16 @@ function Body({ data, onOpen }: { data: WeekResponse; onOpen: (rowId: number) =>
       {days.map(({ day, units }) => (
         <section className="sheet-sec" key={day}>
           <h2>{dayLabel(day, data.to)}</h2>
-          {units.map((unit) => {
-            const Icon = sportIcon(unit.sport);
-            return (
-              <button
-                type="button"
-                className="train-row"
-                key={unit.row_id}
-                onClick={() => onOpen(unit.row_id)}
-              >
-                <span className="train-ico">
-                  <Icon size={18} />
-                </span>
-                <span className="train-main">
-                  <span className="train-name">{unit.name || unit.sport_label}</span>
-                  <span className="train-meta">{meta(unit)}</span>
-                </span>
-                <span className="train-state">{fmtNumber(unit.load)}</span>
-              </button>
-            );
-          })}
+          {units.map((unit) => (
+            <WorkoutPreview
+              key={unit.row_id}
+              sport={unit.sport}
+              name={unit.name || unit.sport_label}
+              meta={meta(unit)}
+              onClick={() => onOpen(unit.row_id)}
+              trailing={<span className="train-state">{fmtNumber(unit.load)}</span>}
+            />
+          ))}
         </section>
       ))}
 

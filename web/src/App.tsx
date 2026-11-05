@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import { BrandMark, PreviewTag } from "./components/Brand";
-import { Sidebar, type Tab } from "./components/Sidebar";
-import { IconFuel, IconToday } from "./components/icons";
+import { BrandMark, DemoTag, PreviewTag } from "./components/Brand";
+import { Sidebar } from "./components/Sidebar";
 import { Fuel } from "./pages/Fuel";
 import { Today } from "./pages/Today";
+import { withDemoRecovery } from "./demo";
+import { TABS, type Tab } from "./tabs";
 import type { Overview } from "./types";
 import { isPreview } from "./variant";
-
-const TABS: { key: Tab; label: string; icon: typeof IconToday }[] = [
-  { key: "today", label: "Heute", icon: IconToday },
-  { key: "fuel", label: "Verpflegung", icon: IconFuel },
-];
 
 /** Wie weit man ziehen muss, bevor der Sync losgeht. */
 const PULL_THRESHOLD = 64;
@@ -32,7 +28,7 @@ export default function App() {
   const load = useCallback(async (): Promise<Overview | null> => {
     try {
       const overview = await api.overview();
-      setData(overview);
+      setData(withDemoRecovery(overview));
       setError(null);
       return overview;
     } catch (err) {
@@ -135,6 +131,7 @@ export default function App() {
             <BrandMark />
             <span className="preview-name">Cockpit</span>
             <PreviewTag />
+            <DemoTag />
           </div>
         )}
         {error && <div className="banner">{error}</div>}
@@ -148,6 +145,7 @@ export default function App() {
             key={key}
             type="button"
             className={tab === key ? "active" : ""}
+            aria-current={tab === key ? "page" : undefined}
             onClick={() => setTab(key)}
           >
             <Icon size={18} />
