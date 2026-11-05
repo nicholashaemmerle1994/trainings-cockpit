@@ -91,3 +91,35 @@ docker compose exec cockpit tc sync --days 365
 
 Ein automatischer Scheduler (morgens/abends) ist noch nicht eingebaut und
 kommt in einer späteren Etappe.
+
+## Release
+
+`main` ist der Stand, der auf Port 8100 läuft. Freigegeben wird aus `develop`,
+nachdem die Vorschau geprüft wurde: Knopf **Release** im Ticket-Board. Er merged
+`develop` nach `main` (`--no-ff`), setzt den Tag `vJJJJ.MM.TT`, pusht beides und
+rollt die Produktion mit `tools/deploy-main.sh` aus. Danach zieht `develop` auf
+`main` nach, damit die beiden Linien nicht auseinanderlaufen.
+
+Von Hand ist es derselbe Weg:
+
+```bash
+git checkout develop && git pull --ff-only
+git checkout main && git pull --ff-only
+git merge --no-ff develop -m "Release v2026.11.05"
+git tag -a v2026.11.05 -m "Release v2026.11.05"
+git push origin main --tags
+git checkout develop && git merge --ff-only main && git push
+tools/deploy-main.sh
+```
+
+**Die eine Regel:** `develop` ist immer in `main` enthalten. Hat `main` Commits,
+die `develop` nicht kennt, verweigert der Release — dann erst `main` nach
+`develop` mergen. Cherry-Picks sind weder für den Release noch für einen Hotfix
+nötig:
+
+- **Release:** `develop` → `main`, alles Getestete auf einmal.
+- **Hotfix:** Branch von `main`, Fix, zurück nach `main`, danach `main` wieder
+  nach `develop`.
+
+Rückweg, wenn ein Release schlecht ist: `git revert` auf den Merge-Commit,
+`tools/deploy-main.sh` erneut. Kein Force, keine verlorene Historie.
