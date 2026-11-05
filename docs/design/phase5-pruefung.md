@@ -42,10 +42,11 @@ Die UI-Migration ist im geprüften Umfang **bestanden**: Navigation, Touchfläch
 | **prefers-reduced-motion** | **bestanden:** globale Regel; gemessene Dauer 0,01 ms für Seiten-Eintritt, Ring-Transition, Skeleton, Sheet-Loading und Popup. | `web/src/styles.css` (globaler Block am Ende) |
 | **Navigation / Bottom-Tabs** | **bestanden:** 320/390/430, aktiver Tab nur Akzent-Icon + helles Label, `aria-current="page"`, Fokusring, gleiche Icons; Desktop-Seitenleiste ruhig. | `web/src/App.tsx`, `web/src/components/Sidebar.tsx`, `web/src/styles.css`, `screens/phase5/start-320/390/430.png`, `nav-320/390/430.png` |
 | **Safe Areas iPhone** | **bestanden (emuliert):** oben 47 px, unten 34 px; Main oben 67 px, unten 122 px, Tabbar unten 42 px; Blatt oben 57 px, unten 62 px. Echtes Gerät nicht verfügbar. | CDP-Messung, `web/src/styles.css` (`env(...)`), `screens/phase5/safearea-390.png` |
+| **320 px / Überlauf** | **bestanden nach Fix:** Verpflegung hatte 25 px horizontalen Überlauf durch `.fuel-figures` (`min-width: 96px`); jetzt dreispaltiges Grid mit `min-width: 0`, `scrollWidth = 320`. | `web/src/styles.css`, `screens/phase5/verpflegung-320.png` |
 | **Browser-Back / direkte URLs** | **offen:** kein Router; der Tab liegt im Speicher, ein Neuladen führt auf „Heute". Bewusste Architektur (Phase 0), nicht geändert. | `web/src/App.tsx` (`useState<Tab>`) |
 | **Offline** | **offen / nicht vorhanden:** kein Offline-Zustand mit letztem bestätigten Stand; `DESIGN.md` 5 nennt ihn. | `web/src/App.tsx`, `web/src/api.ts` |
-| **Build** | **bestanden:** stabil 52 Module, CSS 32,47 kB, JS 265,01 kB, 1,50 s; Vorschau 32,47 kB / 265,23 kB, 1,53 s. | `npm run build` |
-| **Tests** | **bestanden:** 135 passed, 1 Warnung, 5,99 s. | `uv run pytest` |
+| **Build** | **bestanden:** stabil 52 Module, CSS 32,60 kB, JS 265,01 kB, 1,53 s; Vorschau 32,60 kB / 265,23 kB, 1,53 s. | `npm run build` |
+| **Tests** | **bestanden:** 135 passed, 1 Warnung, 6,21 s. | `uv run pytest` |
 
 ---
 
@@ -60,7 +61,7 @@ Alle unter `docs/design/screens/phase5/`. Die Start-/Navigationsbilder stammen a
 | Startseite | [start-320.png](screens/phase5/start-320.png) | [start-390.png](screens/phase5/start-390.png) | [start-430.png](screens/phase5/start-430.png) |
 | Navigation | [nav-320.png](screens/phase5/nav-320.png) | [nav-390.png](screens/phase5/nav-390.png) | [nav-430.png](screens/phase5/nav-430.png) |
 
-Zusätzlich: [Scrollende 390](screens/phase5/bottom-390.png), [Safe Area 390](screens/phase5/safearea-390.png), [Verpflegung 390](screens/phase5/verpflegung-390.png), [Verpflegung mit Ahornsirup 390](screens/phase5/verpflegung-ahornsirup-390.png).
+Zusätzlich: [Scrollende 390](screens/phase5/bottom-390.png), [Safe Area 390](screens/phase5/safearea-390.png), [Verpflegung 390](screens/phase5/verpflegung-390.png), [Verpflegung 320](screens/phase5/verpflegung-320.png), [Verpflegung mit Ahornsirup 390](screens/phase5/verpflegung-ahornsirup-390.png).
 
 ### 3.2 Zustände
 
@@ -118,9 +119,9 @@ Gemessen bei 390 px (Heute und Verpflegung) und 1440 px (Sidebar). Auf Desktop b
 
 | Datei | Änderung |
 |---|---|
-| `web/src/styles.css` | Touchflächen: Sidebar-Navigation/Sync 44 px, Eingabefelder/Shot-Feld/g/ml/Slider/Retry 44 px; Tabbar-Label auf `--text-micro` (12 px); sichtbarer Fokus für Sync und Felder (`:focus-within`/`:focus-visible`); globaler `prefers-reduced-motion`-Block; `.sync-btn` gestaltet |
+| `web/src/styles.css` | Touchflächen: Sidebar-Navigation/Sync 44 px, Eingabefelder/Shot-Feld/g/ml/Slider/Retry 44 px; Tabbar-Label auf `--text-micro` (12 px); sichtbarer Fokus für Sync und Felder (`:focus-within`/`:focus-visible`); globaler `prefers-reduced-motion`-Block; `.sync-btn` gestaltet; `.fuel-figures` mobil auf ein dreispaltiges Grid mit `min-width: 0` (320-px-Überlauf behoben) |
 | `DESIGN.md` | In 3.2 die Desktop-Variante der Navigation ergänzt (dieselbe Liste, dieselben Icons, ruhige Seitenleiste); keine Regel geändert |
-| `docs/design/screens/phase5/*.png` | 14 finale und Zustandsbilder |
+| `docs/design/screens/phase5/*.png` | 15 finale und Zustandsbilder |
 | `docs/design/phase5-pruefung.md` | dieser Bericht |
 
 **Keine** API-, Berechnungs-, Recovery-, Datenbank- oder Sync-Änderung; kein Markup, keine neue Abhängigkeit.

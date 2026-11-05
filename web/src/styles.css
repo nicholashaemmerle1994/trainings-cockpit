@@ -1830,6 +1830,14 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   .fuel-value {
     font-size: 44px;
   }
+  .fuel-figures {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .fuel-figures > div {
+    min-width: 0;
+    padding: var(--space-3) 10px;
+  }
   .mode-switch {
     grid-template-columns: minmax(0, 1fr);
   }
