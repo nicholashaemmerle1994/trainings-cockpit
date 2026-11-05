@@ -1,5 +1,11 @@
 # Oberfläche — wie hier gestaltet wird
 
+> **Ersetzt am 05.11.2026 durch [`DESIGN.md`](../DESIGN.md) (D-59).**
+> Diese Datei bleibt als Herkunftsnachweis stehen — die Regeln sind aus
+> *unslop* übernommen, und die Lizenz (CC BY 4.0) verlangt, dass Name und
+> Link bleiben. Verbindlich für neue Arbeit ist `DESIGN.md`.
+
+
 Diese Datei gilt für jede Arbeit an einer Oberfläche im Cockpit: Dashboard,
 Verpflegungsseite, Aktivitätenliste, später Plan und PWA.
 

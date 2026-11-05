@@ -24,16 +24,17 @@ Zahlen kommen aus intervals.icu und Garmin, die Bewertung steht im Vault
 
 1. `docs/ENTSCHEIDUNGEN.md` — warum etwas so ist. Groß: gezielt mit `grep`
    suchen, nicht am Stück lesen.
-2. `docs/UI-REGELN.md` — verbindlich für **jede** Arbeit an der Oberfläche.
+2. `DESIGN.md` — verbindlich für **jede** Arbeit an der Oberfläche. Die alte
+   `docs/UI-REGELN.md` ist ersetzt und bleibt nur als Herkunftsnachweis stehen.
 3. `docs/KONZEPT.md` — Produkt und Datenmodell, wenn das Ticket es berührt.
 
 ## Regeln
 
 - **Entscheidungen zuerst.** Eine Änderung, die eine Entscheidung braucht, wird
   als `D-xx` in `docs/ENTSCHEIDUNGEN.md` festgehalten, dann gebaut.
-- **UI-Regeln sind bindend**, nicht Empfehlung: ein helles Element je
-  Bildschirm, ruhiger Rahmen, neutrale Grautöne, ein Akzent — die Maße und
-  Tokens stehen in `docs/UI-REGELN.md`.
+- **`DESIGN.md` ist bindend**, nicht Empfehlung: Tokens, Typografie, Abstände,
+  Radien und Komponenten stehen dort. Ein neues Feature passt sich dem
+  Designsystem an, nicht umgekehrt.
 - **Prüfen, bevor du abgibst:** `uv run pytest` und, bei Oberflächenarbeit,
   die betroffene Seite tatsächlich aufrufen und ansehen.
 - **Nichts erfinden.** Fehlt eine Zahl in der Quelle, wird sie nicht geschätzt

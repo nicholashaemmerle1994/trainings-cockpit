@@ -220,7 +220,8 @@ src/trainings_cockpit/
   sync.py                intervals.icu → DB
   sources/               intervals- und Garmin-Client
   spike/                 Phase-0-Werkzeuge
-docs/UI-REGELN.md        Gestaltungsregeln (unslop), gelten für jede Oberfläche
+DESIGN.md                Designsystem, verbindlich für jede Oberfläche
+docs/UI-REGELN.md        ersetzt, nur noch Herkunftsnachweis (unslop, CC BY 4.0)
 web/src/
   pages/                 Heute, Verpflegung, Aktivitäten
   components/            Uhr, Diagramm, Wochenstreifen, Tabelle, Karten
