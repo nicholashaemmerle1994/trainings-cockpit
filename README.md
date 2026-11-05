@@ -231,7 +231,7 @@ web/src/
   pages/                 Heute, Verpflegung
   components/            Uhr, Diagramm, Wochenstreifen, Tabelle, Karten
   styles.css             Tokens, Layout, Komponenten
-web/public/fonts/        Plex Sans, Plex Mono, Instrument Serif (selbst gehostet)
+web/public/fonts/        Instrument Serif fürs Datum; Plex-Dateien ungenutzt
 tests/                   pytest
 ```
 
