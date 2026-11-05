@@ -18,7 +18,8 @@ Verpflegung. Stabil auf Port 8100, Vorschau auf 8101.
 | **Verpflegung** | Kohlenhydratrechner für Locker und Wettkampf: Gramm je Stunde, Getränk, Gels oder Ahornsirup, Wasser, Salz, Zeitplan, Herrichten und Drumherum |
 
 Dazu: dunkle Oberfläche, mobiles Layout, installierbar auf dem iPhone (PWA),
-Sync per Ziehen nach unten, Saison-Countdowns.
+Sync über „Aktualisieren“ in der Seitenleiste oder per Ziehen nach unten,
+Saison-Countdowns.
 
 <p>
   <img src="docs/img/fuel.png" width="76%" alt="Verpflegung" />
@@ -229,7 +230,7 @@ DESIGN.md                Designsystem, verbindlich für jede Oberfläche
 docs/UI-REGELN.md        ersetzt, nur noch Herkunftsnachweis (unslop, CC BY 4.0)
 web/src/
   pages/                 Heute, Verpflegung
-  components/            Uhr, Diagramm, Wochenstreifen, Tabelle, Karten
+  components/            Ring, Wochenstreifen, Blätter, Tabellen, Karten
   styles.css             Tokens, Layout, Komponenten
 web/public/fonts/        Instrument Serif fürs Datum; Plex-Dateien ungenutzt
 tests/                   pytest
