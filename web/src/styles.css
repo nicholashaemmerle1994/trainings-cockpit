@@ -70,6 +70,7 @@
   --negative-soft: rgba(241, 120, 127, 0.12);
   --positive-soft: rgba(73, 222, 164, 0.12);
   --warning-soft: rgba(243, 190, 106, 0.12);
+  --on-warning: #1c1406;
   --accent-line: rgba(53, 220, 197, 0.45);
   --accent-wash: rgba(53, 220, 197, 0.045);
   --backdrop: rgba(3, 6, 9, 0.72);
@@ -264,6 +265,13 @@ a {
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
+}
+
+/* Der Demo-Zustand ist keine echte Messung und trägt deshalb ein eigenes,
+   deutlich abweichendes Abzeichen neben der Vorschau-Plakette. */
+.brand-tag.demo {
+  background: var(--warning);
+  color: var(--on-warning);
 }
 
 .nav {
@@ -1907,7 +1915,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     z-index: 40;
     display: flex;
     justify-content: space-around;
-    padding: var(--space-2) var(--space-2) calc(8px + env(safe-area-inset-bottom));
+    padding: var(--space-2) var(--space-2) max(4px, calc(env(safe-area-inset-bottom) - 14px));
     border-top: 1px solid var(--line);
     background: var(--bg-app-blur);
     backdrop-filter: blur(16px);
@@ -1916,7 +1924,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-1);
+    gap: 2px;
     flex: 1;
     min-height: 44px;
     padding: 6px 0;
