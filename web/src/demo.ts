@@ -69,7 +69,7 @@ const DEMO_RECOVERY: Recovery = {
   missing: [],
   reference: { nights: 21, minimum: 21, target: 21, average: 76 },
   explanation:
-    "HRV und Ruhepuls liegen über dem Üblichen, die Nacht war mit 6:50 h etwas kurz. Insgesamt eine gute Erholung.",
+    "Die HRV liegt über dem Üblichen, der Ruhepuls darunter; die Nacht war mit 6:50 h etwas kurz. Insgesamt eine gute Erholung.",
   vendor_prompt: false,
 };
 

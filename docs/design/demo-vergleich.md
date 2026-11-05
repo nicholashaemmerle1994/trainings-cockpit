@@ -171,7 +171,7 @@ Blur bleiben. Gemessen bei 390 × 844:
 
 | Zustand | `padding-bottom` | Label-Unterkante | Abstand zur Unterkante |
 |---|---|---|---|
-| ohne Safe Area | 4 px | 818 px | 26 px |
+| ohne Safe Area | 4 px | 834 px | 10 px |
 | 34 px Safe Area (emuliert) | 20 px | 818 px | 26 px |
 
 Mit 34 px Inset entspricht das der Vorgabe (rechnerisch vorher 42 px, jetzt
