@@ -2328,7 +2328,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 .badge--band-good {
   border-color: transparent;
   background: var(--positive-soft);
-  color: var(--band-good);
+  color: var(--positive);
 }
 
 .badge--band-mid {
