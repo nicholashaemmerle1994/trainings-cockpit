@@ -31,6 +31,14 @@ Service Worker und braucht keinen sicheren Kontext.
 
 Der Funnel für die Bibliothek (`/` → 8083) bleibt davon unberührt.
 
+## Erkennungszeichen
+
+Der Vorschau-Bau setzt `VITE_APP_VARIANT=preview` (steht als Build-Argument in
+`docker-compose.develop.yml`). Damit trägt die App einen offenen Akzent-Ring, die
+Plakette „Vorschau", den Titel „Trainings-Cockpit · Vorschau" und ein eigenes
+Startbildschirm-Icon („Cockpit Vorschau"). Der stabile Bau bleibt unverändert;
+ohne den Wert entsteht wieder das normale Logo.
+
 ## Bauen und Starten
 
 ```bash

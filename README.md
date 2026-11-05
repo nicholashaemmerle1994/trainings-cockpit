@@ -169,6 +169,8 @@ Dann **http://127.0.0.1:8000** öffnen.
 ```bash
 uv run tc serve --reload      # API mit Auto-Reload
 cd web && npm run dev         # Frontend mit HMR auf :5173
+
+VITE_APP_VARIANT=preview npm run dev   # Vorschau-Logo und -Titel
 ```
 
 ## Docker / Homeserver

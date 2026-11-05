@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import puppeteer from "puppeteer-core";
 
 const browser = await puppeteer.launch({
@@ -24,18 +25,40 @@ const markup = `
   <div class="ring"></div>
 `;
 
+// Dieselbe Datei, die auch als Favicon ausgeliefert wird — so bleiben
+// Startbildschirm und Browser-Tab dasselbe Zeichen.
+const previewSvg = await readFile("public/icons/vorschau.svg", "utf8");
+const previewMarkup = `
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; background: #08090f; }
+    svg { display: block; width: 100%; height: 100%; }
+  </style>
+  ${previewSvg}
+`;
+
+async function save(markup, size, name) {
+  const page = await browser.newPage();
+  await page.setViewport({ width: size, height: size, deviceScaleFactor: 1 });
+  await page.setContent(markup, { waitUntil: "load" });
+  await page.screenshot({ path: `public/icons/${name}` });
+  await page.close();
+  console.log(`saved public/icons/${name}`);
+}
+
 try {
   for (const [size, name] of [
     [512, "icon-512.png"],
     [192, "icon-192.png"],
     [180, "apple-touch-icon.png"],
   ]) {
-    const page = await browser.newPage();
-    await page.setViewport({ width: size, height: size, deviceScaleFactor: 1 });
-    await page.setContent(markup, { waitUntil: "load" });
-    await page.screenshot({ path: `public/icons/${name}` });
-    await page.close();
-    console.log(`saved public/icons/${name}`);
+    await save(markup, size, name);
+  }
+  for (const [size, name] of [
+    [512, "vorschau-512.png"],
+    [192, "vorschau-192.png"],
+    [180, "apple-touch-icon-vorschau.png"],
+  ]) {
+    await save(previewMarkup, size, name);
   }
 } finally {
   await browser.close();

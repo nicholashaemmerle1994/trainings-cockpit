@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { BrandMark, PreviewTag } from "./components/Brand";
 import { Sidebar, type Tab } from "./components/Sidebar";
 import { IconFuel, IconToday } from "./components/icons";
 import { Fuel } from "./pages/Fuel";
 import { Today } from "./pages/Today";
 import type { Overview } from "./types";
+import { isPreview } from "./variant";
 
 const TABS: { key: Tab; label: string; icon: typeof IconToday }[] = [
   { key: "today", label: "Heute", icon: IconToday },
@@ -128,6 +130,13 @@ export default function App() {
       />
 
       <main className="main">
+        {isPreview && (
+          <div className="preview-brand" aria-label="Vorschau-Version">
+            <BrandMark />
+            <span className="preview-name">Cockpit</span>
+            <PreviewTag />
+          </div>
+        )}
         {error && <div className="banner">{error}</div>}
         {tab === "today" && <Today data={data} />}
         {tab === "fuel" && <Fuel />}
@@ -171,8 +180,9 @@ export default function App() {
 function Splash({ error, onRetry }: { error: string | null; onRetry: () => void }) {
   return (
     <div className="splash">
-      <span className="brand-mark large" />
+      <BrandMark large />
       <h1>Trainings-Cockpit</h1>
+      <PreviewTag />
       {error ? (
         <>
           <p className="error">{error}</p>
