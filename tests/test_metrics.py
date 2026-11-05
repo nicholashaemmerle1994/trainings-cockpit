@@ -51,6 +51,29 @@ def test_daily_days_filters_sentinel_values() -> None:
     assert today_point.sleep_h is None
 
 
+@pytest.mark.parametrize(
+    ("score", "band"),
+    [
+        (100, "green-top"),
+        (85, "green-top"),
+        (84, "green"),
+        (70, "green"),
+        (69, "amber"),
+        (50, "amber"),
+        (49, "orange"),
+        (35, "orange"),
+        (34, "red"),
+        (0, "red"),
+    ],
+)
+def test_band_boundaries(score: float, band: str) -> None:
+    assert metrics._band(score)[0] == band
+
+
+def test_green_top_sentence() -> None:
+    assert metrics.BAND_SENTENCES["green-top"] == "Du bist heute sehr gut erholt."
+
+
 def test_recovery_is_in_range_and_explained() -> None:
     today = date(2026, 10, 30)
     wellness = _wellness(90, today)
@@ -59,7 +82,7 @@ def test_recovery_is_in_range_and_explained() -> None:
 
     assert recovery["score"] is not None
     assert 0 <= recovery["score"] <= 100
-    assert recovery["band"] in {"green", "amber", "orange", "red"}
+    assert recovery["band"] in {"green-top", "green", "amber", "orange", "red"}
     assert {component["key"] for component in recovery["components"]} == {
         "hrv",
         "rhr",

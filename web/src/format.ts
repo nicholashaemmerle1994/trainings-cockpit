@@ -1,6 +1,7 @@
 import type { Band } from "./types";
 
 export const BAND_COLORS: Record<Band, string> = {
+  "green-top": "var(--band-top)",
   green: "#4cc38a",
   amber: "#d0a54e",
   orange: "#d8763f",

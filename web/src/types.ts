@@ -1,4 +1,4 @@
-export type Band = "green" | "amber" | "orange" | "red" | "unknown";
+export type Band = "green-top" | "green" | "amber" | "orange" | "red" | "unknown";
 
 export interface RecoveryComponent {
   key: string;
