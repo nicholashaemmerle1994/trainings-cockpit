@@ -66,7 +66,7 @@
   --chart-neutral: #465763;
   --chart-neutral-strong: #78909e;
 
-  /* Abgeleitet: nur diese zwei Werte stehen nicht in DESIGN.md. */
+  /* Abgeleitet: diese vier Werte stehen nicht wörtlich in DESIGN.md. */
   --negative-soft: rgba(241, 120, 127, 0.12);
   --accent-line: rgba(53, 220, 197, 0.45);
   --backdrop: rgba(3, 6, 9, 0.72);

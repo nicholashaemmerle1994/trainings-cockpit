@@ -15,7 +15,7 @@ Phase 0 bleibt unverändert in [`PHASE0.md`](PHASE0.md). Dieses Dokument beschre
 **Tatsächlich:**
 - eine zentrale Token-Schicht mit Aliasen für die bestehenden Namen,
 - DESIGN-Farbpalette inklusive Erholungs-Skala,
-- System-UI als Oberflächenschrift, Serif nur für das Datum (mit Instrument Serif als lokalem Rückfall),
+- System-UI als Oberflächenschrift, Serif für Datum und die noch nicht getrennten Seitentitel (offene Abweichung, siehe 8.9; Instrument Serif als lokaler Rückfall),
 - Typografie-Rollen für Body, Kartentitel, Mikro-/Label-Texte und Hauptkennzahlen,
 - Abstands- und Radius-Tokens, angewendet auf die bestehenden Regeln,
 - Diagramm-Neutralfarben und PWA-Farben auf derselben Palette,
@@ -92,11 +92,11 @@ Keine Datei unter `src/`, `web/src/pages/`, `web/src/components/` oder `tests/` 
 ### 4.2 Typografie
 
 - `--font-ui`: `-apple-system, BlinkMacSystemFont, "Segoe UI", "Liberation Sans", Arial, sans-serif`. Auf dem iPhone SF, auf dem Linux-Homeserver Liberation Sans, auf Windows Segoe UI.
-- `--font-editorial`: `"Iowan Old Style", Baskerville, "Instrument Serif", Georgia, serif`. Die selbst gehostete Instrument Serif bleibt als Rückfall erhalten, damit der Homeserver nicht auf DejaVu Serif fällt. Das Datum bleibt der einzige Serif-Moment.
+- `--font-editorial`: `"Iowan Old Style", Baskerville, "Instrument Serif", Georgia, serif`. Die selbst gehostete Instrument Serif bleibt als Rückfall erhalten, damit der Homeserver nicht auf DejaVu Serif fällt. Serif ist derzeit **nicht** auf das Datum begrenzt: `h1` (Datum und Verpflegungs-Seitentitel), `.cd-n` (Countdown-Zahlen) und `.sheet-title` (Blatt-Titel) nutzen weiterhin `var(--serif)`. Das ist eine offene Abweichung zu `DESIGN.md` 4.1 („Das Datum darf als einziges serif gesetzt werden"), siehe 8.9.
 - `--font-numeric` zeigt auf die Systemschrift; `.mono`/`.n` behalten `tabular-nums`. Plex Sans und Plex Mono sind damit aus der Oberfläche, die Dateien bleiben ungenutzt im Repo (siehe 8.2).
 - Body 15/1,5 (vorher 14/1,45), `font-variant-numeric: tabular-nums` global.
 - Kartentitel 20/1,3, Gewicht 600 (vorher 15/500) — der deutlichste optische Schritt.
-- Screen-Titel 36 (mobil 32), Hauptkennzahl 56, Label 13, Mikro 12.
+- `h1` 36 (mobil 32) — derzeit Datum und Seitentitel, siehe 8.9; Hauptkennzahl 56, Label 13, Mikro 12.
 - `.meta`, `.card-sub`, `.dial-band`, `.dial-ref`, `.night-head`, `.drivers th`, `.train-meta`, `.train-state`, `.empty` und `.note` sind auf die Rollen umgestellt.
 - **Bewusst noch nicht angefasst:** die sehr kleinen Diagramm- und Zusatzgrößen (9,5–11,5 px, u. a. `.week-days`, `.fuel-time`, `.sheet-crumb`, `.profile-tick`). Sie gehören in die jeweilige Komponentenrunde; ein pauschales Hochziehen hätte die 7-Tage-Achse und die Blätter in einem Schritt umgebrochen.
 
@@ -165,6 +165,8 @@ Die CSS-Datei wächst von 26,42 kB auf 29,22 kB, weil Tokens, Kommentare und Ali
 6. **Schrift auf dem Homeserver.** Die System-UI fällt unter Linux auf Liberation Sans zurück; das ist gewollt und näher an SF als DejaVu. Die tatsächliche iPhone-Darstellung (SF Pro, Iowan Old Style) lässt sich hier nicht rendern.
 7. **Vorschau 8101.** Sie läuft noch auf `develop` und zeigt bis zum Deploy den alten Stand. Die Nachher-Bilder stammen aus dem lokalen Build mit den echten Vorschau-Daten.
 8. **Keine Frontend-Tests.** Geprüft sind Build, Typen, Backend-Tests und Screenshots. Eine visuelle Regression kann nur über die Bilder beurteilt werden.
+9. **Serif nicht nur am Datum.** `h1` (Verpflegungs-Seitentitel), `.cd-n` (Countdown-Zahlen) und `.sheet-title` (Blatt-Titel) setzen weiterhin `var(--serif)`; `DESIGN.md` 4.1 erlaubt Serif nur für das Datum. Die Trennung Datum/Seitentitel braucht Markup bzw. eine eigene Klasse und folgt in Phase 2 (`ScreenHeader`: Verpflegung und Blatt-Titel auf System-UI) sowie Phase 3a (Countdown-Zahlen). Die Commit-Message „Serif fuer das Datum“ ist an dieser Stelle zu weit gefasst; dieser Bericht korrigiert sie.
+10. **Vierte Bandfarbe.** `--band-low: #e8925f` steht nicht wörtlich in `DESIGN.md` und war nicht Teil der Freigabe-Rückfrage (bestätigt wurden Umfang Phase 1 und der Schriftwechsel). Sie erhält die bestehende Viererskala (35–49 „Erholungsbedarf“) und braucht die Sichtabnahme mit diesem Bericht.
 
 ---
 
