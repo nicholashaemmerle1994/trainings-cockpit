@@ -4,7 +4,7 @@
 >
 > **Gilt für:** alle neuen und geänderten Oberflächen — Seiten, Tabs, Karten, Blätter, Dialoge, Diagramme und Zustände
 >
-> **Bezug:** D-59 (dieses Dokument ist das Designsystem), D-63 (Erholungskarte), D-64 (dunkle Fläche, lokaler Lichtschein), D-65 (Ringstrich 8), D-66 (Kartenrampe, gedämpfte Statuslabels, ruhige Navigation)
+> **Bezug:** D-59 (dieses Dokument ist das Designsystem), D-63 (Erholungskarte), D-64 (dunkle Fläche, lokaler Lichtschein), D-65 (Ringstrich 8), D-66 (Kartenrampe, gedämpfte Statuslabels, ruhige Navigation), D-67 (Label und Trendtexte teilen den Text-Token)
 >
 > **Optische Referenz:** `docs/design/cockpit-premium-reference.png` — Stilvorlage, keine Datenquelle
 
@@ -67,9 +67,11 @@ Statuslabels sind kleine Pillen (`.badge`, Höhe 24, `--radius-pill`, 12 px/500)
 - kritisch: `--negative-soft` mit `--negative`,
 - ohne Bewertung: `--bg-surface-raised` mit `--text-secondary`.
 
-Die Tönungen liegen bei 12 % der Statusfarbe; die Schrift steht in der vollen Statusfarbe. Statusfarben bleiben semantisch, nicht dekorativ; die Bedeutung steht immer auch im Text („Gut", „Geplant", „Erledigt", „Zusätzlich").
+Die Tönungen liegen bei 12 % der Statusfarbe (Ist-Wert: `--positive-soft`, `--warning-soft`, `--negative-soft`, `--band-top-soft`, `--band-low-soft` = `rgba(..., 0.12)`); die Schrift steht in der vollen Statusfarbe. Statusfarben bleiben semantisch, nicht dekorativ; die Bedeutung steht immer auch im Text („Gut", „Geplant", „Erledigt", „Zusätzlich").
 
-**Erholungsband.** Die Farbe des Erholungsstatus kommt aus der Band-Skala, nicht aus dem Akzent: `--band-top-soft`/`--band-top`, `--positive-soft`/`--band-good`, `--warning-soft`/`--band-mid`, `--band-low-soft`/`--band-low`, `--negative-soft`/`--band-bad`. Auch das „Gut" der Erholungskarte ist eine gedämpfte Pille; die vollflächig gefüllte Akzentpille entfällt damit als Statuslabel überall. Die gemessenen Kontraste liegen bei 5,9:1 bis 11,1:1 (Nachweis: `docs/design/karten-status-navigation.md`).
+**Gleicher Token für Text und Trend.** „Positive Trendtexte und positive Statuslabels verwenden dieselbe semantische Textfarbe. Statuslabels ergänzen lediglich eine dunkle, zurückhaltend getönte Hintergrundfläche." Deshalb liest `.badge--band-good` („Gut") direkt `--positive` wie `.night-delta--good`; den Weg über den Band-Alias gibt es nur noch für die Skala.
+
+**Erholungsband.** Die Stufe des Erholungsstatus kommt aus der Band-Skala, nicht aus dem Akzent: `--band-top-soft`/`--band-top`, `--positive-soft`/`--positive` (Band `--band-good: var(--positive)`), `--warning-soft`/`--band-mid`, `--band-low-soft`/`--band-low`, `--negative-soft`/`--band-bad`. Auch das „Gut" der Erholungskarte ist eine gedämpfte Pille; die vollflächig gefüllte Akzentpille entfällt damit als Statuslabel überall. Die gemessenen Kontraste liegen bei 5,9:1 bis 11,1:1 (Nachweis: `docs/design/karten-status-navigation.md`).
 
 Die Abzeichen der Bauvariante (`.brand-tag` „Vorschau" und „Demo") sind **keine Statuslabels**; sie bleiben gefüllt, weil sie die Herkunft des Baus markieren (D-56, D-60).
 
