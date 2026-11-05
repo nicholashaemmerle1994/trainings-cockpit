@@ -3,6 +3,7 @@
 **Ticket:** TB-11 · **Stand:** 05.11.2026 · **Branch:** `feature/tb-11-design-recovery-label-am-trend-token-aus`
 **Basis:** `develop` (TB-10-Stand). Der im Ticket beschriebene sichtbare Stand (D-66, `--positive`, gedämpfte Label-Fläche) liegt nur auf `develop`; `main` ist Vorfahr (wie bei TB-6–TB-10). `main` enthält diese Tokens und Klassen nicht.
 **Ziel:** Das Statuslabel „Gut" liest seine Schriftfarbe aus demselben semantischen Token wie die positiven Trendtexte. Optik, Fläche, Maße und alle anderen Zustände bleiben unverändert.
+**Nacharbeit (05.11.2026):** Der Review hat den Stand ohne Befund freigegeben und nach `develop` gemergt. Für den erneuten Nachweis wurden die 390×844-Vollansichten zusätzlich mit dem Projekt-Skript `web/scripts/audit-shots.mjs` reproduziert. Code, Design und Entscheidung bleiben unverändert; der Branch wurde nach dem Merge neu von `develop` angelegt.
 
 ---
 
@@ -11,7 +12,7 @@
 - **Eine Deklaration geändert:** `.badge--band-good { color: var(--band-good) }` → `.badge--band-good { color: var(--positive) }` in `web/src/styles.css`.
 - Der Band-Alias `--band-good: var(--positive)` bleibt für die Erholungsskala bestehen.
 - **Befund bestätigt:** Vor der Änderung lasen die positiven Trendtexte `var(--positive)`, das Label `var(--band-good)`. Beide lösten bereits auf **`rgb(73, 222, 164)` / `#49dea4`** auf; der Unterschied war nur der Weg über den Alias.
-- **Optisch identisch:** Alle sechs Bildpaare (390 × 844, DPR 2, sowie die 4x-Ausschnitte) sind byte-identisch (`sha256`). Das ist der Nachweis, dass nur die Token-Bindung und nicht die Darstellung geändert wurde.
+- **Optisch identisch:** Alle sechs Detailpaare (390 × 844, DPR 2, sowie die 4x-Ausschnitte) sind byte-identisch (`sha256`); das zusätzliche `audit-shots`-Vollansicht-Paar ebenfalls. Das ist der Nachweis, dass nur die Token-Bindung und nicht die Darstellung geändert wurde.
 - **Kontraste:** Labeltext **9,28:1** auf seiner Fläche, beide Trendtexte **11,40:1** auf der Erholungskarte, „Geplant" **8,89:1**. Fläche gegen Karte: **1,23:1** (gewollt zurückhaltende 12-%-Tönung).
 - Keine Änderung an Karte, Ring, Navigation, Trendtexten, Statusberechnung, Datenlogik, Maßen oder Typografie.
 
@@ -106,7 +107,7 @@ Einordnung:
 
 ## 5. Bilder
 
-Alle Aufnahmen: Vorschau-Bau (`VITE_APP_VARIANT=preview`), Chromium, `--force-color-profile=srgb`, 390 × 844, `deviceScaleFactor` 2. Der Score-Zustand kommt aus `?demo=recovery` (Demo-Abzeichen sichtbar); die API-Antwort wurde einmal von `http://127.0.0.1:8101` eingefroren, damit Vorher und Nachher dieselben Daten sehen. Der Vorher-Bau hat dieselben Asset-Hashes wie die laufende Vorschau (`index-CNcAhsju.css`, `index-CLiMYuXk.js`).
+Alle Aufnahmen: Vorschau-Bau (`VITE_APP_VARIANT=preview`), Chromium, `--force-color-profile=srgb`, 390 × 844, `deviceScaleFactor` 2. Der Score-Zustand kommt aus `?demo=recovery` (Demo-Abzeichen sichtbar); die API-Antwort wurde einmal von `http://127.0.0.1:8101` eingefroren, damit Vorher und Nachher dieselben Daten sehen. Der Vorher-Bau hatte dieselben Asset-Hashes wie die damals laufende Vorschau (`index-CNcAhsju.css`, `index-CLiMYuXk.js`); der Nachher-Bau entspricht dem deployten Stand (`index-DnbPmkBP.css`, `index-DWScooWB.js`).
 
 ### 5.1 Karte mit „Gut" und den Trendtexten
 
@@ -153,6 +154,22 @@ Label und Deltas gemeinsam:
 
 Alle sechs Paare sind mit `cmp` byte-identisch. Es gibt keine sichtbare Änderung — genau das ist die Abnahme dieser Story.
 
+### 5.4 Reproduktion mit `audit-shots.mjs`
+
+Zusätzlich wurden die Vollansichten mit dem Projekt-Skript erzeugt, nicht nur mit dem Puppeteer-Skript der Detailaufnahmen:
+
+```bash
+cd web
+node scripts/audit-shots.mjs 'http://127.0.0.1:8111/?demo=recovery'   # Vorher
+node scripts/audit-shots.mjs 'http://127.0.0.1:8112/?demo=recovery'   # Nachher
+```
+
+Das Skript nimmt `fullPage` auf; für den Vergleich wurde die 390er-Aufnahme auf 390 × 844 (DPR 2, 780 × 1688 px) beschnitten. Beide Läufe sind byte-identisch (`sha256 ddcbf356e5df7960c12a67a6055410feba75302df9694113789330db2c29bb7e`). Die Bytes unterscheiden sich von den sRGB-Detailaufnahmen (anderes Chromium-Farbprofil, kein zusätzlicher Warte-Schritt); sichtbar und im Layout sind sie identisch.
+
+| Vorher | Nachher |
+|---|---|
+| [vorher-heute-390-audit.png](screens/recovery-label/vorher-heute-390-audit.png) | [nachher-heute-390-audit.png](screens/recovery-label/nachher-heute-390-audit.png) |
+
 ---
 
 ## 6. Andere Labels und „Geplant"
@@ -192,8 +209,8 @@ Der CSSOM-Vergleich zeigt genau **eine** geänderte Deklaration: `.badge--band-g
 | Layout | Erholungskarte 350 × 431,39 px, Position 20 / 241,09 px; Label 41,34 × 24 px — vor/nach identisch |
 | Überlauf | `scrollWidth == clientWidth == 390`; kein horizontaler Überlauf |
 | Konsole | keine Konsolen- oder Seitenfehler |
-| Bilder | alle sechs Vorher/Nachher-Paare byte-identisch |
+| Bilder | alle sechs Detailpaare byte-identisch; das zusätzliche `audit-shots`-Paar ebenfalls (siehe 5.4) |
 | Status „Geplant" | neutral, `rgb(171, 184, 196)` auf `rgb(14, 24, 30)`, unverändert |
 | Umfang | nur eine CSS-Deklaration, Doku und Bilder; keine API-, Berechnungs-, Recovery-, Datenbank- oder Sync-Änderung |
 
-**Nicht geprüft / offen:** Die laufende Vorschau `http://127.0.0.1:8101` zeigt den Branch-Stand erst nach Merge und Deploy; die Belege stammen aus dem lokal gebauten Vorschau-Bau mit eingefrorener API-Antwort. Der echte 21-Nächte-Score ist weiterhin nicht vorhanden (2 von 21 Nächten); der Score-Zustand ist der dokumentierte Demo-Zustand aus D-60.
+**Nicht geprüft / offen:** Die Vorschau `http://127.0.0.1:8101` liefert nach dem Merge/Deploy den Nachher-Stand (`index-DnbPmkBP.css`, `index-DWScooWB.js`); die Messungen stammen aus dem eingefrorenen Vorschau-Bau, nicht aus dem Live-Betrieb. Der echte 21-Nächte-Score ist weiterhin nicht vorhanden (2 von 21 Nächten); der Score-Zustand ist der dokumentierte Demo-Zustand aus D-60.
