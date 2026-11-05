@@ -123,8 +123,8 @@ genau ein lokaler Lichtschein, ein Akzent, ruhige Navigation, keine Verläufe
   die Serif bleibt dem Datum im Kopf vorbehalten. Zahlen laufen mit
   `tabular-nums`, nicht in einer zweiten Schrift.
 - **Ein Akzent.** Türkis `#35DCC5` markiert den Ring, die aktive Navigation und
-  die ausgewählte Interaktion; Grün, Gelb, Orange und Rot erscheinen nur als
-  Befund der Erholung.
+  die ausgewählte Interaktion. Grün, Gelb, Orange und Rot bleiben Statusfarben
+  für Erholung, erledigte Einheiten und Fehler — nie Dekoration.
 - **Anthrazit statt Petrol.** Standardkarten liegen auf `#0B1318`, die
   Erholungskarte noch dunkler; der Seitenhintergrund ist dunkler als alle
   Karten. Unterschieden wird über Helligkeit und 1-px-Rand, nicht über Farbe.
