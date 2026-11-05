@@ -66,11 +66,12 @@
   --chart-neutral: #465763;
   --chart-neutral-strong: #78909e;
 
-  /* Abgeleitet: diese vier Werte stehen nicht wörtlich in DESIGN.md. */
+  /* Abgeleitet: diese Werte stehen nicht wörtlich in DESIGN.md. */
   --negative-soft: rgba(241, 120, 127, 0.12);
   --positive-soft: rgba(73, 222, 164, 0.12);
   --warning-soft: rgba(243, 190, 106, 0.12);
   --accent-line: rgba(53, 220, 197, 0.45);
+  --accent-wash: rgba(53, 220, 197, 0.045);
   --backdrop: rgba(3, 6, 9, 0.72);
   --bg-app-blur: rgba(5, 9, 13, 0.94);
 
@@ -92,10 +93,6 @@
   --text: var(--text-primary);
   --text-2: var(--text-secondary);
   --text-3: var(--text-muted);
-  --good: var(--band-good);
-  --mid: var(--band-mid);
-  --low: var(--band-low);
-  --bad: var(--band-bad);
 
   /* DESIGN.md 2.3 — System-UI plus Serif für das Datum; die Countdown-Zahlen folgen in Phase 3a. */
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Liberation Sans", Arial, sans-serif;
@@ -532,9 +529,11 @@ h1 {
 }
 
 .cd-n {
-  font-family: var(--serif);
-  font-size: 30px;
+  font-family: var(--sans);
+  font-size: 26px;
+  font-weight: 600;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .cd-u {
@@ -592,6 +591,9 @@ h2 {
 .recovery {
   display: flex;
   flex-direction: column;
+  padding: var(--space-6);
+  background-image: linear-gradient(180deg, var(--accent-wash), transparent 55%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
 }
 
 .recovery-side {
@@ -634,44 +636,61 @@ h2 {
 }
 
 .night-head {
-  margin: 0;
-  padding-bottom: var(--space-1);
-  font-family: var(--mono);
+  margin: 0 0 var(--space-2);
+  font-family: var(--sans);
   font-size: var(--text-micro);
-  color: var(--text-3);
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
-.night-list {
+.night-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0;
 }
 
-.night-list > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-2) 0;
-  border-top: 1px solid var(--line);
+.night-metric {
+  min-width: 0;
+  padding: 0 var(--space-4);
+  border-left: 1px solid var(--line);
 }
 
-.night-list dt {
-  font-size: 13px;
-  color: var(--text-2);
+.night-metric:first-child {
+  padding-left: 0;
+  border-left: 0;
 }
 
-.night-list dd {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
+.night-metric:last-child {
+  padding-right: 0;
+}
+
+.night-metric dt {
+  font-size: var(--text-micro);
+  color: var(--text-muted);
+}
+
+.night-metric dd {
+  margin: var(--space-1) 0 0;
+  font-family: var(--sans);
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.night-metric dd span {
+  margin-left: 4px;
+  font-size: var(--text-micro);
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 
 .dial {
   position: relative;
   display: grid;
   place-items: center;
-  padding: var(--space-3) 0 var(--space-1);
+  padding: var(--space-2) 0 0;
 }
 
 .dial svg {
@@ -829,7 +848,7 @@ h2 {
 }
 
 .vendor-note-bad {
-  color: var(--bad);
+  color: var(--negative);
 }
 
 .note {
@@ -854,33 +873,34 @@ h2 {
   grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: end;
   gap: 6px;
-  height: 64px;
+  height: 84px;
   border-bottom: 1px solid var(--line);
 }
 
 .week-bars i {
   display: block;
-  min-height: 3px;
-  border-radius: 2px 2px 0 0;
-  background: var(--chart-neutral);
+  min-height: 4px;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--chart-neutral-strong), var(--chart-neutral));
 }
 
 .week-bars i.peak {
-  background: var(--chart-neutral-strong);
+  background: linear-gradient(180deg, var(--text-muted), var(--chart-neutral-strong));
 }
 
 .week-bars i.today {
-  min-height: 5px;
-  background: var(--accent);
+  min-height: 6px;
+  background: linear-gradient(180deg, var(--accent-hover), var(--accent));
 }
 
 .week-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
-  margin-top: 6px;
-  font-family: var(--mono);
-  font-size: 9.5px;
+  margin-top: var(--space-2);
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: -0.01em;
   color: var(--text-3);
   text-align: center;
 }
@@ -1707,18 +1727,24 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     padding-left: 0;
   }
   .cd-n {
-    font-size: 22px;
+    font-size: 24px;
   }
   .cd-u {
-    font-size: 10px;
+    font-size: 11px;
   }
   .cd-name {
     margin-top: 2px;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.25;
   }
   .recovery {
-    padding: var(--space-4);
+    padding: var(--space-5);
+  }
+  .night-metric {
+    padding: 0 var(--space-3);
+  }
+  .night-metric:last-child {
+    padding-right: 0;
   }
   /* Der Ring wird kleiner, damit das Training ohne Scrollen sichtbar ist. */
   .dial svg {
@@ -1842,33 +1868,37 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 
 .train-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  min-height: 44px;
-  padding: 10px 0;
-  border: 0;
-  border-top: 1px solid var(--line);
-  background: transparent;
+  min-height: 56px;
+  margin-top: var(--space-2);
+  padding: 10px var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-inner);
+  background: var(--raised);
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background-color 160ms var(--ease), border-color 160ms var(--ease);
 }
 
-.train-row:hover .train-name {
-  color: var(--text);
+.train-row:hover {
+  background: var(--bg-surface-interactive);
+  border-color: var(--line-strong);
 }
 
 .train-ico {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-control);
-  color: var(--text-2);
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .train-main {
@@ -1880,6 +1910,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 
 .train-name {
   font-size: var(--text-body);
+  font-weight: 500;
   color: var(--text);
 }
 
@@ -1895,19 +1926,21 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 }
 
 .train-lab {
-  margin: 18px 0 0;
-  font-size: 11.5px;
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-micro);
   color: var(--text-3);
-}
-
-.train-lab + .train-row {
-  border-top: 0;
 }
 
 .train-empty {
-  margin: 12px 0 0;
-  font-size: 13px;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-label);
   color: var(--text-3);
+}
+
+.train-caret {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
 }
 
 /* ------------------------------------------------------------------ Einheit */

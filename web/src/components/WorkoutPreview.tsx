@@ -26,6 +26,9 @@ export function WorkoutPreview({
         <span className="train-meta">{meta}</span>
       </span>
       {trailing}
+      <span className="train-caret" aria-hidden="true">
+        ›
+      </span>
     </button>
   );
 }

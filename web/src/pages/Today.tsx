@@ -58,9 +58,11 @@ export function Today({ data }: { data: Overview }) {
       ? Math.round(recentScores.reduce((sum, entry) => sum + entry.score, 0) / recentScores.length)
       : null;
   const referenceScore = reference?.average ?? seriesAverage;
+  const baselineProgress =
+    reference && reference.minimum > 0 ? Math.min(1, reference.nights / reference.minimum) : null;
   const referenceText = reference
     ? reference.nights < reference.minimum
-      ? `Referenz ${reference.nights} von ${reference.minimum} Nächten`
+      ? `${reference.nights} von ${reference.minimum} Nächten`
       : referenceScore == null
         ? `Referenz ${reference.nights} von ${reference.target} Nächten`
         : `${reference.nights} von ${reference.target} Nächten · Schnitt ${referenceScore}`
@@ -96,7 +98,7 @@ export function Today({ data }: { data: Overview }) {
         title="Erholung"
         subtitle={
           recovery.label === "Referenz wird aufgebaut"
-            ? `Neuer Sensor · ${reference?.nights ?? 0} von ${reference?.minimum ?? 7} Nächten`
+            ? "Neuer Sensor"
             : recovery.score == null
               ? "Wartet auf die Nacht"
               : `Nacht vom ${fmtDate(today.as_of ?? today.date, {
@@ -106,11 +108,12 @@ export function Today({ data }: { data: Overview }) {
         }
       >
           <RecoveryDial
-          score={recovery.score}
-          band={recovery.band}
-          label={recovery.label}
-          referenceText={referenceText}
-          referenceScore={referenceScore}
+            score={recovery.score}
+            band={recovery.band}
+            label={recovery.label}
+            referenceText={referenceText}
+            referenceScore={referenceScore}
+            baselineProgress={baselineProgress}
           />
 
           <div className="recovery-side">
@@ -146,13 +149,25 @@ export function Today({ data }: { data: Overview }) {
           {showNightly && (
             <div className="night">
               <p className="night-head">Letzte Nacht</p>
-              <dl className="night-list">
-                {nightly.map((row) => (
-                  <div key={row.key}>
-                    <dt>{row.label}</dt>
-                    <dd>{valueWithUnit(row.value, row.unit)}</dd>
-                  </div>
-                ))}
+              <dl className="night-grid">
+                {nightly.map((row) => {
+                  const text =
+                    row.value == null
+                      ? "—"
+                      : row.unit === "h"
+                        ? fmtClock(row.value)
+                        : fmtNumber(row.value);
+                  const unit = row.value == null ? "" : row.unit;
+                  return (
+                    <div className="night-metric" key={row.key}>
+                      <dt>{row.label}</dt>
+                      <dd>
+                        {text}
+                        {unit && <span>{unit}</span>}
+                      </dd>
+                    </div>
+                  );
+                })}
               </dl>
             </div>
           )}
