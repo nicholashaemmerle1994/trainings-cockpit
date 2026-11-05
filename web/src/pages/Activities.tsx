@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { ActivityTable } from "../components/ActivityTable";
-import { EmptyState, Skeleton } from "../components/ui";
+import { ScreenHeader } from "../components/ScreenHeader";
+import { DashboardCard, EmptyState, Skeleton } from "../components/ui";
 import { sportLabel } from "../format";
 import type { ActivitiesResponse } from "../types";
 
@@ -30,12 +31,10 @@ export function Activities() {
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>Aktivitäten</h1>
-          <p className="meta">{data ? `${data.total} Einheiten` : "Verlauf"}</p>
-        </div>
-      </header>
+      <ScreenHeader
+        title="Aktivitäten"
+        meta={data ? `${data.total} Einheiten` : "Verlauf"}
+      />
 
       <div className="chips">
         <button
@@ -61,11 +60,11 @@ export function Activities() {
       {error && <div className="banner">{error}</div>}
 
       {!data && !error && (
-        <div className="card">
+        <DashboardCard>
           <Skeleton height={40} />
           <Skeleton height={40} />
           <Skeleton height={40} />
-        </div>
+        </DashboardCard>
       )}
 
       {data && data.items.length === 0 && (
@@ -74,9 +73,9 @@ export function Activities() {
 
       {data && data.items.length > 0 && (
         <>
-          <section className="card">
+          <DashboardCard>
             <ActivityTable items={data.items.slice(0, visible)} />
-          </section>
+          </DashboardCard>
           {data.items.length > visible && (
             <button
               type="button"

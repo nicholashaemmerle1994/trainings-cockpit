@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { RecoveryDial } from "../components/RecoveryDial";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
 import { UnitSheet } from "../components/UnitSheet";
 import { VendorScore } from "../components/VendorScore";
 import { WeekSheet } from "../components/WeekSheet";
-import { sportIcon } from "../components/sportIcon";
+import { WorkoutPreview } from "../components/WorkoutPreview";
+import { DashboardCard, MetricRow, StatusBadge } from "../components/ui";
 import { fmtClock, fmtDate, fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
 import type { Overview, RecoveryComponent, SessionRow, UnplannedUnit } from "../types";
 
@@ -72,12 +74,7 @@ export function Today({ data }: { data: Overview }) {
 
   return (
     <div className="page">
-      <header className="page-head">
-        <div>
-          <h1>{fmtDateLong(today.date)}</h1>
-          <p className="meta">Zuletzt synchronisiert {syncTime}</p>
-        </div>
-      </header>
+      <ScreenHeader date={fmtDateLong(today.date)} meta={`Zuletzt synchronisiert ${syncTime}`} />
 
       {data.goals.length > 0 && (
         <section className="countdowns">
@@ -93,23 +90,21 @@ export function Today({ data }: { data: Overview }) {
         </section>
       )}
 
-      <article className="card recovery">
-          <div className="card-head">
-          <div>
-            <h2>Erholung</h2>
-            <p className="card-sub">
-              {recovery.label === "Referenz wird aufgebaut"
-                ? `Neuer Sensor · ${reference?.nights ?? 0} von ${reference?.minimum ?? 7} Nächten`
-                : recovery.score == null
-                  ? "Wartet auf die Nacht"
-                  : `Nacht vom ${fmtDate(today.as_of ?? today.date, {
-                      day: "numeric",
-                      month: "long",
-                    })}`}
-            </p>
-          </div>
-          </div>
-
+      <DashboardCard
+        as="article"
+        className="recovery"
+        title="Erholung"
+        subtitle={
+          recovery.label === "Referenz wird aufgebaut"
+            ? `Neuer Sensor · ${reference?.nights ?? 0} von ${reference?.minimum ?? 7} Nächten`
+            : recovery.score == null
+              ? "Wartet auf die Nacht"
+              : `Nacht vom ${fmtDate(today.as_of ?? today.date, {
+                  day: "numeric",
+                  month: "long",
+                })}`
+        }
+      >
           <RecoveryDial
           score={recovery.score}
           band={recovery.band}
@@ -168,7 +163,7 @@ export function Today({ data }: { data: Overview }) {
             <VendorScore day={today.date} initial={today.vendor} score={recovery.score} />
           )}
           </div>
-      </article>
+      </DashboardCard>
 
       <section className="split">
         <TrainingCard
@@ -178,43 +173,22 @@ export function Today({ data }: { data: Overview }) {
           onOpenUnit={setOpenUnit}
         />
 
-        <aside className="card week">
-          <div className="card-head">
-            <div>
-              <h2>Letzte 7 Tage</h2>
-              <p className="card-sub">Umfang und Plan</p>
-            </div>
-          </div>
-
+        <DashboardCard as="aside" className="week" title="Letzte 7 Tage" subtitle="Umfang und Plan">
           <WeekStrip series={data.series.load} today={today.date} />
 
-          <button type="button" className="week-row week-row-link" onClick={() => setWeekOpen(true)}>
-            <span>Umfang</span>
-            <span>
-              {fmtSpan(today.load.week_seconds)}
-              <span className="week-caret" aria-hidden="true">
-                ›
-              </span>
-            </span>
-          </button>
-          <div className="week-row">
-            <span>Belastung</span>
-            <span>{fmtNumber(today.load.week_load)}</span>
-          </div>
-          <button type="button" className="week-row week-row-link" onClick={() => setWeekOpen(true)}>
-            <span>Einheiten</span>
-            <span>
-              {today.load.week_sessions}
-              <span className="week-caret" aria-hidden="true">
-                ›
-              </span>
-            </span>
-          </button>
-          <div className="week-row">
-            <span>Belastungsverhältnis</span>
-            <span>{fmtNumber(today.load.acwr, 2)}</span>
-          </div>
-      </aside>
+          <MetricRow
+            label="Umfang"
+            value={fmtSpan(today.load.week_seconds)}
+            onClick={() => setWeekOpen(true)}
+          />
+          <MetricRow label="Belastung" value={fmtNumber(today.load.week_load)} />
+          <MetricRow
+            label="Einheiten"
+            value={today.load.week_sessions}
+            onClick={() => setWeekOpen(true)}
+          />
+          <MetricRow label="Belastungsverhältnis" value={fmtNumber(today.load.acwr, 2)} />
+        </DashboardCard>
       </section>
 
       {openSession != null && (
@@ -263,61 +237,40 @@ function TrainingCard({
       ? "Nichts geplant"
       : `${count} ${count === 1 ? "Einheit" : "Einheiten"} · ${fmtMinutes(totalMinutes)}`;
 
-  const row = (session: SessionRow) => {
-    const Icon = sportIcon(session.sport);
-    return (
-      <button
-        type="button"
-        className="train-row"
-        key={session.id}
-        onClick={() => onOpen(session.id)}
-      >
-        <span className="train-ico">
-          <Icon size={18} />
-        </span>
-        <span className="train-main">
-          <span className="train-name">{session.name || session.sport_label}</span>
-          <span className="train-meta">{sessionMeta(session)}</span>
-        </span>
-        <span className="train-state">{session.done ? "Erledigt" : "Geplant"}</span>
-      </button>
-    );
-  };
+  const sessionRow = (session: SessionRow) => (
+    <WorkoutPreview
+      key={session.id}
+      sport={session.sport}
+      name={session.name || session.sport_label}
+      meta={sessionMeta(session)}
+      onClick={() => onOpen(session.id)}
+      trailing={
+        <StatusBadge tone={session.done ? "positive" : "neutral"}>
+          {session.done ? "Erledigt" : "Geplant"}
+        </StatusBadge>
+      }
+    />
+  );
 
   // Dazugekommen, ohne im Plan zu stehen: gleiche Zeile, andere Herkunft.
   const extraRow = (unit: UnplannedUnit) => {
-    const Icon = sportIcon(unit.sport);
     const parts = [fmtMinutes(unit.minutes)];
     if (unit.km) parts.push(fmtKm(unit.km));
     return (
-      <button
-        type="button"
-        className="train-row"
+      <WorkoutPreview
         key={`extra-${unit.row_id}`}
+        sport={unit.sport}
+        name={unit.name || unit.sport_label}
+        meta={parts.join(" · ")}
         onClick={() => onOpenUnit(unit.row_id)}
-      >
-        <span className="train-ico">
-          <Icon size={18} />
-        </span>
-        <span className="train-main">
-          <span className="train-name">{unit.name || unit.sport_label}</span>
-          <span className="train-meta">{parts.join(" · ")}</span>
-        </span>
-        <span className="train-state">Zusätzlich</span>
-      </button>
+        trailing={<StatusBadge>Zusätzlich</StatusBadge>}
+      />
     );
   };
 
   return (
-    <article className="card train">
-      <div className="card-head">
-        <div>
-          <h2>Training</h2>
-          <p className="card-sub">{subtitle}</p>
-        </div>
-      </div>
-
-      {count > 0 && today.map(row)}
+    <DashboardCard as="article" className="train" title="Training" subtitle={subtitle}>
+      {count > 0 && today.map(sessionRow)}
       {count === 0 && <p className="train-empty">Für heute steht nichts im Plan.</p>}
       {unplanned.map(extraRow)}
 
@@ -326,9 +279,9 @@ function TrainingCard({
           <p className="train-lab">
             Morgen · {fmtDate(tomorrow[0].date, { weekday: "long", day: "numeric", month: "long" })}
           </p>
-          {tomorrow.map(row)}
+          {tomorrow.map(sessionRow)}
         </>
       )}
-    </article>
+    </DashboardCard>
   );
 }
