@@ -1,5 +1,5 @@
 import { TABS, type Tab } from "../tabs";
-import { BrandMark, PreviewTag } from "./Brand";
+import { BrandMark, DemoTag, PreviewTag } from "./Brand";
 import { IconSync } from "./icons";
 
 export function Sidebar({
@@ -23,6 +23,7 @@ export function Sidebar({
         <BrandMark />
         Cockpit
         <PreviewTag />
+        <DemoTag />
       </div>
 
       <nav className="nav">

@@ -9,25 +9,34 @@ const CHROME =
     : "/usr/bin/chromium");
 
 const url = process.argv[2] ?? "http://127.0.0.1:8010/";
+const outDir = process.env.SHOT_OUT ?? "../data/screens";
+const prefix = process.env.SHOT_PREFIX ?? "audit";
+const scale = Number(process.env.SHOT_SCALE ?? "");
+const viewportOnly = process.env.SHOT_VIEWPORT === "1";
+const waitFor = process.env.SHOT_WAIT ?? ".dial-score";
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
   args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"],
 });
 
-const PAGES = ["Heute", "Verpflegung", "Aktivitäten"];
+const PAGES = (process.env.SHOT_PAGES ?? "Heute,Verpflegung,Aktivitäten")
+  .split(",")
+  .map((label) => label.trim())
+  .filter(Boolean);
 
 async function shoot(width, height, suffix, mobile) {
   const page = await browser.newPage();
   await page.setViewport({
     width,
     height,
-    deviceScaleFactor: mobile ? 2 : 1,
+    deviceScaleFactor: Number.isFinite(scale) && scale > 0 ? scale : mobile ? 2 : 1,
     isMobile: mobile,
     hasTouch: mobile,
   });
   await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
-  await page.waitForSelector(".dial-score", { timeout: 15000 }).catch(() => undefined);
+  await page.waitForSelector(waitFor, { timeout: 15000 }).catch(() => undefined);
+  await new Promise((resolve) => setTimeout(resolve, 500));
   for (const label of PAGES) {
     await page.evaluate((text) => {
       const button = [...document.querySelectorAll(".tabbar button, .nav button")].find((node) =>
@@ -37,7 +46,10 @@ async function shoot(width, height, suffix, mobile) {
     }, label);
     await new Promise((resolve) => setTimeout(resolve, 1400));
     const slug = label === "Aktivitäten" ? "aktivitaeten" : label.toLowerCase();
-    await page.screenshot({ path: `../data/screens/audit-${slug}-${suffix}.png`, fullPage: true });
+    await page.screenshot({
+      path: `${outDir}/${prefix}-${slug}-${suffix}.png`,
+      fullPage: !viewportOnly,
+    });
   }
   console.log("ok", suffix);
   await page.close();
