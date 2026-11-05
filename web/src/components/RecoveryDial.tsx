@@ -1,5 +1,6 @@
 import { BAND_COLORS } from "../format";
 import type { Band } from "../types";
+import { IconPulse } from "./icons";
 
 const SIZE = 220;
 const CENTER = SIZE / 2;
@@ -69,7 +70,12 @@ export function RecoveryDial({
             strokeDasharray={CIRCUMFERENCE}
             strokeDashoffset={offset}
             transform={`rotate(-90 ${CENTER} ${CENTER})`}
-            style={{ transition: "stroke-dashoffset 700ms cubic-bezier(0.22, 1, 0.36, 1)" }}
+            style={{
+              transition: "stroke-dashoffset 700ms cubic-bezier(0.22, 1, 0.36, 1)",
+              // Dezenter innerer Schein nur am Score-Ring (D-63); der
+              // Referenzaufbau bleibt neutral.
+              filter: score == null ? undefined : "drop-shadow(0 0 7px var(--recovery-ring-glow))",
+            }}
           />
         )}
 
@@ -94,6 +100,12 @@ export function RecoveryDial({
         </span>
         <span className="dial-ref">{referenceText}</span>
       </div>
+
+      {score != null && (
+        <div className="dial-center dial-center--pulse" aria-hidden="true">
+          <IconPulse size={24} />
+        </div>
+      )}
     </div>
   );
 }

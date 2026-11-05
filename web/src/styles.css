@@ -73,6 +73,11 @@
   --on-warning: #1c1406;
   --accent-line: rgba(53, 220, 197, 0.45);
   --accent-wash: rgba(53, 220, 197, 0.045);
+  /* Nur die Erholungskarte trägt den kräftigen Verlauf (D-63); der Ring
+     bekommt einen dezenten inneren Schein, andere Karten bleiben neutral. */
+  --recovery-wash: rgba(53, 220, 197, 0.28);
+  --recovery-wash-end: rgba(53, 220, 197, 0.05);
+  --recovery-ring-glow: rgba(53, 220, 197, 0.3);
   --backdrop: rgba(3, 6, 9, 0.72);
   --bg-app-blur: rgba(5, 9, 13, 0.94);
 
@@ -612,13 +617,34 @@ h2 {
 .recovery {
   display: flex;
   flex-direction: column;
-  background-image: linear-gradient(180deg, var(--accent-wash), transparent 55%);
+  background-image: linear-gradient(
+    180deg,
+    var(--recovery-wash) 0%,
+    var(--recovery-wash-end) 52%,
+    transparent 82%
+  );
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
+}
+
+/* Desktop: der Hero löst sich auf, Ring und Seite stehen im Kartenraster.
+   Mobil (siehe unten) wird daraus die zweispaltige Score-Anordnung. */
+.recovery-hero {
+  display: contents;
+}
+
+.recovery-summary {
+  display: none;
 }
 
 .recovery-side {
   display: flex;
   flex-direction: column;
+}
+
+/* Mit Score zeigt die Treiberzeile auf dem Desktop weiter heute/Schnitt/üblich;
+   mobil treten die Nachtwerte an ihre Stelle. */
+.recovery.has-score .night {
+  display: none;
 }
 
 @media (min-width: 1001px) {
@@ -699,11 +725,30 @@ h2 {
   color: var(--text-primary);
 }
 
-.night-metric dd span {
+.night-metric dd .night-unit {
   margin-left: 4px;
   font-size: var(--text-micro);
   font-weight: 400;
   color: var(--text-secondary);
+}
+
+/* Delta zur eigenen Baseline — nur mit Score, nur mobil (D-63). */
+.night-delta {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.night-delta--good {
+  color: var(--positive);
+}
+
+.night-delta--bad {
+  color: var(--negative);
 }
 
 .dial {
@@ -729,6 +774,52 @@ h2 {
   pointer-events: none;
 }
 
+/* Der Puls steht mobil im Ring; auf dem Desktop trägt der Ring weiter den Score. */
+.dial-center--pulse {
+  display: none;
+  color: var(--accent);
+}
+
+/* Zweispaltiger Score-Kopf, nur mobil (D-63). */
+.recovery-score {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+}
+
+.recovery-score__value {
+  font-family: var(--sans);
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+.recovery-score__unit {
+  font-size: var(--text-body);
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.recovery-summary .badge {
+  margin-top: var(--space-3);
+}
+
+.recovery-night {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-label);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.recovery-ref {
+  margin: 2px 0 0;
+  font-size: var(--text-micro);
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
 .dial-score {
   font-family: var(--mono);
   font-size: var(--text-hero);
@@ -749,9 +840,12 @@ h2 {
 }
 
 .dial-ref {
+  max-width: 160px;
   font-family: var(--mono);
   font-size: var(--text-micro);
+  line-height: 1.35;
   color: var(--text-3);
+  text-align: center;
 }
 
 .drivers {
@@ -1821,7 +1915,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     padding-right: 0;
   }
   /* Der Ring wird kleiner, damit das Training ohne Scrollen sichtbar ist. */
-  .dial svg {
+  .dial > svg {
     width: 186px;
     height: 186px;
   }
@@ -1830,6 +1924,51 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   }
   .dial-score.blank {
     font-size: 34px;
+  }
+  /* Score-Zustand mobil: Score links, Ring rechts, Nachtwerte darunter (D-63).
+     Ohne Score bleibt der Ring zentriert. */
+  .recovery-hero {
+    display: flex;
+    justify-content: center;
+  }
+  .recovery.has-score .card-head .card-sub {
+    display: none;
+  }
+  .recovery.has-score .recovery-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(120px, 38vw, 150px);
+    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+  }
+  .recovery.has-score .recovery-summary {
+    display: block;
+    min-width: 0;
+  }
+  .recovery.has-score .recovery-score__value {
+    font-size: clamp(44px, 14vw, 56px);
+  }
+  .recovery.has-score .dial {
+    padding: 0;
+  }
+  .recovery.has-score .dial > svg {
+    width: clamp(120px, 38vw, 150px);
+    height: clamp(120px, 38vw, 150px);
+  }
+  .recovery.has-score .dial-center:not(.dial-center--pulse) {
+    display: none;
+  }
+  .recovery.has-score .dial-center--pulse {
+    display: flex;
+  }
+  .recovery.has-score .drivers {
+    display: none;
+  }
+  .recovery.has-score .night {
+    display: block;
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--line);
   }
   .grid-2 {
     grid-template-columns: minmax(0, 1fr);
@@ -2154,6 +2293,13 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   border-color: transparent;
   background: var(--negative-soft);
   color: var(--negative);
+}
+
+/* Gefüllte Plakette: nur wo der Zustand selbst der Fokus ist (Erholung, D-63). */
+.badge--accent {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .profile {
