@@ -10,5 +10,9 @@
 services:
   cockpit:
     image: trainings-cockpit:develop
+    build:
+      context: .
+      args:
+        VITE_APP_VARIANT: preview
     ports: !override
       - "${TC_PORT:-8101}:8000"

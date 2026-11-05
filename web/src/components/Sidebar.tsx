@@ -1,3 +1,4 @@
+import { BrandMark, PreviewTag } from "./Brand";
 import { IconFuel, IconSync, IconToday } from "./icons";
 
 export type Tab = "today" | "fuel";
@@ -25,8 +26,9 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="brand-mark" />
+        <BrandMark />
         Cockpit
+        <PreviewTag />
       </div>
 
       <nav className="nav">
