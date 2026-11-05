@@ -83,7 +83,16 @@ export function MetricRow({
   return <div className={classes}>{content}</div>;
 }
 
-export type BadgeTone = "neutral" | "positive" | "warning" | "negative" | "accent";
+export type BadgeTone =
+  | "neutral"
+  | "positive"
+  | "warning"
+  | "negative"
+  | "band-top"
+  | "band-good"
+  | "band-mid"
+  | "band-low"
+  | "band-bad";
 
 /** Ein kleiner Statuschip; die Farbe sagt dasselbe wie der Text. */
 export function StatusBadge({

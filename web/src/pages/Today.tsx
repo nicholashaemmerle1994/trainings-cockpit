@@ -7,7 +7,7 @@ import { UnitSheet } from "../components/UnitSheet";
 import { VendorScore } from "../components/VendorScore";
 import { WeekSheet } from "../components/WeekSheet";
 import { WorkoutPreview } from "../components/WorkoutPreview";
-import { DashboardCard, MetricRow, StatusBadge } from "../components/ui";
+import { DashboardCard, MetricRow, StatusBadge, type BadgeTone } from "../components/ui";
 import {
   fmtClock,
   fmtDate,
@@ -18,11 +18,21 @@ import {
   fmtSigned,
   fmtSpan,
 } from "../format";
-import type { Overview, RecoveryComponent, SessionRow, UnplannedUnit } from "../types";
+import type { Band, Overview, RecoveryComponent, SessionRow, UnplannedUnit } from "../types";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
+
+/** Die Erholungsfarbe kommt aus der Band-Skala, nicht aus dem Akzent (D-66). */
+const BAND_TONES: Record<Band, BadgeTone> = {
+  "green-top": "band-top",
+  green: "band-good",
+  amber: "band-mid",
+  orange: "band-low",
+  red: "band-bad",
+  unknown: "neutral",
+};
 
 function driverPosition(component: RecoveryComponent): number {
   if (!component.baseline || component.today == null) return 50;
@@ -181,7 +191,7 @@ export function Today({ data }: { data: Overview }) {
                 <span className="recovery-score__value">{Math.round(recovery.score)}</span>
                 <span className="recovery-score__unit">/ 100</span>
               </p>
-              <StatusBadge tone="accent">{recovery.label}</StatusBadge>
+              <StatusBadge tone={BAND_TONES[recovery.band]}>{recovery.label}</StatusBadge>
               <p className="recovery-night">{nightText}</p>
               <p className="recovery-ref">{referenceText}</p>
             </div>
