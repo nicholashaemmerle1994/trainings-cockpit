@@ -20,10 +20,13 @@ function driverPosition(component: RecoveryComponent): number {
   return clamp(50 + (relative / 0.2) * 40, 6, 94);
 }
 
+function valueWithUnit(value: number | null | undefined, unit: string): string {
+  if (value == null) return "—";
+  return unit === "h" ? `${fmtClock(value)} h` : `${fmtNumber(value)} ${unit}`;
+}
+
 function driverToday(component: RecoveryComponent): string {
-  if (component.today == null) return "—";
-  if (component.unit === "h") return `${fmtClock(component.today)} h`;
-  return `${fmtNumber(component.today)} ${component.unit}`;
+  return valueWithUnit(component.today, component.unit);
 }
 
 function driverPlain(value: number | null | undefined, unit: string): string {
@@ -39,6 +42,13 @@ export function Today({ data }: { data: Overview }) {
 
   const recovery = today.recovery;
   const drivers = recovery.components.filter((component) => component.key !== "resp");
+  // Ohne Score fehlt die Treiberzeile – dann bleiben die Nachtwerte sichtbar (D-57).
+  const nightly = [
+    { key: "hrv", label: "HRV", value: today.hrv.value, unit: "ms" },
+    { key: "rhr", label: "Ruhepuls", value: today.rhr.value, unit: "bpm" },
+    { key: "sleep", label: "Schlaf", value: today.sleep.hours, unit: "h" },
+  ];
+  const showNightly = drivers.length === 0 && nightly.some((row) => row.value != null);
   const reference = recovery.reference ?? null;
   const recentScores = data.series.recovery.slice(-21);
   const seriesAverage =
@@ -136,6 +146,20 @@ export function Today({ data }: { data: Overview }) {
               ))}
             </tbody>
           </table>
+          )}
+
+          {showNightly && (
+            <div className="night">
+              <p className="night-head">Letzte Nacht</p>
+              <dl className="night-list">
+                {nightly.map((row) => (
+                  <div key={row.key}>
+                    <dt>{row.label}</dt>
+                    <dd>{valueWithUnit(row.value, row.unit)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           )}
 
           <p className="note">{recovery.explanation}</p>
