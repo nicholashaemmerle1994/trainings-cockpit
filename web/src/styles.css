@@ -211,7 +211,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-6) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
   background: var(--side);
   border-right: 1px solid var(--line);
 }
@@ -293,17 +293,17 @@ a {
 }
 
 .nav button:hover {
+  background: var(--bg-surface-raised);
   color: var(--text);
 }
 
 .nav button.active {
-  background: var(--raised);
+  background: transparent;
   color: var(--text);
-  box-shadow: inset 0 1px 0 var(--line-strong);
 }
 
 .nav button.active svg {
-  color: var(--text-2);
+  color: var(--accent);
 }
 
 .side-foot {
@@ -352,9 +352,9 @@ a {
 .main {
   width: 100%;
   min-width: 0;
-  max-width: 1360px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: var(--space-8) var(--space-8) 64px;
+  padding: var(--space-8) var(--space-8) calc(64px + env(safe-area-inset-bottom));
 }
 
 /* Auf dem Handy fehlt die Seitenleiste; dort steht die Plakette im Inhalt. */
@@ -476,9 +476,19 @@ h1 {
 .btn:focus-visible,
 .nav button:focus-visible,
 .chip:focus-visible,
-.link-btn:focus-visible {
+.link-btn:focus-visible,
+.tabbar button:focus-visible,
+.train-row:focus-visible,
+.mode-option:focus-visible,
+.icon-btn:focus-visible,
+.side-sync:focus-visible,
+.unit-toggle button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.tabbar button:focus-visible {
+  outline-offset: -2px;
 }
 
 .link-btn {
@@ -552,7 +562,7 @@ h1 {
 
 .card {
   min-width: 0;
-  padding: var(--space-5);
+  padding: var(--space-6);
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r-card);
@@ -591,7 +601,6 @@ h2 {
 .recovery {
   display: flex;
   flex-direction: column;
-  padding: var(--space-6);
   background-image: linear-gradient(180deg, var(--accent-wash), transparent 55%);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
 }
@@ -1698,6 +1707,9 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   .page {
     gap: var(--space-4);
   }
+  .card {
+    padding: var(--space-5);
+  }
   .screen-head {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
@@ -1705,6 +1717,13 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   }
   .screen-head__date {
     font-size: var(--text-editorial-sm);
+  }
+  .chips {
+    gap: var(--space-2);
+  }
+  .chip {
+    height: 44px;
+    padding: 0 14px;
   }
   .btn {
     justify-self: start;
@@ -1736,9 +1755,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     margin-top: 2px;
     font-size: 12px;
     line-height: 1.25;
-  }
-  .recovery {
-    padding: var(--space-5);
   }
   .night-metric {
     padding: 0 var(--space-3);
@@ -1846,14 +1862,19 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     align-items: center;
     gap: var(--space-1);
     flex: 1;
+    min-height: 44px;
     padding: 6px 0;
     border: 0;
+    border-radius: var(--r-control);
     background: transparent;
     color: var(--text-3);
-    font-size: 10.5px;
+    font-size: 11px;
+    font-weight: 400;
+    transition: color 140ms var(--ease);
   }
   .tabbar button.active {
     color: var(--text);
+    font-weight: 500;
   }
   .tabbar button.active svg {
     color: var(--accent);
@@ -1941,6 +1962,24 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   font-size: 16px;
   line-height: 1;
   color: var(--text-muted);
+}
+
+@media (max-width: 360px) {
+  /* Die Zeile bekommt auf sehr schmalen Geräten eine zweite Zeile für den
+     Status; der Name bleibt in voller Breite. */
+  .train-row {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: var(--space-2) var(--space-3);
+  }
+  .train-caret {
+    display: none;
+  }
+  .train-row > .badge,
+  .train-row > .train-state {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: var(--space-1);
+  }
 }
 
 /* ------------------------------------------------------------------ Einheit */
