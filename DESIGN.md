@@ -4,7 +4,7 @@
 >
 > **Gilt für:** alle neuen und geänderten Oberflächen — Seiten, Tabs, Karten, Blätter, Dialoge, Diagramme und Zustände
 >
-> **Bezug:** D-59 (dieses Dokument ist das Designsystem), D-63 (Erholungskarte), D-64 (dunkle Fläche, lokaler Lichtschein), D-65 (Ringstrich 8)
+> **Bezug:** D-59 (dieses Dokument ist das Designsystem), D-63 (Erholungskarte), D-64 (dunkle Fläche, lokaler Lichtschein), D-65 (Ringstrich 8), D-66 (Kartenrampe, gedämpfte Statuslabels, ruhige Navigation)
 >
 > **Optische Referenz:** `docs/design/cockpit-premium-reference.png` — Stilvorlage, keine Datenquelle
 
@@ -56,26 +56,28 @@ Türkis (`--accent`) ist kein Dekor, sondern Bedeutung. Es erscheint gezielt fü
 - die **aktive Navigation** (Icon),
 - die **ausgewählte Interaktion** (gewählter Modus, Fokusring, Primäraktion).
 
-**Hierarchie:** Ring und Kennzahlen tragen sie. Titel, Werte und die große Zahl bleiben `--text-primary`. Sekundärtext bleibt neutral (`--text-secondary`, `--text-muted`) und wird weder abgedunkelt noch grünlich getönt. Pro Abschnitt ein Akzentelement; Statuslabels (auch das gefüllte der Erholung) zählen als Status, nicht als zweiter Akzent.
+**Hierarchie:** Ring und Kennzahlen tragen sie. Titel, Werte und die große Zahl bleiben `--text-primary`. Sekundärtext bleibt neutral (`--text-secondary`, `--text-muted`) und wird weder abgedunkelt noch grünlich getönt. Pro Abschnitt ein Akzentelement; Statuslabels zählen als Status, nicht als zweiter Akzent — sie sind gedämpft (Abschnitt 5).
 
 ## 5. Statuslabels
 
-Statuslabels sind kleine Pillen (`.badge`, Höhe 24, `--radius-pill`, 12 px/500). Standard ist eine **gedämpfte, semantisch passende Hintergrundtönung** mit kontrastreicher Schrift:
+Statuslabels sind kleine Pillen (`.badge`, Höhe 24, `--radius-pill`, 12 px/500). Jede trägt eine **gedämpfte, semantisch passende Hintergrundtönung** mit kontrastreicher Schrift:
 
 - positive Bedeutung: `--positive-soft` mit `--positive`,
 - Hinweis: `--warning-soft` mit `--warning`,
 - kritisch: `--negative-soft` mit `--negative`,
 - ohne Bewertung: `--bg-surface-raised` mit `--text-secondary`.
 
-Die Tönungen liegen bei 12 % der Statusfarbe. Statusfarben bleiben semantisch, nicht dekorativ; die Bedeutung steht immer auch im Text („Gut", „Geplant", „Erledigt", „Zusätzlich").
+Die Tönungen liegen bei 12 % der Statusfarbe; die Schrift steht in der vollen Statusfarbe. Statusfarben bleiben semantisch, nicht dekorativ; die Bedeutung steht immer auch im Text („Gut", „Geplant", „Erledigt", „Zusätzlich").
 
-Die vollflächig gefüllte Akzentpille (`--accent`/`--on-accent`) ist **kein Standard**. Sie bleibt allein dem Erholungszustand vorbehalten, weil dort der Zustand selbst der Fokus ist (D-63); neue Features nutzen die gedämpften Töne.
+**Erholungsband.** Die Farbe des Erholungsstatus kommt aus der Band-Skala, nicht aus dem Akzent: `--band-top-soft`/`--band-top`, `--positive-soft`/`--band-good`, `--warning-soft`/`--band-mid`, `--band-low-soft`/`--band-low`, `--negative-soft`/`--band-bad`. Auch das „Gut" der Erholungskarte ist eine gedämpfte Pille; die vollflächig gefüllte Akzentpille entfällt damit als Statuslabel überall. Die gemessenen Kontraste liegen bei 5,9:1 bis 11,1:1 (Nachweis: `docs/design/karten-status-navigation.md`).
+
+Die Abzeichen der Bauvariante (`.brand-tag` „Vorschau" und „Demo") sind **keine Statuslabels**; sie bleiben gefüllt, weil sie die Herkunft des Baus markieren (D-56, D-60).
 
 ## 6. Navigation
 
 Zwei Formen, eine Sprache: Seitenleiste ab 1001 px, Tab-Leiste darunter (≤ 1000 px).
 
-- **Aktiv:** türkises Icon, helle Beschriftung (`--text-primary`, 500); inaktiv `--text-muted`, 400.
+- **Aktiv:** türkises Icon, helle Beschriftung (`--text-primary`, 500); inaktiv `--text-muted`, 400. Seitenleiste und Tab-Leiste folgen denselben Werten.
 - Ein sehr schwacher Schein unmittelbar am Icon ist optional (maximal ca. 6 px Blur, 8–12 % Deckkraft). **Derzeit trägt kein Navigationselement einen Schein.**
 - Kein Balken, kein Halo, keine eingefärbte Navigationsfläche, kein farbiger Volltab.
 - Icon 18 px, Touchfläche mindestens 44 × 44 CSS-px, gleiche Ausrichtung und derselbe Iconstil für alle Einträge.
@@ -132,11 +134,11 @@ Quelle: `web/src/styles.css` (`:root`), Stand 05.11.2026. Änderungen zuerst im 
 | Token | Wert |
 |---|---|
 | `--bg-app` | `#05090d` |
-| `--bg-surface` | `#0d171d` |
-| `--bg-surface-raised` | `#102229` |
-| `--bg-surface-interactive` | `#132b31` |
-| `--border-subtle` | `#203039` |
-| `--border-strong` | `#2d4650` |
+| `--bg-surface` | `#0b1318` |
+| `--bg-surface-raised` | `#0e181e` |
+| `--bg-surface-interactive` | `#121f26` |
+| `--border-subtle` | `#1c272e` |
+| `--border-strong` | `#2a373f` |
 | `--text-primary` | `#f6f8fa` |
 | `--text-secondary` | `#abb8c4` |
 | `--text-muted` | `#82919f` |
@@ -156,6 +158,8 @@ Quelle: `web/src/styles.css` (`:root`), Stand 05.11.2026. Änderungen zuerst im 
 | `--positive-soft` | `rgba(73, 222, 164, 0.12)` |
 | `--warning-soft` | `rgba(243, 190, 106, 0.12)` |
 | `--negative-soft` | `rgba(241, 120, 127, 0.12)` |
+| `--band-top-soft` | `rgba(126, 240, 192, 0.12)` |
+| `--band-low-soft` | `rgba(232, 146, 95, 0.12)` |
 | `--on-warning` | `#1c1406` |
 | `--accent-line` | `rgba(53, 220, 197, 0.45)` |
 | `--accent-wash` | `rgba(53, 220, 197, 0.045)` — nur Kleinteile, derzeit ungenutzt |
@@ -192,7 +196,7 @@ Jedes Band ist eine semantische Stufe der Erholungsskala (sehr gut, gut, mittel,
 
 **Erholungskarte.** Wichtigste Karte; Ring oder Score ist der eine Schwerpunkt.
 
-- *Mit Score, mobil (≤ 1000 px):* zweispaltig `minmax(0, 1fr) clamp(120px, 38vw, 150px)` — bei 390 px rund 148 px Ring. Links Score 56 px (mobil 44–56) mit `/ 100`, Statusplakette, „Nacht vom …", Referenzzeile; rechts der Ring mit Puls-Icon. Darunter eine Trennlinie und HRV, Ruhepuls, Schlaf **dreispaltig**, je Wert, Einheit und Delta zur eigenen Baseline (aus vorhandenen Feldern gerechnet, nichts erfunden).
+- *Mit Score, mobil (≤ 1000 px):* zweispaltig `minmax(0, 1fr) clamp(120px, 38vw, 150px)` — bei 390 px rund 148 px Ring. Links Score 56 px (mobil 44–56) mit `/ 100`, gedämpfte Statusplakette im Bandton (12 %), „Nacht vom …", Referenzzeile; rechts der Ring mit Puls-Icon. Darunter eine Trennlinie und HRV, Ruhepuls, Schlaf **dreispaltig**, je Wert, Einheit und Delta zur eigenen Baseline (aus vorhandenen Feldern gerechnet, nichts erfunden).
 - *Mit Score, Desktop (≥ 1001 px):* Raster `minmax(240px, 300px) minmax(0, 1fr)`; Ring links, rechts die Treibertabelle heute / Schnitt / üblich mit Skalenmarke; die Nachtwerte treten dort nicht zusätzlich auf.
 - *Ohne Score und ohne Treiberzeile:* Der Ring bleibt zentriert, „—" statt Zahl, Label und „x von 21 Nächten"; der Fortschritt ist neutral (`--chart-neutral-strong`), nie grün und nie türkis. Die Nachtwerte treten dreispaltig an die Stelle der Treiberzeile (D-58), ohne Delta. Kein erfundener Score, kein positiver Status.
 - *Ring:* `SIZE` 220 im viewBox, `RING` 92, `STROKE` 8, `strokeLinecap="round"`, Start oben; Spur `--bg-surface-raised`, Fortschritt mit Score `--accent`, ohne Score `--chart-neutral-strong`; Schein nur mit Score: `drop-shadow(0 0 7px var(--recovery-ring-glow))`; Referenzmarke als Linie mit Strichstärke 2 in `--text-muted`. Gerendert mobil: 186 px ohne Score, 148 px mit Score bei 390 px. `role="img"` und sprechendes `aria-label`.
@@ -270,4 +274,4 @@ Daten werden so gezeigt, wie sie sind — vollständig, benannt und vergleichbar
 4. Jede bewusste Abweichung vor der Umsetzung als **`D-xx`** in `docs/ENTSCHEIDUNGEN.md` festhalten (Grund, Umfang, Fundstellen) und danach die Werte hier nachziehen.
 5. Ändert sich ein Token, zuerst den Code, dann Abschnitt 10 — nie umgekehrt.
 
-**Anti-Patterns.** Türkis oder Petrol als Kartenfläche; flächige Verläufe über Karten; leuchtende Ränder; türkise Trenner oder flächige Sekundärflächen; Licht auf normalen Karten; Dimmen von Karte oder Inhalt statt der dekorativen Ebene; vollflächig leuchtende Statuspillen als Standard; eingefärbte Navigationsflächen, Balken oder Halos; Neon, Bloom, Glassmorphism; fremde App-Layouts 1:1; Emojis oder gemischte Iconstile; Monospace als UI-Schrift; erfundene Scores, Demo-Werte im stabilen Bau, `0` statt `null`; graue, ausgewaschene Sekundärtexte; ein zweiter Fokus pro Abschnitt.
+**Anti-Patterns.** Türkis oder Petrol als Kartenfläche; flächige Verläufe über Karten; leuchtende Ränder; türkise Trenner oder flächige Sekundärflächen; Licht auf normalen Karten; Dimmen von Karte oder Inhalt statt der dekorativen Ebene; vollflächig gefüllte Statuspillen (auch die Erholung); eingefärbte Navigationsflächen, Balken oder Halos; Neon, Bloom, Glassmorphism; fremde App-Layouts 1:1; Emojis oder gemischte Iconstile; Monospace als UI-Schrift; erfundene Scores, Demo-Werte im stabilen Bau, `0` statt `null`; graue, ausgewaschene Sekundärtexte; ein zweiter Fokus pro Abschnitt.

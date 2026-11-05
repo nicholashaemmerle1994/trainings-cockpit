@@ -47,11 +47,11 @@
 
   /* DESIGN.md 2.1 — Farben (Dark Mode) */
   --bg-app: #05090d;
-  --bg-surface: #0d171d;
-  --bg-surface-raised: #102229;
-  --bg-surface-interactive: #132b31;
-  --border-subtle: #203039;
-  --border-strong: #2d4650;
+  --bg-surface: #0b1318;
+  --bg-surface-raised: #0e181e;
+  --bg-surface-interactive: #121f26;
+  --border-subtle: #1c272e;
+  --border-strong: #2a373f;
   --text-primary: #f6f8fa;
   --text-secondary: #abb8c4;
   --text-muted: #82919f;
@@ -88,6 +88,8 @@
      Orange ist die zusätzliche Stufe für „Erholungsbedarf" (35–49),
      Mint die fünfte für „Sehr gut erholt" (ab 85). */
   --band-top: #7ef0c0;
+  --band-top-soft: rgba(126, 240, 192, 0.12);
+  --band-low-soft: rgba(232, 146, 95, 0.12);
   --band-good: var(--positive);
   --band-mid: var(--warning);
   --band-low: #e8925f;
@@ -299,7 +301,7 @@ a {
   border: 0;
   border-radius: var(--r-control);
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-muted);
   font-size: 14px;
   text-align: left;
   transition: background-color 140ms var(--ease), color 140ms var(--ease);
@@ -318,6 +320,7 @@ a {
 .nav button.active {
   background: transparent;
   color: var(--text);
+  font-weight: 500;
 }
 
 .nav button.active svg {
@@ -1259,7 +1262,7 @@ table.list .load {
 
 .mode-option.active {
   border-color: var(--accent-line);
-  background: var(--accent-soft);
+  background: var(--bg-surface-interactive);
 }
 
 .mode-option.active strong {
@@ -2315,11 +2318,35 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   color: var(--negative);
 }
 
-/* Gefüllte Plakette: nur wo der Zustand selbst der Fokus ist (Erholung, D-63). */
-.badge--accent {
+/* Erholungsband: dieselbe gedämpfte Fläche, die Farbe kommt aus der Skala (D-66). */
+.badge--band-top {
   border-color: transparent;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--band-top-soft);
+  color: var(--band-top);
+}
+
+.badge--band-good {
+  border-color: transparent;
+  background: var(--positive-soft);
+  color: var(--band-good);
+}
+
+.badge--band-mid {
+  border-color: transparent;
+  background: var(--warning-soft);
+  color: var(--band-mid);
+}
+
+.badge--band-low {
+  border-color: transparent;
+  background: var(--band-low-soft);
+  color: var(--band-low);
+}
+
+.badge--band-bad {
+  border-color: transparent;
+  background: var(--negative-soft);
+  color: var(--band-bad);
 }
 
 .profile {
