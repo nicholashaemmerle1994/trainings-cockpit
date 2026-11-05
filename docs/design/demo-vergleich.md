@@ -196,10 +196,10 @@ liegen darüber.
 - **Keine** Änderung an `api.ts`, `types.ts`, Backend, Berechnung, Recovery,
   Datenbank oder Sync. Die Demo ersetzt nur Anzeigedaten im Frontend.
 - **Stabiler Bau:** `npm run build` ohne `VITE_APP_VARIANT` → 53 Module,
-  CSS 32,65 kB, JS 265,04 kB; im JS-Bundle kommen weder „Demo" noch die
+  CSS 32,68 kB, JS 265,04 kB; im JS-Bundle kommen weder „Demo" noch die
   Demo-Werte vor. `?demo=recovery` im stabilen Bau geprüft: kein
   `.brand-tag.demo`, Score „—", kein „82" im Text. Vorschau-Bau: 53 Module,
-  CSS 32,65 kB, JS 266,34 kB, Demo-Zweig enthalten.
+  CSS 32,68 kB, JS 266,35 kB, Demo-Zweig enthalten.
 
 ---
 
@@ -208,8 +208,8 @@ liegen darüber.
 | Punkt | Ergebnis |
 |---|---|
 | `uv run pytest` | 135 passed, 1 Warnung |
-| `npm run build` (stabil) | grün, 53 Module, CSS 32,65 kB, JS 265,04 kB |
-| `VITE_APP_VARIANT=preview npm run build` | grün, 53 Module, CSS 32,65 kB, JS 266,34 kB |
+| `npm run build` (stabil) | grün, 53 Module, CSS 32,68 kB, JS 265,04 kB |
+| `VITE_APP_VARIANT=preview npm run build` | grün, 53 Module, CSS 32,68 kB, JS 266,35 kB |
 | Demo nur in Vorschau + `?demo=recovery` | ja; stabiler Bau im DOM ohne Demo, Score „—" |
 | Abzeichen „Demo" sichtbar | ja, mobil im Kopf und Desktop in der Seitenleiste, neben „Vorschau" |
 | Keine API-/Berechnungs-/Typänderung | ja; nur `web/src/demo.ts` und Anzeige-Verdrahtung |

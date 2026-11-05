@@ -70,6 +70,7 @@
   --negative-soft: rgba(241, 120, 127, 0.12);
   --positive-soft: rgba(73, 222, 164, 0.12);
   --warning-soft: rgba(243, 190, 106, 0.12);
+  --on-warning: #1c1406;
   --accent-line: rgba(53, 220, 197, 0.45);
   --accent-wash: rgba(53, 220, 197, 0.045);
   --backdrop: rgba(3, 6, 9, 0.72);
@@ -270,7 +271,7 @@ a {
    deutlich abweichendes Abzeichen neben der Vorschau-Plakette. */
 .brand-tag.demo {
   background: var(--warning);
-  color: #1c1406;
+  color: var(--on-warning);
 }
 
 .nav {
