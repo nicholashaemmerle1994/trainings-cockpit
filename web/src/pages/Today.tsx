@@ -42,7 +42,7 @@ export function Today({ data }: { data: Overview }) {
 
   const recovery = today.recovery;
   const drivers = recovery.components.filter((component) => component.key !== "resp");
-  // Ohne Score fehlt die Treiberzeile – dann bleiben die Nachtwerte sichtbar (D-57).
+  // Ohne Score fehlt die Treiberzeile – dann bleiben die Nachtwerte sichtbar (D-58).
   const nightly = [
     { key: "hrv", label: "HRV", value: today.hrv.value, unit: "ms" },
     { key: "rhr", label: "Ruhepuls", value: today.rhr.value, unit: "bpm" },
