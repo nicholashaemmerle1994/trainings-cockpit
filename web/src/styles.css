@@ -544,6 +544,48 @@ h2 {
   .recovery-side .drivers {
     margin-top: 0;
   }
+  .recovery-side .night {
+    margin-top: 0;
+  }
+}
+
+/* Ohne Score: die Nachtwerte an der Stelle der Treiberzeile (D-58). */
+.night {
+  margin-top: 20px;
+}
+
+.night-head {
+  margin: 0;
+  padding-bottom: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.night-list {
+  margin: 0;
+}
+
+.night-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.night-list dt {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.night-list dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 
 .dial {
