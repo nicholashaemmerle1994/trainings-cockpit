@@ -1,8 +1,16 @@
 import puppeteer from "puppeteer-core";
 
+// Am Mac liegt Chrome im App-Bundle, auf dem Homeserver ist Chromium
+// installiert. CHROME_PATH überschreibt beides.
+const CHROME =
+  process.env.CHROME_PATH ??
+  (process.platform === "darwin"
+    ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    : "/usr/bin/chromium");
+
 const url = process.argv[2] ?? "http://127.0.0.1:8010/";
 const browser = await puppeteer.launch({
-  executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  executablePath: CHROME,
   headless: true,
   args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"],
 });
