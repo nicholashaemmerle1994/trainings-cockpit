@@ -125,13 +125,14 @@ genau ein lokaler Lichtschein, ein Akzent, ruhige Navigation, keine Verläufe
 - **Ein Akzent.** Türkis `#35DCC5` markiert den Ring, die aktive Navigation und
   die ausgewählte Interaktion; Grün, Gelb, Orange und Rot erscheinen nur als
   Befund der Erholung.
-- **Anthrazit statt Petrol.** Karten liegen auf `#0B1318`, der Seitenhintergrund
-  ist dunkler; unterschieden wird über Helligkeit und 1-px-Rand, nicht über
-  Farbe.
+- **Anthrazit statt Petrol.** Standardkarten liegen auf `#0B1318`, die
+  Erholungskarte noch dunkler; der Seitenhintergrund ist dunkler als alle
+  Karten. Unterschieden wird über Helligkeit und 1-px-Rand, nicht über Farbe.
 - **Genau ein Lichtschein.** Er liegt lokal und weich auf der Erholungskarte;
   alle anderen Karten bleiben flach.
-- **Kein Diagramm-Paket.** Die Lastkurve ist von Hand als SVG gezeichnet;
-  recharts ist raus, das Bündel liegt bei 266,82 kB JavaScript und 35,55 kB CSS.
+- **Kein Diagramm-Paket.** Wochenstreifen und Verlaufsdiagramme sind ohne
+  Chart-Bibliothek gebaut; recharts ist raus, das Bündel liegt bei 266,82 kB
+  JavaScript und 35,55 kB CSS.
 
 ## Datenquellen
 
