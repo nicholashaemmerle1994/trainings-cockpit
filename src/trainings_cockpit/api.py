@@ -623,10 +623,14 @@ def _persist_confirmed(conn: Any, outcome: SaveOutcome) -> None:
 def _remove_missing_event(conn: Any, outcome: SaveOutcome) -> None:
     """Eine lokal übrig gebliebene Zeile zu einem verschwundenen Event räumen.
 
-    Meldet die Quelle 404, ist der lokale Eintrag nachweislich tot. Er darf
-    nicht als Karteileiche im Planer stehen bleiben, auch wenn der Vorgang
-    selbst als endgültig gescheitert abgeschlossen wird.
+    Nur ein endgültig gescheiterter Vorgang mit 404 des adressierten Events
+    belegt, dass der lokale Eintrag tot ist. Ein 404 der externen Suche oder
+    ein noch offener Vorgang räumt nichts. Die Zeile darf nicht als
+    Karteileiche im Planer stehen bleiben, auch wenn der Vorgang selbst als
+    gescheitert abgeschlossen wird.
     """
+    if outcome.status.state is not SaveState.FAILED:
+        return
     if outcome.status.error is not SaveErrorKind.NOT_FOUND:
         return
     snapshot = outcome.snapshot

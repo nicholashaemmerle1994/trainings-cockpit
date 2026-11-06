@@ -547,7 +547,13 @@ class EventWriteService:
                 "Die lesende Zuordnung ist noch nicht möglich.",
                 remote_id=attempted_id,
                 external_id=external_id,
-                error=classified.error or SaveErrorKind.RECONCILIATION,
+                # Ein Fehler der Suche belegt nicht, dass das adressierte
+                # Event fehlt. NOT_FOUND darf nur der direkte Read melden.
+                error=(
+                    SaveErrorKind.RECONCILIATION
+                    if classified.error is SaveErrorKind.NOT_FOUND
+                    else classified.error or SaveErrorKind.RECONCILIATION
+                ),
                 reconciliation_required=True,
             )
         if matches:
