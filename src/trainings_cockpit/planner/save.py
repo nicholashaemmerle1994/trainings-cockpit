@@ -91,6 +91,7 @@ class SaveStatus:
     error: SaveErrorKind | None = None
     retryable: bool = False
     reconciliation_required: bool = False
+    conflict: Any | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, SaveState):
@@ -109,6 +110,7 @@ class SaveStatus:
         return self.state in LOCKED_STATES
 
     def as_dict(self) -> dict[str, Any]:
+        conflict = getattr(self.conflict, "as_dict", None)
         return {
             "state": self.state.value,
             "message": self.message,
@@ -119,6 +121,7 @@ class SaveStatus:
             "retryable": self.retryable,
             "reconciliation_required": self.reconciliation_required,
             "locked": self.locked,
+            "conflict": conflict() if callable(conflict) else None,
         }
 
 
@@ -226,12 +229,16 @@ class WriteResult:
     retryable: bool = False
     reconciliation_required: bool = False
     confirmed: Any | None = None
+    conflict: Any | None = None
+    remote_raw: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, SaveState):
             object.__setattr__(self, "state", SaveState(self.state))
         if self.error is not None and not isinstance(self.error, SaveErrorKind):
             object.__setattr__(self, "error", SaveErrorKind(self.error))
+        if self.remote_raw is not None and not isinstance(self.remote_raw, Mapping):
+            raise TypeError("remote_raw muss ein Mapping oder None sein.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,6 +281,7 @@ def classify_exception(exc: BaseException) -> WriteResult:
     """
     status = getattr(exc, "status_code", None)
     message = str(exc) or type(exc).__name__
+    conflict = getattr(exc, "conflict", None)
     if isinstance(exc, (TimeoutError, ConnectionError, httpx.TimeoutException)):
         return WriteResult(
             SaveState.UNKNOWN,
@@ -294,6 +302,7 @@ def classify_exception(exc: BaseException) -> WriteResult:
             SaveState.FAILED,
             "Die Einheit existiert remote nicht mehr. Es wird nichts neu angelegt.",
             error=SaveErrorKind.NOT_FOUND,
+            conflict=conflict,
         )
     if status in (409, 412):
         return WriteResult(
@@ -301,6 +310,7 @@ def classify_exception(exc: BaseException) -> WriteResult:
             "Die Remote-Einheit wurde zwischenzeitlich geändert. "
             "Der lokale Entwurf bleibt erhalten.",
             error=SaveErrorKind.CONFLICT,
+            conflict=conflict,
         )
     if status in (400, 422):
         return WriteResult(
@@ -607,6 +617,7 @@ class SaveCoordinator:
             error=result.error,
             retryable=result.retryable,
             reconciliation_required=result.reconciliation_required,
+            conflict=result.conflict,
         )
         with self._lock:
             self._status[operation.key] = status
