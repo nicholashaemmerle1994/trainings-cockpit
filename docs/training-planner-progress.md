@@ -1,0 +1,494 @@
+# Trainingsplaner — Arbeitsnachweis P00
+
+**Stand:** 06.11.2026  
+**Paket:** P00 — Repository und bestehenden Datenfluss erfassen  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `7153a19`  
+**Umfang:** Nur Bestandsaufnahme. Keine Produktcode-Änderung, keine Datenbankänderung, keine API-Zugangsdaten ausgegeben.
+
+> **Arbeitskopie-Hinweis:** Die lokale `data/cockpit.db` dieser Umgebung enthält
+> 0 Aktivitäten, 0 Events und 2 Wellness-Zeilen. Reale historische Abdeckung ist
+> daraus nicht ablesbar. Die Aussagen zu älteren Wochen stützen sich deshalb auf
+> den tatsächlichen Code, die vorhandenen Tests und den dokumentierten Bestand
+> aus `docs/ENTSCHEIDUNGEN.md` (E-01: 283 Aktivitäten vom 08.01.–29.10.2026,
+> 47 Kalender-Events). Diese Zahlen sind Bestandsdokumentation, kein Nachweis
+> für die aktuell leere Arbeitskopie.
+
+## 1. Framework, Sprache, Prüfbasis
+
+| Bereich | Tatsächlicher Befund |
+|---|---|
+| Backend | Python `>=3.12`, FastAPI, uvicorn, httpx, SQLite. Einstieg `src/trainings_cockpit/api.py`, CLI `src/trainings_cockpit/cli.py` (`tc`). |
+| Paketmanager | `uv` mit `pyproject.toml` und `uv.lock`; Frontend `npm` mit `web/package.json` und `web/package-lock.json`. |
+| Frontend | React 19.1, TypeScript 5.9, Vite 7.1. Kein CSS-Framework, keine Chart-Bibliothek, keine State-Bibliothek. |
+| Router | **Kein Router.** `web/src/App.tsx` hält den aktiven Bereich als `useState<Tab>`; `web/src/tabs.ts` ist die einzige Tab-Liste. Das Backend liefert nur den SPA-Fallback (`api.py:256-263`). Es gibt keine URL-Pfade, keine History-API und keine Deep-Link-Logik im Frontend. |
+| State | Lokaler React-State in `App.tsx`, `Today.tsx`, `Activities.tsx`, `WeekSheet.tsx`, `UnitSheet.tsx`, `SessionSheet.tsx`. Kein Context, kein Reducer, kein Query-Cache. |
+| API-Schicht | `web/src/api.ts` (zentraler `fetch`-Wrapper), Typen in `web/src/types.ts`, Endpunkte in `src/trainings_cockpit/api.py`. |
+| Zentraler Theme-/Tokenort | `web/src/styles.css`, `:root` ab Zeile 45; verbindliche Dokumentation in `DESIGN.md` Abschnitt 10. Keine Tokens außerhalb dieser beiden Orte. |
+| UI-Bausteine | `Sidebar`, `ScreenHeader`, `DashboardCard`, `MetricRow`, `StatusBadge`, `WorkoutPreview`, `WeekStrip`, `Sheet`, `SessionSheet`, `SessionProfile`, `UnitSheet`, `WorkoutChart`, `WeekSheet`, `ActivityTable`. |
+| Vorhandene Tests | 148 pytest-Tests in `tests/`; keine Frontend-Unit-/Komponententests, kein Vitest. `npm run build` führt `tsc --noEmit` und den Vite-Build aus. Kein CI-Verzeichnis. |
+| Bild-/Prototypreferenzen | Alle acht PNGs in `docs/trainingsplaner/references/` sowie `prototype/Trainingsplaner-Referenz.html` vorhanden; PNG-Signaturen und Maße geprüft, HTML lesbar. |
+
+### 1.1 Prüfbefehle und Ausgangsstand
+
+| Befehl | Ergebnis am 06.11.2026 |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **148 passed**, 1 Warnung (`StarletteDeprecationWarning` zu `httpx` im TestClient), 6,05 s. |
+| `npm run build --prefix web` | **Erfolg.** `tsc --noEmit` ohne Fehler; Vite baut 53 Module, `index-BJkbOUeP.js` 266,82 kB, `index-DnbPmkBP.css` 35,55 kB. |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check .` | **23 bestehende Fehler**, nicht durch P00 verursacht: 18 × `E501` (Zeilenlänge), 4 × `F401` (unbenutzte Importe in `tests/test_load.py` und `tools/vault_import.py`), 1 × `B905` (`zip()` ohne `strict` in `tests/test_load.py`). Keine Auto-Fixes ausgeführt. |
+| `git status --short` nach den Prüfungen | leer; Build und Tests haben keine verfolgten Dateien verändert. |
+
+`UV_CACHE_DIR=.uv-cache` war in dieser Umgebung nötig, weil der Standard-Cache
+`/home/node/.cache/uv` nicht beschreibbar ist. Der reguläre Projektbefehl bleibt
+`uv run pytest`; fachlich ist der Cache-Pfad ohne Bedeutung.
+
+## 2. Tatsächlicher Datenfluss
+
+### 2.1 Geplante Einheit: Einlesen → Anzeigen
+
+1. **Remote lesen:** `sync.sync()` ruft `IntervalsClient.events(oldest, newest)`
+   auf (`src/trainings_cockpit/sync.py:44-45`). Der Zeitraum ist
+   `today - days` bis `today + 365` (`sync.py:32-34`); `days` ist standardmäßig
+   365. Es wird **keine** Kategorie gefiltert.
+2. **Lokal speichern:** `db.upsert_events()` schreibt je Event eine Zeile in
+   `event` (`db.py:326-350`). Gespeichert werden `id`, `date` aus
+   `start_date_local[:10]`, `sport`, `category`, `name`, `load`,
+   `duration_s` aus `moving_time`, `distance_m`, `intensity`, `description`
+   und das vollständige Roh-JSON in `raw` (`db.py:168-181`).
+3. **Tageskarte:** `GET /api/overview` → `metrics.build_overview()` →
+   `db.events_on(today)` und `db.events_on(tomorrow)` (`api.py:54-59`,
+   `metrics.py:803-810`) → `plan.session_row()` → `plan.planned()` →
+   `plan.parse_workout()` liest `event.raw.workout_doc.steps`
+   (`plan.py:281-359`). Die Karte zeigt nur heute und morgen.
+4. **Detail öffnen:** `Today` öffnet `SessionSheet` mit der Event-ID
+   (`Today.tsx:313-315`). `GET /api/session/{event_id}` →
+   `db.event_by_id()` → `plan.session()` (`api.py:84-93`,
+   `plan.py:537-553`). `plan.session()` liefert geplante Dauer/Distanz,
+   Schritte, Achse, Verpflegung und den heuristischen Ist-Abgleich.
+5. **Darstellen:** `SessionSheet` zeigt `SessionProfile` (geplante Blöcke),
+   Kennzahlen, Struktur und bei vorhandenem `actual` den Ist-Verlauf über
+   `WorkoutChart` (`SessionSheet.tsx:44-149`). `_add_series()` hängt den
+   gespeicherten Verlauf an (`api.py:96-102`).
+
+**Wichtige Grenze:** Der Weg ist heute **rein lesend**. Ein Bearbeiten von
+Name, Termin oder Aufbau existiert im Produktcode nicht.
+
+### 2.2 Geplante Einheit: Bearbeiten → Remote-Antwort
+
+**Befund: nicht vorhanden.** Konkret fehlen:
+
+- ein Editor oder eine Edit-Route in `web/src` (kein `WorkoutEditor`, kein
+  Draft-Store, kein Speichern-Button für Planungen);
+- ein schreibender API-Endpunkt in `api.py` (kein `PATCH`/`PUT` für Events);
+- eine Update-Methode im vorhandenen Client. `IntervalsClient` besitzt
+  `upsert_events()` (POST bulk upsert, `sources/intervals.py:198-205`),
+  `delete_events()` (`:207-212`) und `create_event()` (`:214-219`), aber
+  **kein** gezieltes `PUT /events/{eventId}`. `event()` ist nur GET
+  (`:176-177`).
+- eine Serialisierung des internen Aufbaus. `plan.py` parst nur
+  `workout_doc`; `spike/workout.py` baut ausschließlich den Phase-0-Testtext
+  (`TEST_DESCRIPTION`) und ist kein Produkt-Serializer.
+
+Der einzige vorhandene Schreibweg ist der CLI-Test `tc push-test`
+(`cli.py:404-448`): `workout.build_test_event()` → `client.upsert_events()` →
+`client.event()` zum Rücklesen → `workout.verify_event()` → optional
+`client.delete_events()`. Er schreibt einen festen Testtext, hat keine
+Konflikterkennung, keine stabile lokale Vorgangsidentität und ist nicht an die
+UI angebunden. **Er ist kein Planer-Speicherweg.**
+
+Damit sind für P17–P22 alle Schreib-, Konflikt-, Idempotenz- und
+Offline-Vorgänge Neuimplementierungen auf dem vorhandenen Client, nicht
+Erweiterungen eines bereits funktionierenden Produktpfads.
+
+### 2.3 Aufzeichnung: Einlesen → Aktivitätsdetails
+
+1. **intervals-Aktivitäten:** `sync.sync()` ruft
+   `IntervalsClient.activities(oldest, today)` (`sync.py:44`) →
+   `db.upsert_activities()` → `activity` (`db.py:187-221`).
+2. **Garmin-Aktivitäten:** `sync._garmin_data()` → `fetch_garmin()` →
+   `actor_rows()` (`sync.py:146-160`, `sources/garmin.py:115-176`). Nur
+   `Run`, `VirtualRun`, `Swim`, `OpenWaterSwim` kommen direkt; die Last wird
+   mit `load.compute_load()` berechnet (`load.py:36-45`).
+3. **Dedupe vor dem Schreiben:** `dedupe.behalten()` entscheidet anhand der
+   Rohdaten, welche Quelle bleibt (`sync.py:65-70`); `delete_unlisted()`
+   entfernt intervals-Zeilen, die die Quelle im gesyncten Zeitraum nicht mehr
+   führt (`sync.py:65-67`, `db.py:300-323`). Danach werden die Gewinner
+   geschrieben und verbleibende Dubletten gelöscht (`sync.py:72-76`).
+4. **Verläufe:** `streams.fetch_missing()` holt für die letzten **14 Tage**
+   fehlende Sekundenwerte, aus intervals-Streams oder Garmin-FIT, und legt sie
+   in 5-Sekunden-Mitteln in `activity_stream` ab (`sync.py:89-95`,
+   `streams.py:24-31`, `:296-370`).
+5. **API:** `GET /api/overview` liefert die letzten 12 Aktivitäten und die
+   heutigen ungeplanten Einheiten (`metrics.py:797-815`). `GET /api/week`
+   liefert die letzten sieben Tage (`api.py:105-119`). `GET /api/unit/{row_id}`
+   liefert eine Aufzeichnung mit Zonen, Quelle und Verlauf
+   (`api.py:122-131`).
+6. **UI:** `Today` öffnet `UnitSheet` aus der Wochenliste oder aus
+   „Zusätzlich“ (`Today.tsx:316-325`). `UnitSheet` lädt
+   `api.unit(rowId)`, zeigt `WorkoutChart`, Dauer/Distanz/Last, `ZoneBar`,
+   Puls/Tempo/Höhenmeter/Kalorien und die Quellenangabe
+   (`UnitSheet.tsx:21-145`). `SessionSheet` nutzt für den Ist-Teil denselben
+   `WorkoutChart` (`SessionSheet.tsx:113-145`).
+7. **Nicht erreichbar:** `web/src/pages/Activities.tsx` und
+   `components/ActivityTable.tsx` existieren, sind aber nicht in `TABS` oder
+   `App.tsx` eingebunden. D-38 hat den Aktivitäten-Tab am 01.11.2026 bewusst
+   abgehängt. Es gibt keine direkten Aktivitäts-URLs.
+
+## 3. Alte Liste „Letzte 7 Tage“, Dashboard-Karte, Tabs, Planerroute
+
+### 3.1 Aufrufstellen der alten Liste
+
+| Stelle | Tatsächlicher Code | Befund |
+|---|---|---|
+| Dashboard-Karte | `web/src/pages/Today.tsx:295` `<DashboardCard as="aside" className="week" title="Letzte 7 Tage" subtitle="Umfang und Plan">` | Die Karte selbst ist **nicht** klickbar. `DashboardCard` in `ui.tsx:6-36` hat keinen `onClick`, keinen Link und keine Rolle. |
+| „Umfang“ | `Today.tsx:298-302`, `MetricRow` mit `onClick={() => setWeekOpen(true)}` | Öffnet `WeekSheet`. |
+| „Einheiten“ | `Today.tsx:304-308`, `MetricRow` mit demselben `onClick` | Öffnet **dieselbe** `WeekSheet`. |
+| Chevron | `web/src/components/ui.tsx:75-82` | `MetricRow` rendert bei vorhandenem `onClick` ein `<button>` und den Pfeil `.metric-row__caret`; CSS `.metric-row--button` (`styles.css:1101-1122`). |
+| Karten-Wrapper | `Today.tsx:295-310` | Kein zusätzlicher Wrapper-Handler, kein Karten-`onClick`. Nur die beiden `MetricRow`-Buttons sind interaktiv. |
+| Overlay-Zustand | `Today.tsx:92-94`, `:316-322` | `weekOpen` und `openUnit` sind reiner React-State. `WeekSheet` wird mit `top={openUnit == null}` gerendert. |
+| Detail-Overlay | `Today.tsx:323-325` | `UnitSheet` liegt als zweites `Sheet` über der Liste. |
+| Listeninhalt | `WeekSheet.tsx:24-58` lädt `api.week()`; `:60-109` gruppiert und rendert | Keine Datumsnavigation, kein Query-Parameter, kein Router. |
+| Tagesgruppen | `WeekSheet.tsx:62-68` | `data.units` kommt aufsteigend aus `training_between()`; die Schleife gruppiert benachbarte Tage, danach `days.reverse()`. Anzeige daher **absteigend**, neuester Tag zuerst. |
+| Summen | `WeekSheet.tsx:77-90` | Umfang aus `data.seconds`, Belastung aus `data.load`, Einheiten aus `data.units.length`. |
+| Einheitenzeilen | `WeekSheet.tsx:94-108` | `WorkoutPreview` mit Sport-Icon, Name, Dauer/Distanz, Last; Klick öffnet `UnitSheet`. |
+| Endpunkt | `api.py:105-119` | `GET /api/week`; `today = date.today()`, `start = today - 6`, `db.training_between(start, today)`. |
+| Typ | `web/src/types.ts:205-217` | `WeekUnit`, `WeekResponse`; nur für diese Liste. |
+
+### 3.2 Tabs und Planerroute
+
+- `web/src/tabs.ts:3-9` definiert exakt zwei Tabs: `today` („Heute“) und
+  `fuel` („Verpflegung“). `Sidebar.tsx` und die Tabbar in `App.tsx:142-155`
+  lesen dieselbe Liste.
+- Es gibt **keinen** Tab „Trainingsplaner“ und **keine** Planerroute. D-45
+  hatte am 03.11.2026 einen Tab „Woche“ und `GET /api/week/plan` beschlossen,
+  aber nicht gebaut. Der aktuelle Code enthält beides nicht. Die Ablösung von
+  D-42 und D-45 durch den Planer ist als **D-68** festgehalten.
+- Es gibt **keinen** React Router, keine `history`-/`pushState`-Aufrufe und
+  keine URL-Auswertung. Die alte Liste ist ein Overlay, keine Route. Deshalb
+  existiert heute auch **keine gespeicherte alte Listen-URL**, die weitergeleitet
+  werden müsste. P07 muss mit dem Planer-Tab zugleich eine Route einführen;
+  eine Kompatibilitätsweiterleitung ist erst danach für dann existierende URLs
+  sinnvoll.
+- `web/src/pages/Activities.tsx` ist vorhanden, aber nicht eingebunden (D-38).
+  Es ist kein Ersatz für den Planer und darf nicht als zweite Liste
+  weiterlaufen.
+
+### 3.3 Was bleibt, was wird umgebaut, was entfällt
+
+**Bleibt und wird weiterverwendet:**
+
+- `DashboardCard`, `MetricRow` (ohne `onClick`), `StatusBadge`,
+  `WorkoutPreview`, `WeekStrip`, `Sheet`, `SessionSheet`, `SessionProfile`,
+  `UnitSheet`, `WorkoutChart`, `ZoneBar`, `format.ts`.
+- Die Dashboard-Karte „Letzte 7 Tage“ mit ihrer rollierenden Berechnung aus
+  `metrics.build_overview()` (`metrics.py:785-795`, `:836-845`).
+
+**Wird umgebaut:**
+
+- `WeekSheet` von einer rollierenden, absteigenden Sieben-Tage-Liste zu einer
+  Kalenderwochenansicht mit sieben Tagen Montag–Sonntag, Navigation und
+  getrennten Plan-/Ist-Einträgen. Die vorhandene Gruppierungs- und
+  `WorkoutPreview`-Struktur ist dafür verwendbar; die Datenquelle reicht nicht.
+- `api.week()`/`WeekResponse` zu einem Zeitraumvertrag mit expliziten lokalen
+  Grenzen oder eine neue Planerabfrage. `db.events_between()` existiert bereits,
+  wird aber derzeit von keiner Stelle aufgerufen (`db.py:468-473`).
+- `Today`-Zustand `weekOpen`: entfällt, sobald die separate Liste durch den
+  Planer-Tab ersetzt ist. `openUnit` bleibt für Aktivitätsdetails.
+- `plan.matches()`/`plan.unplanned()`: der heuristische Tagesabgleich ist kein
+  belegter Beziehungsvertrag und muss für die gemeinsame Wochenliste durch
+  nachgewiesene Beziehungen ersetzt bzw. klar als offener Bestand behandelt
+  werden.
+
+**Entfällt:**
+
+- die eigenständige rollierende `WeekSheet`-Liste als zweiter Modus;
+- `onClick` auf „Umfang“ und „Einheiten“ samt Chevron und Button-Semantik;
+- die Vorstellung, der Planer sei über „Umfang“ erreichbar.
+
+## 4. Ursache der bisherigen Sieben-Tage-Grenze
+
+Die Grenze entsteht **nicht in der UI und nicht in der Speicherung**, sondern
+in der festen Zeitraumberechnung des Endpunkts `GET /api/week`:
+
+```python
+# src/trainings_cockpit/api.py:105-119
+today = date.today()
+start = today - timedelta(days=6)
+rows = db.training_between(conn, start, today)
+```
+
+`WeekSheet` ruft `api.week()` ohne Parameter auf (`WeekSheet.tsx:36-49`) und
+hat keine Datumssteuerung. Die Datenbankabfrage `db.training_between()` nimmt
+beliebige `start`/`end`-Werte entgegen (`db.py:371-379`); sie ist nicht auf
+sieben Tage begrenzt. Es gibt keine Pagination in diesem Pfad.
+
+Die weiteren Grenzen sind getrennt davon zu betrachten:
+
+| Ebene | Tatsächliche Grenze | Bedeutung für ältere Wochen |
+|---|---|---|
+| UI | `WeekSheet` zeigt nur den einen Aufruf ohne Datumsparameter. | Kein UI-Filter, sondern fehlende Steuerung. |
+| Backend | `/api/week` fest `today - 6` bis `today`. | **Hauptursache.** |
+| DB/Speicherung | Keine 7-Tage-Speichergrenze; `activity`/`event` speichern alles, was der Sync schreibt. | Ältere Wochen sind bereits in der DB, sofern gesynct. |
+| Sync-Zeitraum | `sync.sync()` standardmäßig 365 Tage rückwärts; Events bis 365 Tage voraus (`sync.py:32-34`). `POST /api/sync` erlaubt 7–730 Tage (`api.py:222-223`). | Ältere als der gesyncte Zeitraum fehlen; kein Vollhistorie-Versprechen. |
+| Verläufe | `streams.fetch_missing()` nur 14 Tage (`streams.py:29`, `:296-309`). | Ältere Aktivitäten können in der Liste stehen, aber ohne `UnitSeries`/Diagramm. |
+| Garmin-Quelle | `_all_activities()` paginiert 100 pro Seite bis maximal 1000 (`sources/garmin.py:241-260`). | Sehr große Zeiträume können gekappt werden; die Liste zeigt das nicht an. |
+| intervals-Quelle | `activities(oldest, newest)` ist ein Bereichsabruf ohne eigene Pagination (`sources/intervals.py:141-153`). | Bereichsabdeckung hängt vom Sync-Zeitraum ab. |
+
+**Kleinste Änderung für gezielt ältere Wochen:** Den vorhandenen Lesezugriff
+parametrisieren, nicht die Datenhaltung ändern.
+
+- Minimal: `GET /api/week` um validierte, inklusive lokale `from`/`to`-Parameter
+  erweitern und an `db.training_between(conn, from, to)` übergeben. Für die
+  Planeransicht zusätzlich `db.events_between(conn, from, to)` verwenden; diese
+  Funktion existiert bereits.
+- Sauberer für P06/P07: eine eigene Planerabfrage (z. B.
+  `GET /api/planner?week=YYYY-MM-DD`) mit `db.training_between()` und
+  `db.events_between()`, damit die Dashboard-Karte und der Planer getrennte
+  Zeitraumverträge behalten. Die Dashboard-Karte liest ohnehin
+  `metrics.build_overview()`, nicht `/api/week`.
+- Für Wochen außerhalb des gesyncten Zeitraums: den bestehenden Sync mit
+  größerem `days` aufrufen (CLI ohne Obergrenze, API bis 730) oder gezielt
+  nachladen. Kein unkontrollierter Vollimport beim Öffnen des Planers.
+- Für fehlende Verläufe älterer Aktivitäten: `streams.fetch_missing(days=...)`
+  gezielt erweitern; die Liste darf deshalb nicht leer erscheinen, der fehlende
+  Verlauf bleibt als fehlend sichtbar.
+
+## 5. Plan-/Aktivitätsbeziehungen, Identitäten, Dedupe, Kardinalität
+
+### 5.1 Identitäten
+
+| Objekt | Identität im Code | Befund |
+|---|---|---|
+| Aktivität (Remote) | `(source, source_id)` mit `UNIQUE` (`db.py:13-35`) | `source` ist `intervals` oder `garmin`; `source_id` ist die jeweilige Remote-ID. Zwei Quellen derselben realen Einheit bleiben zunächst zwei Zeilen. |
+| Aktivität (lokal/UI) | `activity.id` (`row_id`) | `UnitSheet` und `/api/unit/{row_id}` verwenden ausschließlich diese lokale Zeile. `activity_payload()` liefert zusätzlich `id = source_id` (`metrics.py:614-631`). |
+| Event/Planung | `event.id` = intervals-Event-ID (`db.py:54-67`, `:168-181`) | Primärschlüssel. Eine separate lokale Plan-ID gibt es nicht. `external_id` wird nur im Roh-JSON/CLI-Test verwendet, nicht als Spalte oder Beziehung. |
+| Plantyp vs. Aktivitätstyp | getrennte Tabellen und getrennte Endpunkte `/api/session/{event_id}` und `/api/unit/{row_id}` | Eine gleiche numerische ID `123` kann in beiden Tabellen vorkommen; die Endpunkte und UI-Zustände trennen sie. Ein gemeinsamer typisierter Identitätskontext (Account/Athlet/Objekttyp) fehlt. |
+
+### 5.2 Vorhandene Plan-/Aktivitätsbeziehung
+
+Es gibt **keine explizite Beziehung** in Schema, API oder UI:
+
+- keine Tabelle `session_actual`, `plan_activity` oder vergleichbar;
+- keine Spalte `paired_activity_id`, `activity_id` oder `completed_at` in
+  `event`;
+- keine Auswertung von `external_id` für ein Matching;
+- `event.raw` kann weitere Remote-Felder enthalten; der Code liest sie nicht
+  für eine Beziehung aus. Ob die Quelle ein solches Feld liefert, ist mit der
+  leeren Arbeitsdatenbank nicht belegbar.
+
+Die einzige Zuordnung ist die Heuristik `plan.matches()`
+(`plan.py:467-487`):
+
+1. gleicher Kalendertag (`event.date`),
+2. gleiche Sportart-Familie (`plan.sport_family`),
+3. bei mehreren Kandidaten die Aktivität mit der geringsten
+   Dauer-Differenz zur geplanten Dauer.
+
+`plan.session_row()` setzt `done = matches(...) is not None`
+(`plan.py:556-572`). `plan.unplanned()` vergibt die so gefundenen Zeilen und
+behandelt den Rest als „Zusätzlich“ (`plan.py:504-521`). Das ist **kein
+Bestätigungsnachweis** für eine abgeschlossene Planung und keine
+datumsübergreifende Beziehung. Ein gleichnamiger Lauf am selben Tag gilt als
+Treffer, auch ohne explizite Zuordnung.
+
+**Kardinalität:** Der Code geht faktisch von höchstens einer Aktivität pro
+Event aus (`matches()` liefert genau eine Zeile). Mehrere Aktivitäten pro Plan,
+Teilzuordnungen, manuell erledigte Pläne ohne Aufzeichnung und eine
+datumsübergreifende Durchführung sind nicht modelliert. `plan.unplanned()`
+verhindert nur, dass eine bereits vergebene Zeile zusätzlich als ungeplant
+erscheint; es erzwingt keine globale Eindeutigkeit über mehrere Events.
+
+### 5.3 Kanonische Zuordnung und Dedupe
+
+`dedupe.py` erkennt Dubletten über Sportart, Startzeit ±300 s und mindestens
+eine übereinstimmende Spur: Gesamtzeit ±300 s, Bewegungszeit ±120 s oder
+(ähnliche Dauer und Distanz ±400 m) (`dedupe.py:27-39`, `:91-109`). Der
+Gewinner wird nach Quelle/`device_name`/Feldzahl/Dauer bestimmt
+(`dedupe.py:61-81`). `behalten()` entscheidet vor dem Schreiben
+(`dedupe.py:155-163`), `delete_activities()` entfernt die Verlierer.
+
+**Wichtig:** Es gibt keine Tabelle, die mehrere Quell-IDs auf eine dauerhafte
+kanonische Aktivität abbildet. Nach dem Dedupe bleibt genau eine Zeile mit
+ihrer `(source, source_id)` übrig; die andere Remote-ID ist verloren. Die
+Aussage „mehrere Quellabbilder, bereits bestätigt kanonisch zugeordnet“ (F12)
+ist im aktuellen Code **nicht** belegt und darf nicht als vorhanden
+vorausgesetzt werden. `delete_unlisted()` kann zudem intervals-Zeilen
+entfernen, bevor dedupliziert wird (`sync.py:65-70`).
+
+## 6. Definitionen: Dauer, Belastung, Ist-Summen, Aktivitätstag, Zonen, Kurven
+
+| Begriff | Tatsächliche Definition | Fundstelle |
+|---|---|---|
+| Ist-Dauer | `moving_s`, sonst `duration_s`, sonst 0. `duration_min = moving / 60`. „Mit Pausen“ ist separat `total_min` aus `duration_s` (falls abweichend). | `metrics.activity_payload()` (`metrics.py:605-631`), `plan.done_payload()` (`plan.py:490-501`), `UnitSheet.tsx:52-72`. |
+| Plan-Dauer | Summe der `workout_doc`-Schrittsekunden; wenn leer, `event.duration_s`. Fehlende Distanz/Dauer wird aus dem eigenen Median der letzten 180 Tage geschätzt (`plan.speeds`, Fallback 24/8,6/2,6 km/h) und in der UI mit `≈` markiert. | `plan.planned()` (`plan.py:386-450`), `plan.estimate()` (`:365-383`), `SessionSheet.tsx:44-47`. |
+| Belastung Ist | `activity.load` = `icu_training_load` aus intervals; bei Garmin-Direktaufzeichnungen `load.compute_load()` = `Stunden × Faktor × (Puls/160)²` (Lauf 75, Schwimmen 70). | `db.map_activity()` (`db.py:127-148`), `load.py:22-45`, `sources/garmin.py:136-155`. |
+| Belastung Plan | `event.load` = `icu_training_load` des Events; der Planer berechnet keine eigene Last. | `db.map_event()` (`db.py:168-181`), `plan.session_row()` (`plan.py:556-572`). |
+| Ist-Summen | `week_seconds` = Summe `moving_s`/`duration_s`; `week_sessions` = Anzahl der Zeilen aus `db.training_between()`; `week_load` = Summe `activity.load`. `db.training_between()` schließt `Workout` und `Transition` aus. | `metrics.py:785-795`, `:836-845`, `db.py:364-379`. |
+| `/api/week`-Summen | Eigene, duplizierte Berechnung: `seconds` = Summe `moving_s`/`duration_s`, `load` = Summe `load`, Einheiten = `len(rows)`. | `api.py:105-119`. |
+| Tatsächlicher Aktivitätstag | Erste 10 Zeichen von `start_date_local` (intervals) bzw. `startTimeLocal`, sonst `startTimeGMT` (Garmin). Keine UTC-Umrechnung. | `db.map_activity()` (`db.py:127-148`), `sources/garmin.py:129-145`. |
+| Historische Zonen | `icu_hr_zone_times` (intervals) oder `hrTimeInZone_1…5` (Garmin) aus dem gespeicherten Roh-JSON; `zone_source` ist „intervals.icu“ bzw. „Garmin“. Keine Neuberechnung aus heutigen Profilzonen. | `metrics.zone_seconds()` (`metrics.py:645-658`), `unit_payload()` (`:661-702`), `UnitSheet.ZoneBar` (`UnitSheet.tsx:120-145`). |
+| Planzonen | `sport_profile` aus intervals-Sport-Einstellungen (`max_hr`, `zones`, `ftp`, `indoor_ftp`); `_to_bpm`/`_to_watts` übersetzen für die Anzeige. Fallback `HR_ZONES` ist fest 1–7, wenn kein Profil vorliegt. | `plan.sport_profiles()` (`plan.py:70-85`), `_to_bpm()` (`:101-122`), `_to_watts()` (`:125-137`), `HR_ZONES` (`:62-63`). |
+| `WeekStrip`-Balken | Tageslast (`series.load[].load`) der letzten sieben Tage; heutiger Tag akzentuiert, Spitzenwert neutral. **Keine** Umfangsbalken. | `WeekStrip.tsx:8-44`, `metrics.py:726-736`. |
+| `WorkoutChart` (Ist) | Aufgezeichneter Verlauf: Hauptlinie Rad = Leistung (FTP-Referenzlinie), Lauf = Pace (Achse umgedreht, schneller oben), sonst Puls. Puls als zweite Linie bei Pace/Puls, **nicht** bei Leistung (zwei Skalen). Max. 180 Punkte, 5-s-Mittel. | `streams.payload()`/`_kind()` (`streams.py:178-253`), `WorkoutChart.tsx:14-132`, `:167-185`. |
+| `SessionProfile` (Plan) | Geplante Blöcke: x = Minuten, y = Zielband (W, bpm oder %). „Arbeit“ = höchstes Band ≥95 % des Spitzenwerts, ohne Warmup/Cooldown. **Eine** Achse; gemischte Zielarten werden nicht als getrennte Spuren dargestellt. | `plan.parse_workout()` (`plan.py:281-359`), `SessionProfile.tsx:12-103`. |
+| `SessionSheet` „Geplant · gemacht“ | Planwerte und `actual` aus `plan.matches()`; Ist-Dauer/-Distanz/-Last/-Intensität; optional Ist-Verlauf. | `SessionSheet.tsx:113-145`, `plan.session()` (`plan.py:537-553`). |
+
+**Wichtige bestehende Grenzen der Planberechnung:**
+
+- `plan._flatten()` schachtelt nur bis Tiefe 4, kappt Wiederholungen bei 30
+  (`plan.py:235-261`). Das ist eine stille Darstellungsgrenze.
+- `_target()` liest nur **ein** Ziel je Schritt, Priorität Leistung → HF →
+  Pace (`plan.py:173-201`). Zusätzliche Ziele werden in der Anzeige nicht
+  erhalten.
+- `parse_workout()` wählt **eine** Achseneinheit (W vor bpm vor %) und
+  ignoriert Bänder anderer Einheiten in der Achse (`plan.py:314-325`).
+- Die Ende-Bedingung eines Schritts wird nicht als Typ erhalten. `planned()`
+  summiert `seconds` und `distance_m` und leitet `primary` aus
+  `event.distance_m` ab, nicht aus der tatsächlichen Schritt-Endbedingung
+  (`plan.py:392-413`). Distanzschritte ohne Dauer erhalten `minutes = 0` und
+  werden im `SessionProfile` über die Zeitachse nicht sinnvoll positioniert.
+- Es gibt keinen Serializer, der die Rohstruktur beim Bearbeiten erhalten
+  könnte.
+
+## 7. Account, Athlet, Zeitzone, Authentifizierung, Persistenz, Cache, Hintergrund
+
+| Thema | Tatsächlicher Befund |
+|---|---|
+| Account/Athlet | Einzelplatz, kein Multi-User. `INTERVALS_ATHLETE_ID` default `"0"` (`config.py:24-43`); `athlete()` liest den Key-Athleten. `sync` speichert `athlete_name`/`athlete_id` in `setting` (`sync.py:97-100`). Keine `account_id`/`athlete_id`-Spalten in `activity` oder `event`. |
+| Authentifizierung intervals | HTTP Basic, Benutzer `API_KEY`, Passwort = API-Key (`sources/intervals.py:55-78`). Keine Zugangsdaten im Frontend. |
+| Authentifizierung Garmin | Personal-API-Key; Bearer-Token-Cache unter `data/garmin/bearer-token.json` (`sync.py:150-153`, `sources/garmin.py:50-70`). |
+| Authentifizierung Cockpit | Keine Anmeldung, keine Rollen, keine Account-Trennung. CORS nur `localhost:5173`/`127.0.0.1:5173` (`api.py:27-35`). |
+| Zeitzone | Keine App-/Athletenzeitzone in `Settings`. Produktion setzt `TZ: Europe/Vienna` in `docker-compose.yml`; lokal gilt die Prozesszeitzone. `date.today()`/`datetime.now()` sind Prozess-lokal; `generated_at` nutzt `astimezone()`. Event-Tage kommen aus `start_date_local`, Aktivitätstage aus `startTimeLocal`. Das Frontend formatiert mit der Browserzeitzone (`format.ts:111-121`). **Kein gespeicherter Athleten-Zeitzonenwert.** |
+| Lokale Persistenz | SQLite `data/cockpit.db` (`Settings.db_path`), WAL, Tabellen `activity`, `wellness`, `event`, `activity_stream`, `sync_run`, `setting` (`db.py:12-90`). Roh-JSON in `activity.raw`/`event.raw`. `data/` ist gitignored. |
+| Browser-Persistenz | Keine `localStorage`, `sessionStorage`, `IndexedDB`-Nutzung. Keine Entwürfe, keine offenen Vorgänge, keine ausgewählte Woche über Reload. |
+| Cache | Kein Frontend-Query-Cache. Serverseitig nur `lru_cache` für `Settings` (`api.py:38-40`) und der Garmin-Token-Cache. `activity_stream` verhindert wiederholte Stream-Abrufe. Kein HTTP-Cache, kein ETag, kein Service Worker. |
+| Hintergrundaktualisierung | Keine. Sync nur manuell über Sidebar-Button (`Sidebar.tsx:45-48`) oder Pull-to-Refresh (`App.tsx:66-109`); `POST /api/sync` läuft synchron. Kein Scheduler/Cron, kein Polling, kein Refresh bei Tageswechsel. `ensure_db()` beim Start legt nur das Schema an (`cli.py:598-615`). |
+| Fehler-/Leerzustände | `api.ts` wirft bei HTTP-Fehler; `App` zeigt Banner; `WeekSheet`/`UnitSheet`/`SessionSheet` zeigen eigene Fehlertexte. Keine getrennten Quellenzustände für Plan vs. Aktivität im Planer, da dieser noch nicht existiert. |
+
+## 8. Verantwortlichkeit → tatsächliche Datei/Funktion → weiterverwenden/umbauen/entfernen
+
+| Verantwortlichkeit | Tatsächliche Datei/Funktion | Entscheidung |
+|---|---|---|
+| App-Shell und Hauptnavigation | `web/src/App.tsx:19-27`, `:117-175`; `components/Sidebar.tsx`; `tabs.ts` | **weiterverwenden**, Tab-Liste erweitern. |
+| Planer-Tab und Route | existiert nicht. `tabs.ts:3-9` hat nur `today`/`fuel`; `App.tsx:138-140` rendert nur `Today`/`Fuel`. | **neu in P07**; `IconList`/`IconTrends` sind vorhanden (`components/icons.tsx:24-42`). |
+| Dashboard-Karte „Letzte 7 Tage“ | `Today.tsx:295-310`; `metrics.build_overview()` (`metrics.py:785-795`); `WeekStrip.tsx` | **weiterverwenden**, Kennzahlen und rollierendes Fenster unverändert lassen. |
+| „Umfang“-Link | `Today.tsx:298-302` (`onClick`), `ui.tsx:75-82` (Button + Caret), `styles.css:1101-1122` | **umbauen/entfernen**: `onClick` entfernen, dadurch nicht mehr `<button>`, kein Caret, kein Tabstopp. |
+| „Einheiten“-Link | `Today.tsx:304-308`, derselbe Handler | **umbauen/entfernen**: öffnet dieselbe alte Liste; `onClick` entfernen. |
+| Karten-Wrapper | `Today.tsx:295` (`DashboardCard as="aside"`); `ui.tsx:6-36` | **weiterverwenden**; kein Wrapper-Handler vorhanden, nichts zu entfernen. |
+| Alte Liste „Letzte 7 Tage“ | `components/WeekSheet.tsx:24-109`; `Sheet.tsx`; `WorkoutPreview.tsx` | **umbauen** zur Kalenderwoche; `Sheet`/`WorkoutPreview` weiterverwenden. |
+| Sieben-Tage-Endpunkt | `api.py:105-119` `week()`; `db.py:371-379` `training_between()` | **umbauen** auf validierte Zeitraumparameter; `training_between()` weiterverwenden. |
+| Planabfrage für die Woche | `db.py:468-473` `events_between()` | **weiterverwenden**; derzeit ungenutzt. |
+| Tagesgruppen der alten Liste | `WeekSheet.tsx:60-68` (Gruppierung, `reverse()`), `:94-108` | **umbauen** auf Montag–Sonntag aufsteigend, leere Tage sichtbar. |
+| Listensummen der alten Liste | `WeekSheet.tsx:77-90`; `api.py:112-118` | **umbauen** auf getrennte Ist-/Plan-Summen; eine gemeinsame Ist-Summenfunktion statt Duplikat. |
+| Aktivitätskarte | `components/WorkoutPreview.tsx`; `Today.tsx:359-388` | **weiterverwenden**; für geplante Einträge ggf. parallel eine Plan-Variante. |
+| Aktivitätsdetails | `components/UnitSheet.tsx:21-145`; `/api/unit/{row_id}` (`api.py:122-131`); `metrics.unit_payload()` (`metrics.py:661-702`) | **weiterverwenden**, unverändert lassen; kein zweiter Detailstack. |
+| Aktivitätsdiagramm | `components/WorkoutChart.tsx`; `streams.payload()` (`streams.py:178-253`) | **weiterverwenden**; nicht durch Planbalken ersetzen. |
+| Zonenbalken/details | `UnitSheet.tsx:120-145`; `metrics.zone_seconds()` | **weiterverwenden**; historische Zonen nicht neu berechnen. |
+| Aktivitätenliste | `pages/Activities.tsx`, `components/ActivityTable.tsx` | **nicht mounten/entfernen**: per D-38 abgehängt, kein Planerersatz. |
+| Planungsdetails | `components/SessionSheet.tsx:14-149`; `/api/session/{event_id}` (`api.py:84-93`); `plan.session()` | **weiterverwenden/umbauen**: Leseansicht bleibt, Editor kommt in P10–P16 hinzu. |
+| Planungsgraph | `components/SessionProfile.tsx`; `plan.parse_workout()` | **umbauen** für gemischte Spuren und Distanzachsen; aktuelle Ein-Achsen-Logik reicht nicht. |
+| Plan-Parser | `plan.py:173-359` (`_target`, `_flatten`, `parse_workout`) | **umbauen/erweitern**; Erhaltungs- und Editierbarkeitsregeln fehlen. |
+| Plan-/Ist-Zuordnung | `plan.py:467-487` (`matches`), `:504-521` (`unplanned`), `:556-572` (`session_row`) | **umbauen/ersetzen** durch belegte Beziehung; Heuristik nicht als Bestätigung ausgeben. |
+| Event-Sync (lesen) | `sync.py:44-45`, `:83`; `db.upsert_events()` (`db.py:326-350`) | **weiterverwenden**, aber Event-Löschungen/Abgleich und Identität ergänzen. |
+| Event-Schreiben | `sources/intervals.py:198-219` (`upsert_events`, `create_event`, `delete_events`); `cli.py:404-448` (`push-test`) | **weiterverwenden als Clientbasis**; Produkt-Writer/Update fehlt vollständig. |
+| Aktivitäts-Sync | `sync.py:44`, `:65-76`; `db.upsert_activities()`; `sources/garmin.py:115-176` | **weiterverwenden**. |
+| Dedupe | `dedupe.py:27-163`; `sync.dubletten_entfernen()` | **weiterverwenden**, aber fehlende kanonische Mehrquellen-Zuordnung dokumentieren. |
+| Verläufe | `streams.py:24-370`; `db.upsert_stream()`; `activity_stream` | **weiterverwenden**; 14-Tage-Grenze für ältere Details beachten. |
+| Ist-Summen | `metrics.py:785-795`, `:836-845`; `api.py:112-118` | **umbauen**: eine gemeinsame, dokumentierte Summenfunktion; keine zweite Formel. |
+| Account/Athlet | `config.py:24-43`; `sync.py:97-100`; `db.setting` | **weiterverwenden**, aber Single-User-Grenze und fehlende Account-Trennung dokumentieren. |
+| Zeitzone | `docker-compose.yml` (`TZ: Europe/Vienna`); `date.today()` in `api.py:109`, `metrics.py:709`, `sync.py:32`; `format.ts:111-121` | **umbauen/klären**: explizite App-/Athletenzeitzone in P03; nicht Browser-UTC als Standard. |
+| Persistenz | `config.py:45-51` (`db_path`); `db.py:12-122` | **weiterverwenden**; Entwurfs-/Vorgangspersistenz fehlt und kommt in P22. |
+| Cache/Refresh | `App.tsx:28-42` (`load`), `api.ts`; kein Query-Cache | **weiterverwenden für den ersten Stand**; getrennte Quellenzustände und gezielte Invalidierung in P06/P23 ergänzen. |
+| Theme/Tokens | `styles.css:45-142`; `DESIGN.md` Abschnitt 10 | **weiterverwenden**; keine neuen Tokens ohne D-xx. |
+| Tests | `tests/test_api.py:150-213` (week/unit), `tests/test_plan.py` (Schritte, Schätzung, Matching), `tests/test_streams.py`, `tests/test_dedupe.py`, `tests/test_sync.py` | **weiterverwenden/ergänzen**; keine Frontend-Tests vorhanden. |
+| Referenzbilder | `docs/trainingsplaner/references/*.png`; `prototype/Trainingsplaner-Referenz.html` | **weiterverwenden** für die visuelle Abnahme P07–P09. |
+
+## 9. Offene Quellgrenzen (konkret, nicht erfunden)
+
+1. **Keine explizite Plan-/Aktivitätsbeziehung.** Vorhanden ist nur
+   `plan.matches()` (Tag + Sportfamilie + nächste Dauer). Das ist kein
+   bestätigter Abschluss und keine Datumsübergangs-Beziehung.
+2. **Kein Produkt-Schreibweg für Planungen.** Kein Editor, kein API-Mutations-
+   endpunkt, kein `PUT`-Update, kein Serializer, keine Konflikterkennung.
+3. **Kein Planer-Tab und keine Route.** `TABS` enthält nur Heute/Verpflegung;
+   es gibt keinen Router und keine URL-Auswertung. Die alte Liste ist ein
+   Overlay.
+4. **Keine alte Listen-URL.** Deshalb ist eine „Kompatibilitätsweiterleitung“
+   heute gegenstandslos; sie kann erst mit der in P07 neu geschaffenen Route
+   definiert werden.
+5. **Zeitzone nicht explizit gespeichert.** Produktion nutzt `TZ=Europe/Vienna`
+   aus Compose; Python nutzt die Prozesszeit, der Browser seine eigene Zeitzone.
+   Eine Athletenzeitzone wird nicht persistiert. P03 muss den Standard
+   festlegen, bevor Kalenderwochen berechnet werden.
+6. **Single-User ohne Account-Trennung.** `INTERVALS_ATHLETE_ID=0`, keine
+   Account-/Athletenspalten in `activity`/`event`, keine App-Authentifizierung.
+   Mehrkonto-Cache/Entwürfe sind nicht vorbereitet.
+7. **Keine kanonische Mehrquellen-Zuordnung.** `(source, source_id)` ist die
+   einzige Identität; Dedupe löscht den Verlierer. Eine bestätigte Zuordnung
+   mehrerer Quell-IDs auf dieselbe Aktivität existiert nicht.
+8. **Keine Vorgangs-/Entwurfspersistenz.** Kein Browser-Speicher, keine
+   Operations-ID, kein Wiederaufsetzen nach Reload.
+9. **Event-Abgleich unvollständig.** `db.upsert_events()` schreibt nur; es gibt
+   kein `delete_unlisted` für Events. Remote gelöschte Events bleiben lokal.
+   `db.upcoming_events()` filtert zudem nicht auf `category = WORKOUT`
+   (`db.py:476-481`).
+10. **Plan-Parser ist verlustbehaftet für die neue Aufgabe.** Tiefe 4,
+    Wiederholungsdeckel 30, ein Ziel je Schritt, eine Achseneinheit, keine
+    Ende-Bedingung als Typ, keine Distanz-Zeit-Achse, kein Erhalt beim
+    Bearbeiten. Das ist für P04/P05/P09 eine Umbauaufgabe.
+11. **Verläufe nur 14 Tage.** Ältere Aktivitäten können ohne `series` sein;
+    `UnitSheet` zeigt dann keinen Verlauf, ohne einen Verfügbarkeitshinweis.
+12. **Sync-Zeitraum standardmäßig 365 Tage.** Ältere Wochen sind ohne
+    erweiterten Sync nicht in der DB. Garmin kappt bei 1000 Aktivitäten pro
+    Abruf. Kein Beleg für Vollhistorie.
+13. **Arbeitsdatenbank leer.** 0 Aktivitäten/0 Events; reale Abdeckung und
+    echte `event.raw`-Felder (z. B. eine mögliche Remote-Beziehung) sind hier
+    nicht prüfbar. E-01 dokumentiert den früheren Bestand, nicht diese Kopie.
+14. **Kein Hintergrund-Sync, kein Cache, kein Tageswechsel-Refresh.** Nur
+    manueller Sync/Reload; `data` liegt im React-State.
+15. **Keine Frontend-Tests.** `npm run build` prüft Typen und Build, nicht
+    Interaktion, Fokus, Diagramme oder Navigation.
+16. **`Activities`-Seite ist toter UI-Code.** Sie ist per D-38 abgehängt und
+    darf nicht als zweite Historienliste wiederverwendet werden.
+
+## 10. Nächster einzelner Arbeitsschritt
+
+**P01 — Referenzfälle und Fähigkeitsmatrix anlegen.** Konkret:
+
+- F01–F15 als fachliche Fixtures im vorhandenen pytest-System anlegen, ohne
+  Produktivdaten zu überschreiben;
+- die acht Bildreferenzen und den Prototyp als visuellen Maßstab referenzieren;
+- die Fähigkeitsmatrix aus Plan Abschnitt 8.4 mit dem tatsächlichen Adapter
+  füllen: belegt / offen / nicht unterstützt;
+- für jede offene Schreibfähigkeit den fehlenden Nachweis benennen
+  (insbesondere gezieltes Event-Update, absolute bpm, Editorgruppierung);
+- Historienfälle für explizite Beziehung, ungeplante Aktivität, Krafttraining,
+  ältere Daten und Quellausfall abbilden.
+
+Kein Produktcode in P01; keine erfundene Beziehung und keine erfundene
+API-Fähigkeit.
+
+## 11. P00-Abnahme
+
+- [x] Framework, Sprache, Paketmanager, Router, State, API-Schicht,
+  UI-Komponenten, Tokenort, Tests und Prüfbefehle sind mit tatsächlichen
+  Pfaden belegt.
+- [x] Der Weg einer geplanten Einheit (Lesen/Anzeigen) und der Weg einer
+  Aufzeichnung bis zu den Aktivitätsdetails ist verfolgt.
+- [x] Bearbeiten und Remote-Antwort sind als **fehlend** dokumentiert, nicht
+  als vorhanden behauptet.
+- [x] Dashboard-Karte, „Umfang“/„Einheiten“-Handler, Chevron, Karten-Wrapper,
+  Tabs, alte Liste und fehlende Planerroute sind mit Datei/Funktion benannt.
+- [x] Die Sieben-Tage-Grenze ist auf `GET /api/week` zurückgeführt; UI,
+  Speicherung, Sync und Verläufe sind getrennt bewertet.
+- [x] Die kleinste Änderung für gezielt ältere Wochen ist benannt.
+- [x] Vorhandene Identitäten, Dedupe und die fehlende explizite
+  Plan-/Aktivitätsbeziehung sind dokumentiert.
+- [x] Dauer, Belastung, Ist-Summen, Aktivitätstag, historische Zonen und die
+  Bedeutung der Diagrammkurven sind aus der Datenbindung abgeleitet.
+- [x] Account/Athlet, Zeitzone, Authentifizierung, Persistenz, Cache und
+  Hintergrundaktualisierung sind identifiziert.
+- [x] Der Ausgangsstand von Tests, Build und Lint ist dokumentiert; bestehende
+  Fehler sind von P00 verursachten unterschieden.
+- [x] Alle acht PNGs und der Prototyp sind vorhanden und lesbar.
+- [x] Keine Produktcode-Änderung, keine Datenbankänderung, keine Zugangsdaten
+  ausgegeben.
