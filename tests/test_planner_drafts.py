@@ -59,6 +59,42 @@ def _buffer(node: dict, path: str, kind: str, raw: str) -> dict:
     }
 
 
+def test_detail_liefert_zonen_profil_und_getrennte_adapterfaehigkeit(
+    client: TestClient,
+) -> None:
+    event = _event()
+    _store(client, event)
+
+    payload = _detail(client, event["id"])
+
+    zones = payload["zone_options"]
+    assert zones["available"] is True
+    assert zones["zone_set_id"] == "run-hr"
+    assert [zone["id"] for zone in zones["zones"]] == [
+        "run-hr-1",
+        "run-hr-2",
+        "run-hr-3",
+        "run-hr-4",
+        "run-hr-5",
+    ]
+    assert zones["zones"][1]["label"] == "Zone 2"
+    assert zones["zones"][1]["low"] == 131
+    assert zones["zones"][1]["high"] == 155
+
+    targets = payload["capabilities"]["targets"]
+    assert targets["heartRateZone"]["local"] is True
+    assert targets["heartRateZone"]["editable"] is True
+    assert targets["heartRateBpm"]["local"] is True
+    assert targets["heartRateBpm"]["editable"] is False
+    assert targets["heartRateBpm"]["gate"] == "absolute_hr"
+    assert payload["capabilities"]["write"]["available"] is False
+
+    snapshot = payload["source_snapshot"]
+    assert snapshot["remote_id"] == str(event["id"])
+    assert snapshot["relevant_content_hash"].startswith("sha256:")
+    assert snapshot["raw_workout_text"] == event["description"]
+
+
 def test_entwurf_rechnet_1_5_km_zu_1500_m_und_aktualisiert_graph(
     client: TestClient,
 ) -> None:
@@ -176,6 +212,33 @@ def test_entwurf_schreibt_nichts_in_die_gespeicherte_basis(client: TestClient) -
     assert _detail(client, event["id"])["name"] == event["name"]
 
 
+def test_absolutes_bpm_ziel_bleibt_lesbar_aber_gesperrt(client: TestClient) -> None:
+    event = {
+        **_event(),
+        "id": 9199,
+        "workout_doc": {
+            "steps": [
+                {
+                    "text": "Schwelle",
+                    "duration": 600,
+                    "hr": {"units": "bpm", "start": 170, "end": 175},
+                }
+            ]
+        },
+    }
+    _store(client, event)
+
+    detail = _detail(client, event["id"])
+
+    node = detail["nodes"][0]
+    assert node["kind"] == "unsupported"
+    assert "HF-Ziel" in node["reason"] or "HF-Ziel" in node["label"]
+    capability = detail["capabilities"]["targets"]["heartRateBpm"]
+    assert capability["local"] is True
+    assert capability["editable"] is False
+    assert capability["synchronizable"] is False
+
+
 def test_fremder_feldpuffer_wird_abgewiesen(client: TestClient) -> None:
     event = _event()
     _store(client, event)
@@ -192,3 +255,46 @@ def test_fremder_feldpuffer_wird_abgewiesen(client: TestClient) -> None:
     response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
 
     assert response.status_code == 422
+
+
+def test_ohne_profil_werden_keine_zonen_erfunden(client: TestClient) -> None:
+    event = _event()
+    _store(client, event, profile=None)
+
+    detail = _detail(client, event["id"])
+
+    assert detail["zone_options"]["available"] is False
+    assert detail["zone_options"]["zones"] == []
+    assert detail["zone_options"]["max_hr"] is None
+
+
+def test_unbekannte_zonenreferenz_bleibt_erhalten(client: TestClient) -> None:
+    event = _event()
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    node = detail["nodes"][0]
+    body = {
+        "name": detail["name"],
+        "nodes": [
+            {
+                **node,
+                "target": {
+                    "kind": "zone",
+                    "metric": "heartRate",
+                    "zone_id": "run-hr-99",
+                    "zone_set_id": "run-hr",
+                },
+            }
+        ],
+        "field_buffers": {},
+    }
+
+    response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert draft["nodes"][0]["target"]["zone_id"] == "run-hr-99"
+    assert draft["nodes"][0]["target"]["text"] == "Zone 99"
+    assert "run-hr-99" not in {
+        zone["id"] for zone in draft["zone_options"]["zones"]
+    }

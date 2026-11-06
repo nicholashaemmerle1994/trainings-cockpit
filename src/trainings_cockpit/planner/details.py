@@ -32,7 +32,7 @@ from .model import (
     WorkoutNode,
     ZoneTarget,
 )
-from .profile import build_workout_profile_data
+from .profile import build_workout_profile_data, heart_rate_zone_options
 from .remote import read_remote_event
 from .validation import (
     calculate_known_totals,
@@ -225,6 +225,42 @@ def _source_data(source: Any) -> dict[str, Any]:
     }
 
 
+def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
+    """Lokale Modellfähigkeit und belegter Remote-Schreibweg getrennt.
+
+    P12 darf HF-Zonen lokal bearbeiten. Absolute bpm bleiben im Modell
+    darstellbar, sind aber ohne nachgewiesenen Schreibvertrag kein
+    synchronisierbares Eingabefeld (Abschnitt 6.3/8.4).
+    """
+    editable = plan.is_structure_editable
+    return {
+        "write": {
+            "available": False,
+            "reason": "Der Remote-Schreibpfad wird in P17 aktiviert.",
+        },
+        "targets": {
+            "heartRateZone": {
+                "local": True,
+                "editable": editable,
+                "synchronizable": False,
+                "reason": "Schreibbeleg für Zonenreferenzen folgt mit dem Serializer.",
+            },
+            "heartRateBpm": {
+                "local": True,
+                "editable": False,
+                "synchronizable": False,
+                "gate": "absolute_hr",
+                "reason": "Kein belegter Schreibvertrag für absolute bpm-Werte.",
+            },
+            "none": {
+                "local": True,
+                "editable": editable,
+                "synchronizable": False,
+            },
+        },
+    }
+
+
 def _plan_payload(
     plan: PlannedWorkout,
     source: Any,
@@ -262,6 +298,8 @@ def _plan_payload(
         "known": _known_summary(plan),
         "nodes": [_node_data(node) for node in plan.nodes],
         "graph": graph,
+        "zone_options": heart_rate_zone_options(plan.sport, zone_profiles),
+        "capabilities": _capabilities(plan),
         "source_snapshot": _source_data(source),
         "source": {
             "name": "intervals.icu",

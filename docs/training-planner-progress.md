@@ -1275,3 +1275,234 @@ Screenshots liegen lokal unter `data/screens/`:
 ## 5. Nächstes Paket
 
 **P10 — Lokalen Entwurf und Feldpuffer einführen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P10
+
+**Stand:** 06.11.2026  
+**Paket:** P10 — Lokalen Entwurf und Feldpuffer einführen  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `258402a`  
+**Umfang:** Lokaler Entwurf, Feldpuffer je Knoten-ID/Feldpfad, serverseitige
+Projektion ohne Remote-Schreiben, Bearbeitungsbeginn und Verwerfen.
+
+## 1. Ergebnis
+
+- `WorkoutDraft` bleibt die Grenze: Basisplan, Source-Snapshot und aktueller
+  Entwurf sind getrennt. Der Browser hält Basis und Snapshot unverändert; die
+  Eingaben liegen als Rohtext unter `node_id` + Feldpfad.
+- `POST /api/planner/plan/{id}/draft` liest die gespeicherte Basis über den
+  vorhandenen P04-Adapter, baut den Entwurf mit `validate_draft`, und liefert
+  Detail, Summen, Diagramm und Feldfehler. Es gibt keinen Netzwerkaufruf zu
+  intervals.icu und keinen Schreibvorgang.
+- Unfertige Werte (`5:`, leerer Umfang, `1,`) bleiben Rohtext mit
+  `incomplete`/`invalid`. Das validierte Modell behält den zuletzt gültigen
+  Wert; leere Eingaben werden nicht zu `0`.
+- Ein ausdrücklich gewechseltes, noch leeres Ende ist als `OpenEnd` im
+  Entwurfsmodell sichtbar. Diagramm und Summe markieren den Abschnitt als
+  offen, statt eine Dauer oder Geschwindigkeit zu erfinden.
+- Dirty ist semantisch: Ein gültiger Feldpuffer mit demselben Wert ist nicht
+  dirty; Auswahl und aufgeklappter Block werden nicht an die Projektion
+  geschickt und ändern den Status nicht.
+- Ein begonnener Entwurf setzt eine Schutzmarke. Ein später eintreffender
+  Detail-Read überschreibt ihn nicht. Verwerfen setzt Basis, Puffer und
+  Auswahl zurück; die gespeicherte Planung bleibt unverändert.
+- P10 verändert kein Remote-Event und enthält noch keinen Speicherknopf. Der
+  Schreibpfad folgt in P17.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/model.py` — `OpenEnd` nur für Entwürfe.
+- `src/trainings_cockpit/planner/drafts.py` — Entwurfsprojektion, Parser der
+  Feldpuffer, semantische Dirty-Prüfung.
+- `src/trainings_cockpit/planner/details.py` — gemeinsame Detailantwort für
+  Leseansicht und Entwurf inklusive Source-Snapshot-Metadaten.
+- `src/trainings_cockpit/planner/validation.py` — offene Enden zählen als
+  unbekannt und blockieren die Workoutvalidierung.
+- `src/trainings_cockpit/api.py` — lokaler Draft-Endpunkt.
+- `web/src/plannerDraft.ts` — Feldpuffer, Serialisierung, Dirty-Vergleich.
+- `web/src/components/PlanSheet.tsx` — Entwurfszustand, Bearbeitungsbeginn,
+  Verwerfen, Schutz vor überschreibenden Reads.
+- `web/src/types.ts`, `web/src/api.ts` — Entwurfsvertrag.
+- `tests/test_planner_drafts.py` — F01, Semantik, Puffer, OpenEnd, keine
+  Schreibwirkung.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_drafts.py -q` | **9 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **264 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/api.py src/trainings_cockpit/planner tests/test_planner_drafts.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+
+**Sichtprüfung:** Bearbeiten, Verwerfen und ein absichtlich unfertiger Wert
+(`5:`) bei 390 × 844 und 1440 × 900 geöffnet. Der Entwurf bleibt beim
+Einklappen und erneuten Öffnen erhalten; die gespeicherte Summe bleibt
+unverändert, solange der Wert ungültig ist.
+
+## 4. Offene Punkte
+
+- Speichern, Konflikte und Remote-Rücklesen folgen in P17/P18.
+- Abschnitt hinzufügen/entfernen/verschieben folgt in P14; Pace, Watt und
+  gemischte Ziele folgen in P13.
+
+## 5. Nächstes Paket
+
+**P11 — Inline-Akkordeon und stabilen Fokus umsetzen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P11
+
+**Stand:** 06.11.2026  
+**Paket:** P11 — Inline-Akkordeon und stabilen Fokus umsetzen  
+**Basis:** Branch `feature/trainingsplaner`, HEAD nach P10  
+**Umfang:** Formularregion im Block, genau ein offener Editor, Kopf- und
+Graphauswahl, stabile DOM-Identität.
+
+## 1. Ergebnis
+
+- Die Formularregion liegt als eigenes `section` unmittelbar nach dem Kopf und
+  innerhalb desselben `<li>` des Blocks. Es gibt keinen Editor oberhalb des
+  Aufbaus und kein zweites Formular.
+- Höchstens ein Editor ist offen; `null` ist gültig. Ein Kopfklick öffnet,
+  derselbe Kopf schließt, ein anderer Kopf wechselt. Ein Klick in ein Input
+  löst keine erneute Blockauswahl aus.
+- Gruppen und Kinder sind korrekt verschachtelt: Der Gruppeneditor steht vor
+  der Kinderliste, der Kindereditor innerhalb des Kindes. Beim Wechsel wird
+  der jeweils andere Editor geschlossen.
+- Jeder Auswahlkopf ist ein echter Button mit sichtbarem Text, ergänzendem
+  `aria-label`, `aria-expanded` und `aria-controls`. Die referenzierte Region
+  trägt dieselbe ID und ist ein `role="region"` mit `aria-labelledby`.
+- Komponenten-Keys stammen ausschließlich aus `node.node_id`. Beim Tippen
+  werden weder Liste noch Editor neu aufgebaut; Eingabefeld, Fokus und
+  Cursorposition bleiben erhalten, während Projektion, Kopfzeile und Diagramm
+  aktualisieren.
+- Beim Aufklappen wird nicht automatisch fokussiert und keine Tastatur
+  geöffnet. Gescrollt wird nur, wenn der gewählte Kopf außerhalb des sichtbaren
+  Bereichs liegt, etwa nach einer Graphauswahl.
+- Die Graphauswahl öffnet den zugehörigen Abschnitt. Erneutes Wählen desselben
+  Segments lässt ihn offen.
+
+## 2. Geänderte Dateien
+
+- `web/src/components/PlanEditor.tsx` — Akkordeon, Kopfzeilen, Gruppen- und
+  Kinderverschachtelung, Formularregion.
+- `web/src/components/PlanSheet.tsx` — ein offener Editor, Kopf-/Graphwechsel,
+  Scroll-Helfer und stabile Zustandsführung.
+- `web/src/styles.css` — Blockkopf, Inline-Fläche, Formularraster und
+  Fokuszustände mit vorhandenen Tokens.
+
+## 3. Prüfung
+
+| Prüfung | Ergebnis |
+|---|---|
+| Kopfklick / erneuter Klick / Wechsel | `aria-expanded` wechselt korrekt; 1 → 0 → 1 Editor |
+| Graphauswahl / erneute Auswahl | Kindeditor offen; erneute Auswahl bleibt offen |
+| Klick in ein Input | Editor bleibt offen (`aria-expanded="true"`) |
+| Tippen im Namen | dasselbe Input-DOM, `selectionStart=4`, Fokus erhalten |
+| Gruppen-/Kindeditor | 1 Editor, Kindeditor innerhalb des Kindes, Gruppe geschlossen |
+| `npm run build --prefix web` | erfolgreich |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **264 passed** |
+
+**Sichtprüfung:** F01 (einfacher Lauf) und F02 (Wiederholungsgruppe) bei
+390 × 844 und 1440 × 900. Kein horizontaler Überlauf (`scrollWidth` =
+Viewport). Screenshots unter `data/screens/`: `p10-p11-simple-390.png`,
+`p10-p11-simple-1440.png`, `p11-group-390.png`, `p11-group-1440.png`,
+`p11-child-390.png`, `p11-child-1440.png`.
+
+## 4. Offene Punkte
+
+- Hinzufügen, Entfernen, Verschieben und Undo folgen in P14.
+- Gruppeneinstellungen und Auflösen der Wiederholungen folgen in P15.
+
+## 5. Nächstes Paket
+
+**P12 — Umfang und HF-Ziele eines Einzelabschnitts bearbeiten.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P12
+
+**Stand:** 06.11.2026  
+**Paket:** P12 — Umfang und HF-Ziele eines Einzelabschnitts  
+**Basis:** Branch `feature/trainingsplaner`, HEAD nach P11  
+**Umfang:** Name, Rolle, Zeit/Distanz, HF-Zonen aus Profil, Feldfehler,
+Summen und Diagramm aus dem Entwurf.
+
+## 1. Ergebnis
+
+- Abschnittsname und Rolle sind angebunden. Die Rolle bietet gleichmäßig,
+  Aufwärmen, Belastung, Erholung und Abwärmen; sie ändert nur den Entwurf.
+- „Abschnitt endet nach“ schaltet zwischen Zeit und Distanz. Der Wechsel löscht
+  den bisherigen Umfang und setzt kein Tempo und keine Dauer aus dem anderen
+  Wert. Ein leeres Ende bleibt als `OpenEnd` sichtbar.
+- Distanz wird kanonisch in Metern gespeichert: `1,5 km` ergibt `1500` m; die
+  Eingabe bleibt als Rohtext `1,5 km` erhalten. `1.500 m` und deutsche Kommas
+  werden vom gemeinsamen Parser verarbeitet.
+- HF-Zonen kommen ausschließlich aus `sport_profile` der tatsächlichen
+  Sportart. Es werden keine Grenzen aus einer Formel ergänzt. Fehlt das Profil,
+  bleibt die Liste leer und „Ohne Ziel“ möglich.
+- Eine gespeicherte, im Profil unbekannte Zonenreferenz bleibt erhalten und
+  wird als „Referenz nicht im Profil“ markiert. Sie wird nicht still ersetzt.
+- `capabilities.targets` trennt lokale Modellfähigkeit von Remote-Unterstützung:
+  HF-Zonen sind lokal bearbeitbar, aber noch nicht als synchronisierbar
+  freigeschaltet; absolute bpm sind lokal modelliert, aber hinter dem
+  `absolute_hr`-Adapter-Gate gesperrt. Die Oberfläche erklärt beides am Feld.
+- Feldfehler erscheinen am betroffenen Feld, nicht als Toast pro Tastendruck.
+  Ein leerer oder unfertiger Wert bleibt stehen und blockiert die Validierung.
+- Summen, Hero und Diagramm stammen aus der Serverprojektion des validierten
+  Entwurfs. Offene Enden erscheinen als „offene Abschnitte“/schematische Achse
+  und als ruhiger Hinweis; der Kopf trägt „unvollständig“.
+- Ein Zeit-/Distanzwechsel erfindet keine Geschwindigkeit. `1,5 km` aktualisiert
+  Summe (`1,5 km`) und Achse (`Distanz (km)`), ohne die alte Dauer zu behalten.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/profile.py` — `heart_rate_zone_options` aus dem
+  tatsächlichen Profil; HF-Grenzen und stabile String-IDs.
+- `src/trainings_cockpit/planner/details.py` — Zonenoptionen, Fähigkeiten,
+  Source-Snapshot und offene Enden in der Detailprojektion.
+- `web/src/components/PlanEditor.tsx` — Namens-, Rollen-, Zeit-/Distanz-,
+  Zielart- und Zonenfelder sowie Fehler- und Unbekannt-Hinweise.
+- `web/src/plannerDraft.ts`, `web/src/types.ts` — Serialisierung und Vertrag.
+- `tests/test_planner_drafts.py` — `1,5 km` → `1500 m`, offenes Ende,
+  unfertiger Wert, gleicher Wert nicht dirty, Profil fehlt, unbekannte Zone,
+  keine Schreibwirkung.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_drafts.py -q` | **9 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **264 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/api.py src/trainings_cockpit/planner tests/test_planner_drafts.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+
+**Sichtprüfung:** F01 bei 390 × 844 und 1440 × 900: `1,5 km` eingegeben,
+Summe `1,5 km`, Achse `Distanz (km)`, Knoten-Meta `1,5 km · Zone 2`; leeres
+Ende und `5:` separat geprüft. Kein horizontaler Überlauf. Screenshots unter
+`data/screens/`: `p12-distance-sum-390.png`, `p12-distance-sum-1440.png`,
+`p12-distance-full-390.png`, `p12-distance-full-1440.png`.
+
+## 4. Offene Punkte
+
+- Pace, Watt, % FTP und „ohne Ziel“ als editierbare Zielart folgen in P13.
+  Importierte Pace-/Watt-Ziele bleiben in P12 sichtbar und unverändert.
+- Speichern und Synchronisieren folgen in P17; absolute bpm bleiben bis zu
+  einem belegten Schreibvertrag gesperrt.
+
+## 5. Nächstes Paket
+
+**P13 — Pace, Watt und gemischte Ziele ergänzen.**
+
+---
+
+## Ergänzung: Entscheidung und Abgrenzung P10–P12
+
+Die Architektur ist als **D-72** in `docs/ENTSCHEIDUNGEN.md` festgehalten:
+Feldpuffer und UI-Zustand liegen im Browser, die fachliche Projektion entsteht
+serverseitig aus derselben Ausführungsfolge wie Summen und Diagramm. Der
+Draft-Endpunkt liest die gespeicherte Basis und schreibt nichts. `OpenEnd`
+existiert nur im Entwurf und ist nicht speicherbar.

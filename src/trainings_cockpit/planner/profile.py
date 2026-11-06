@@ -823,4 +823,71 @@ def build_workout_profile_data(
     }
 
 
-__all__ = ["build_workout_profile_data"]
+def heart_rate_zone_options(
+    sport: str,
+    zone_profiles: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Die tatsächlich vorhandenen HF-Zonen einer Sportart.
+
+    Es werden keine Zonen aus einer allgemeinen Formel ergänzt. Fehlt das
+    Profil, bleibt die Liste leer; die Oberfläche kann dann nur „Ohne Ziel“
+    anbieten und eine importierte Referenz als unbekannt markieren.
+    """
+    entry = _zone_profile(zone_profiles, sport)
+    if not entry:
+        return {
+            "sport": sport,
+            "available": False,
+            "zone_set_id": None,
+            "max_hr": None,
+            "zones": [],
+        }
+    raw_zones = entry.get("zones")
+    max_hr = entry.get("max_hr")
+    if not isinstance(raw_zones, list) or not raw_zones:
+        return {
+            "sport": sport,
+            "available": False,
+            "zone_set_id": None,
+            "max_hr": float(max_hr) if isinstance(max_hr, (int, float)) else None,
+            "zones": [],
+        }
+    try:
+        boundaries = [float(value) for value in raw_zones]
+    except (TypeError, ValueError):
+        return {
+            "sport": sport,
+            "available": False,
+            "zone_set_id": None,
+            "max_hr": None,
+            "zones": [],
+        }
+    try:
+        max_value = float(max_hr) if max_hr is not None else boundaries[-1]
+    except (TypeError, ValueError):
+        max_value = boundaries[-1]
+    from .remote import _sport_slug
+
+    zone_set_id = f"{_sport_slug(sport)}-hr"
+    zones: list[dict[str, Any]] = []
+    for index, high in enumerate(boundaries, start=1):
+        low = boundaries[index - 2] if index >= 2 else round(max_value * 0.5, 1)
+        zones.append(
+            {
+                "id": f"{zone_set_id}-{index}",
+                "label": f"Zone {index}",
+                "level": index,
+                "low": low,
+                "high": high,
+            }
+        )
+    return {
+        "sport": sport,
+        "available": True,
+        "zone_set_id": zone_set_id,
+        "max_hr": max_value,
+        "zones": zones,
+    }
+
+
+__all__ = ["build_workout_profile_data", "heart_rate_zone_options"]
