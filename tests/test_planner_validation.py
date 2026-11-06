@@ -131,10 +131,12 @@ def test_gemeinsame_parser_lesen_deutsche_und_technische_formen() -> None:
     assert parse_duration("1,5h") == 5400
     assert parse_decimal("1,5") == 1.5
     assert parse_decimal("5.5") == 5.5
-    assert parse_distance("10km") == 10000
-    assert parse_distance("1000m") == 1000
+    assert parse_distance("10") == 10000
+    assert parse_distance("1,5") == 1500
+    assert parse_distance("1.5") == 1500
+    assert parse_distance("0,8") == 800
+    assert parse_distance("10 km") == 10000
     assert parse_distance("1,5 km") == 1500
-    assert parse_distance("1.000 m") == 1000
     assert parse_pace("5:30") == 330
     assert parse_pace("5:30 min/km") == 330
     assert parse_pace("5,5") == 330
@@ -158,6 +160,15 @@ def test_ungueltige_parserwerte_werden_nicht_zu_null() -> None:
             parse_pace(text)
     with pytest.raises(ValueError):
         parse_value_range("170-160")
+
+
+def test_distanzfeld_hat_nur_kilometer_als_standard() -> None:
+    assert parse_distance("1,5") == 1500
+    assert parse_distance("0,4") == 400
+    with pytest.raises(ValueError, match="Kilometern"):
+        parse_distance("1.500 m")
+    with pytest.raises(ValueError, match="Kilometern"):
+        parse_distance("400m")
 
 
 def test_feldvalidierung_trennt_unvollstaendig_und_ungueltig() -> None:

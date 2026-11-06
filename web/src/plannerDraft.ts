@@ -585,9 +585,21 @@ export function bufferRaw(
   return buffers[fieldKey(nodeId, fieldPath)]?.raw;
 }
 
+/** Distanzfeld: immer Kilometer, exakt bis auf den Meter, mit Einheit. */
+export function distanceFieldText(metres: number): string {
+  const text = (metres / 1000)
+    .toFixed(3)
+    .replace(/0+$/, "")
+    .replace(/\.$/, "");
+  return `${text.replace(".", ",")} km`;
+}
+
 /** Der zuletzt gültige Wert als Starttext; offene Enden bleiben leer. */
 export function endSeed(node: PlanNode): string {
   if (!node.end || node.end.kind === "open") return "";
+  if (node.end.kind === "distance" && node.end.metres != null) {
+    return distanceFieldText(node.end.metres);
+  }
   return node.end.text;
 }
 
