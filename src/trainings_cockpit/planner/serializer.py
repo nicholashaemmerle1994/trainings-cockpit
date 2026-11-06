@@ -10,6 +10,7 @@ Feld               Wann
 ``description``    Update nur bei einer Strukturänderung; Create immer
 ``type``           ausschließlich Create (Sportart)
 ``category``       ausschließlich Create, immer ``WORKOUT``
+``external_id``    ausschließlich Create, stabil aus lokaler Identität
 =================  ====================================================
 
 Alles andere bleibt beim Update unangetastet: ``id``, ``external_id``,
@@ -36,6 +37,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from .identities import stable_external_id
 from .model import (
     DistanceEnd,
     HeartRateTarget,
@@ -61,7 +63,7 @@ from .model import (
 from .validation import validate_draft, validate_workout
 
 CONTROLLED_REMOTE_FIELDS = ("name", "start_date_local", "description")
-CREATE_ONLY_REMOTE_FIELDS = ("type", "category")
+CREATE_ONLY_REMOTE_FIELDS = ("type", "category", "external_id")
 PRESERVED_REMOTE_FIELDS = (
     "id",
     "external_id",
@@ -115,6 +117,7 @@ class PreparedWrite:
     remote_id: str | None
     payload: dict[str, Any]
     workout_text: str | None
+    external_id: str | None = None
     controlled_fields: tuple[str, ...] = CONTROLLED_REMOTE_FIELDS
 
     @property
@@ -129,6 +132,7 @@ class PreparedWrite:
             "remote_id": self.remote_id,
             "payload": dict(self.payload),
             "workout_text": self.workout_text,
+            "external_id": self.external_id,
             "controlled_fields": list(self.controlled_fields),
         }
 
@@ -448,11 +452,18 @@ def _assert_structure_supported(plan: PlannedWorkout, source: Any | None = None)
         raise SerializationError("Der Aufbau ist nicht vollständig speicherbar.")
 
 
-def prepare_write(candidate: object) -> PreparedWrite:
+def prepare_write(
+    candidate: object,
+    *,
+    account_id: str = "default",
+    athlete_id: str = "default",
+) -> PreparedWrite:
     """Erzeugt einen zulässigen Schreibauftrag oder lehnt ihn begründet ab.
 
     Es gibt keinen Netzwerkaufruf. ``NoWriteNeeded`` bedeutet, dass der
-    Entwurf keine fachliche Änderung gegenüber der Basis trägt.
+    Entwurf keine fachliche Änderung gegenüber der Basis trägt. Beim Create
+    gehört die stabile externe Identität vor dem ersten Request zum Payload;
+    sie wird aus lokaler Plan-ID und Account/Athlet abgeleitet.
     """
     draft = _require_draft(candidate)
     current = draft.current
@@ -472,12 +483,21 @@ def prepare_write(candidate: object) -> PreparedWrite:
             )
         _assert_structure_supported(current, draft.base_source)
         workout_text = serialize_workout_text(current)
+        external_id = (
+            current.external_id
+            or stable_external_id(
+                current.local_id,
+                account_id=account_id,
+                athlete_id=athlete_id,
+            )
+        )
         payload = {
             "category": "WORKOUT",
             "type": current.sport,
             "name": current.name,
             "start_date_local": _start_date_local(current),
             "description": workout_text,
+            "external_id": external_id,
         }
         return PreparedWrite(
             kind="create",
@@ -486,6 +506,7 @@ def prepare_write(candidate: object) -> PreparedWrite:
             remote_id=None,
             payload=payload,
             workout_text=workout_text,
+            external_id=external_id,
             controlled_fields=CONTROLLED_REMOTE_FIELDS + CREATE_ONLY_REMOTE_FIELDS,
         )
 

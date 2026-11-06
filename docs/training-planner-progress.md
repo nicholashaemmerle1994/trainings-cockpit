@@ -1783,3 +1783,70 @@ aufgerufen.
 ## 5. Nächstes Paket
 
 **P18 — Speicherkoordinator und Statusmodell einführen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P18
+
+**Stand:** 06.11.2026  
+**Paket:** P18 — Speicherkoordinator und Statusmodell einführen  
+**Basis:** Branch `feature/trainingsplaner`, HEAD nach P17
+
+## 1. Ergebnis
+
+- `SaveState` bildet die Zustände aus Abschnitt 9.2 getrennt ab: `clean`,
+  `dirty`, `invalid`, `saving`, `saved`, `failed`, `conflict`, `unknown` und
+  `savedUnverified`. Ein Timeout wird ausdrücklich `unknown`, nicht
+  „nichts gespeichert“.
+- `SaveCoordinator` prüft Typgrenze, Validierung, Dirty-Zustand und erzeugt
+  daraus einen unveränderlichen `SaveSnapshot` mit Vorgangs-ID,
+  Entwurfsrevision, Account, Athlet, Ziel-ID und eingefrorenem Payload.
+- Pro Account, Athlet und lokaler Plan-ID ist genau eine Operation aktiv.
+  Zehn gleichzeitige Aktivierungen starten im Test genau einen Adapteraufruf;
+  alle zehn tragen dieselbe Vorgangs-ID. Nach bestätigtem Erfolg liefert
+  derselbe Inhalt den gespeicherten Status ohne zweiten Write.
+- `saving`, `unknown` und `savedUnverified` sperren fachliche Eingaben über
+  `ensure_editable`; ein `InputLocked`-Fehler trägt den konkreten Status.
+- Fehlerklassen: Grenze, Validierung, 404, Berechtigung, Konflikt,
+  Remote-Validierung, Rate Limit, Server, Netzwerk, Timeout, Identität,
+  Roundtrip und Reconciliation. 5xx und Timeout bleiben unklar; 404 wird nie
+  in einen Create umgeleitet.
+- Nur ein `WorkoutDraft` mit geplantem Workout erreicht den Koordinator. Eine
+  `ActivityReference`, ein Dict oder ein `PlannedWorkout` ohne Entwurf endet
+  als `invalid`, bevor der Adapter aufgerufen wird.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/save.py` — Zustände, Snapshot, Koordinator,
+  Sperre, Fehlerklassifikation und Reconciliation-Grundlage.
+- `src/trainings_cockpit/planner/serializer.py` — stabile externe Identität im
+  Create-Payload; `PreparedWrite.external_id`.
+- `src/trainings_cockpit/planner/identities.py` — `stable_external_id`.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `tests/test_planner_save.py` — Zustände, Snapshot, Sperre, Parallelität,
+  Fehler, Typgrenze und Account-/Athlet-Trennung.
+- `tests/test_planner_serializer.py` — Create-Payload mit externer Identität.
+- `docs/ENTSCHEIDUNGEN.md` — D-76.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_save.py -q` | **12 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **323 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner tests/test_planner_save.py tests/test_planner_serializer.py` | ohne Befund |
+
+Es gab keinen Netzwerkaufruf und keinen Produktiv-Schreibzugriff.
+
+## 4. Offene Punkte
+
+- Der konkrete Update-/Create-Adapter folgt in P19/P20. `SaveCoordinator`
+  arbeitet gegen die `SaveRunner`-Grenze.
+- `reconcile()` bereitet die lesende Prüfung vor; die fachliche
+  Remote-Reconciliation wird in P19/P20 mit dem kontrollierten Testadapter
+  belegt und in P22 dauerhaft gespeichert.
+- Konfliktprüfung gegen eine neuere Remoteversion bleibt P21.
+
+## 5. Nächstes Paket
+
+**P19 — Update bestehender Einheiten anschließen.**

@@ -137,6 +137,26 @@ class IdentityContext:
         return f"{self.object_kind.value}:{self.account_id}:{self.athlete_id}:{self.value}"
 
 
+def stable_external_id(
+    local_id: PlanId | str,
+    *,
+    account_id: str,
+    athlete_id: str,
+) -> str:
+    """Stabile App-Identität für den belegten Upsert-Pfad.
+
+    Sie gehört zur beabsichtigten Einheit und zum Account/Athleten, nicht zu
+    einem einzelnen HTTP-Versuch. Ein Retry desselben Entwurfs erzeugt deshalb
+    dieselbe externe ID; zwei bewusst getrennte Entwürfe behalten zwei IDs.
+    """
+    local = local_id if isinstance(local_id, PlanId) else PlanId(local_id)
+    return (
+        "tc:planner:"
+        f"{require_text(account_id, 'account_id')}:"
+        f"{require_text(athlete_id, 'athlete_id')}:{local.value}"
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class SourceActivityRef:
     """Ein Quellabbild derselben kanonischen Aktivität."""

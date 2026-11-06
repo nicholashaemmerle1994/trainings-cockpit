@@ -452,8 +452,9 @@ def test_neuanlage_hat_getrennte_lokale_identitaet_ohne_remote_id() -> None:
         "name": "Neuer Dauerlauf",
         "start_date_local": "2026-11-11T00:00:00",
         "description": "- Dauerlauf 45m Z2 HR",
+        "external_id": "tc:planner:default:default:plan:draft:neu",
     }
-    assert "external_id" not in prepared.payload
+    assert prepared.external_id == "tc:planner:default:default:plan:draft:neu"
 
 
 def test_remote_id_darf_bei_update_nicht_wechseln() -> None:
@@ -514,5 +515,6 @@ def test_serializer_ist_ohne_schreibweg_und_mit_allen_kontrollfeldern_dokumentie
         "description",
         "type",
         "category",
+        "external_id",
     )
     assert prepared.as_dict()["payload"]["type"] == "Run"
