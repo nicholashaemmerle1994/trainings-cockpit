@@ -2741,6 +2741,21 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   color: var(--text-muted);
 }
 
+.planner-operation-note {
+  margin: 0;
+  font-size: var(--text-label);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.planner-operation-note--warning {
+  color: var(--warning);
+}
+
+.planner-operation-note--error {
+  color: var(--negative);
+}
+
 .planner-updating {
   margin: 0;
   font-size: var(--text-micro);

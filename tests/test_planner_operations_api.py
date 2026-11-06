@@ -14,6 +14,7 @@ from planner_fixtures import build_plan_from_case, load_case
 from trainings_cockpit import api, db
 from trainings_cockpit.planner import (
     EventWriteService,
+    GatewayNotFound,
     SaveCoordinator,
     SaveState,
     WorkoutDraft,
@@ -180,3 +181,154 @@ def test_fremder_vorgang_wird_nicht_abgeglichen(
 
     assert response.status_code == 404
     assert client.get("/api/planner/operations").json()["items"] == []
+
+
+class MissingGateway:
+    """Quelle kennt das Event nicht mehr und findet auch keine externe Identität."""
+
+    def read_event(self, remote_id: str) -> dict:
+        raise GatewayNotFound(remote_id)
+
+    def create_event(self, payload: dict) -> dict:
+        raise AssertionError("Ein Abgleich darf keinen Create auslösen")
+
+    def update_event(self, remote_id: str, payload: dict) -> dict:
+        raise AssertionError("Ein Abgleich darf keinen Write auslösen")
+
+    def find_by_external_id(self, external_id: str, day: str) -> list[dict]:
+        del external_id, day
+        return []
+
+
+def test_verschwundenes_event_wird_verworfen_und_lokal_geraeumt(
+    client: TestClient, monkeypatch
+) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    draft = WorkoutDraft.new(
+        _new_plan(), draft_id="draft:f09", operation_id="op:f09"
+    )
+    snapshot = (
+        SaveCoordinator(EventWriteService(ReconcileGateway(_remote_event("x"))))
+        .preview(draft, account_id="default", athlete_id="default")
+        .snapshot
+    )
+    assert snapshot is not None
+    SqliteOperationStore(conn).save(
+        replace(snapshot, remote_id="9201"), SaveState.UNKNOWN
+    )
+    db.upsert_events(
+        conn,
+        [
+            {
+                "id": 9201,
+                "start_date_local": "2026-11-09T00:00:00",
+                "type": "Run",
+                "category": "WORKOUT",
+                "name": "Neue Einheit",
+            }
+        ],
+    )
+    assert db.event_by_id(conn, 9201) is not None
+    conn.close()
+
+    service = EventWriteService(MissingGateway())
+
+    @contextmanager
+    def fake_service(settings):
+        del settings
+        yield service
+
+    monkeypatch.setattr(api, "event_write_service", fake_service)
+
+    result = client.post("/api/planner/operations/op:f09/reconcile").json()
+
+    assert result["status"]["state"] == "failed"
+    assert result["status"]["error"] == "not_found"
+    assert result["status"]["remote_id"] == "9201"
+    assert "nicht vorhanden" in result["status"]["message"]
+    assert client.get("/api/planner/operations").json()["items"] == []
+
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    try:
+        assert db.event_by_id(conn, 9201) is None
+    finally:
+        conn.close()
+    week = client.get("/api/planner", params={"week": "2026-11-09"}).json()
+    assert all(entry["name"] != "Neue Einheit" for entry in week["entries"])
+
+
+class SearchUnavailableGateway:
+    """Die Event-Liste antwortet 404; über das adressierte Event ist nichts bekannt."""
+
+    def read_event(self, remote_id: str) -> dict:
+        raise AssertionError("Ohne Treffer der Suche darf erst der direkte Read folgen")
+
+    def create_event(self, payload: dict) -> dict:
+        raise AssertionError("Ein Abgleich darf keinen Create auslösen")
+
+    def update_event(self, remote_id: str, payload: dict) -> dict:
+        raise AssertionError("Ein Abgleich darf keinen Write auslösen")
+
+    def find_by_external_id(self, external_id: str, day: str) -> list[dict]:
+        del external_id, day
+        raise GatewayNotFound("events")
+
+
+def test_404_der_externen_suche_loescht_kein_lokales_event(
+    client: TestClient, monkeypatch
+) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    draft = WorkoutDraft.new(
+        _new_plan(), draft_id="draft:search404", operation_id="op:search404"
+    )
+    snapshot = (
+        SaveCoordinator(EventWriteService(ReconcileGateway(_remote_event("x"))))
+        .preview(draft, account_id="default", athlete_id="default")
+        .snapshot
+    )
+    assert snapshot is not None
+    SqliteOperationStore(conn).save(
+        replace(snapshot, remote_id="9301"), SaveState.UNKNOWN
+    )
+    db.upsert_events(
+        conn,
+        [
+            {
+                "id": 9301,
+                "start_date_local": "2026-11-09T00:00:00",
+                "type": "Run",
+                "category": "WORKOUT",
+                "name": "Neue Einheit",
+            }
+        ],
+    )
+    conn.close()
+
+    service = EventWriteService(SearchUnavailableGateway())
+
+    @contextmanager
+    def fake_service(settings):
+        del settings
+        yield service
+
+    monkeypatch.setattr(api, "event_write_service", fake_service)
+
+    result = client.post("/api/planner/operations/op:search404/reconcile").json()
+
+    # Ein 404 der Suche belegt nicht, dass das adressierte Event fehlt.
+    assert result["status"]["state"] == "unknown"
+    assert result["status"]["error"] == "reconciliation"
+    assert "noch nicht möglich" in result["status"]["message"]
+    assert len(client.get("/api/planner/operations").json()["items"]) == 1
+
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    try:
+        assert db.event_by_id(conn, 9301) is not None
+    finally:
+        conn.close()

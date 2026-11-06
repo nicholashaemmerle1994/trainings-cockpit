@@ -66,6 +66,21 @@ function entryName(entry: PlannerEntry): string {
   return entry.name || entry.plan?.name || entry.sport_label;
 }
 
+const OPERATION_STATES: Record<string, string> = {
+  saving: "wird gespeichert",
+  unknown: "unklar",
+  savedUnverified: "ungeprüft",
+  failed: "fehlgeschlagen",
+  conflict: "Konflikt",
+  saved: "gespeichert",
+};
+
+const TERMINAL_OPERATION_STATES = new Set(["saved", "failed", "conflict"]);
+
+function operationStateLabel(state: string): string {
+  return OPERATION_STATES[state] ?? state;
+}
+
 function openPlannedText(open: PlannerSummaryEntry): string {
   if (open.seconds == null && open.count == null) {
     return "Offene Planung: Daten nicht verfügbar";
@@ -138,6 +153,10 @@ export function Planner({
   const [newPlan, setNewPlan] = useState<NewPlanConfig | null>(null);
   const [operations, setOperations] = useState<PlannerOperation[]>([]);
   const [reconciling, setReconciling] = useState<string | null>(null);
+  const [reconcileNote, setReconcileNote] = useState<{
+    kind: "info" | "warning" | "error";
+    text: string;
+  } | null>(null);
   const [recoverNew, setRecoverNew] = useState<StoredPlannerDraft | null>(null);
 
   useEffect(() => {
@@ -182,17 +201,54 @@ export function Planner({
 
   const reconcile = async (operation: PlannerOperation) => {
     setReconciling(operation.operation_id);
+    setReconcileNote(null);
     try {
       const result = await api.reconcileOperation(operation.operation_id);
+      const status = result.status;
+      const terminal = TERMINAL_OPERATION_STATES.has(status.state);
       invalidate([week, result.week]);
-      setOperations((current) =>
-        current.filter((item) => item.operation_id !== operation.operation_id),
-      );
+      if (terminal) {
+        setOperations((current) =>
+          current.filter((item) => item.operation_id !== operation.operation_id),
+        );
+      } else {
+        setOperations((current) =>
+          current.map((item) =>
+            item.operation_id === operation.operation_id
+              ? {
+                  ...item,
+                  state: status.state,
+                  remote_id: status.remote_id ?? item.remote_id,
+                }
+              : item,
+          ),
+        );
+      }
+      setReconcileNote({
+        kind:
+          status.error === "not_found"
+            ? "warning"
+            : status.state === "failed" || status.state === "conflict"
+              ? "error"
+              : "info",
+        text:
+          status.message ||
+          (terminal
+            ? "Der Vorgang ist abgeschlossen."
+            : "Der Vorgang ist weiterhin offen."),
+      });
       onDataChanged?.();
       if (result.week && result.week !== week) onWeekChange(result.week);
       else reload();
-    } catch {
-      /* Der Vorgang bleibt sichtbar; der nächste Reload versucht es erneut. */
+    } catch (error) {
+      // Ein stiller Fehlschlag sähe aus, als hätte der Knopf nichts getan.
+      setReconcileNote({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? `Statusprüfung fehlgeschlagen: ${error.message}`
+            : "Die Statusprüfung ist fehlgeschlagen.",
+      });
     } finally {
       setReconciling(null);
     }
@@ -262,13 +318,13 @@ export function Planner({
             <div key={operation.operation_id} className="planner-operation__row">
               <span>
                 {operation.mode === "create" ? "Neuanlage" : "Änderung"} ·{" "}
-                {operation.state}
+                {operationStateLabel(operation.state)}
                 {operation.remote_id ? ` · Event ${operation.remote_id}` : ""}
               </span>
               <button
                 type="button"
                 className="btn btn--ghost"
-                disabled={reconciling === operation.operation_id}
+                disabled={reconciling !== null}
                 onClick={() => void reconcile(operation)}
               >
                 {reconciling === operation.operation_id
@@ -278,6 +334,15 @@ export function Planner({
             </div>
           ))}
         </section>
+      )}
+
+      {reconcileNote && (
+        <p
+          className={`planner-operation-note planner-operation-note--${reconcileNote.kind}`}
+          role={reconcileNote.kind === "error" ? "alert" : "status"}
+        >
+          {reconcileNote.text}
+        </p>
       )}
 
       {!resolved && loading && <PlannerSkeleton />}

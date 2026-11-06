@@ -12,6 +12,7 @@ from planner_fixtures import build_plan_from_case, load_case
 from trainings_cockpit import db
 from trainings_cockpit.planner import (
     EventWriteService,
+    GatewayNotFound,
     SaveCoordinator,
     SaveErrorKind,
     SaveSnapshot,
@@ -72,7 +73,10 @@ class CreateGateway:
         self.read_calls.append(remote_id)
         if self.fail_read:
             raise TimeoutError("Rücklesen weg")
-        return copy.deepcopy(self.events[int(remote_id)])
+        event = self.events.get(int(remote_id))
+        if event is None:
+            raise GatewayNotFound(remote_id)
+        return copy.deepcopy(event)
 
     def update_event(self, remote_id: str, payload: dict) -> dict:
         raise AssertionError("P22 darf kein Update als Create-Ersatz auslösen")
@@ -400,4 +404,126 @@ def test_editorshape_wird_erst_nach_bestaetigung_veroeffentlicht(tmp_path) -> No
     row = db.planner_operation(conn, "op:f09")
     assert row is not None
     assert row["editor_shape_state"] == "confirmed"
+    conn.close()
+
+
+def test_toter_create_wird_statt_ewig_offen_verworfen(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    gateway.fail_read = True
+    service = EventWriteService(gateway)
+    coordinator = SaveCoordinator(service, recorder=store)
+
+    first = coordinator.activate(_draft(plan), account_id="acct", athlete_id="7")
+    assert first.status.state is SaveState.SAVED_UNVERIFIED
+    assert first.status.remote_id == "1201"
+
+    # Die Remote-Anlage ist inzwischen bei der Quelle gelöscht; der lokale
+    # Vorgang kennt aber noch die ID aus der Create-Antwort.
+    gateway.events.clear()
+    gateway.fail_read = False
+    reloaded = SaveCoordinator(service, recorder=store)
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.FAILED
+    assert result.status.error is SaveErrorKind.NOT_FOUND
+    assert result.status.remote_id == "1201"
+    assert "nicht vorhanden" in result.status.message
+    assert "verworfen" in result.status.message
+    assert len(gateway.create_calls) == 1
+    assert store.open_operations(account_id="acct", athlete_id="7") == []
+    row = db.planner_operation(conn, "op:f09")
+    assert row is not None and row["state"] == "failed"
+    conn.close()
+
+
+def test_create_ohne_externe_id_wird_ueber_bekannte_remote_id_bestaetigt(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    coordinator = SaveCoordinator(EventWriteService(gateway), recorder=store)
+
+    created = coordinator.activate(
+        _draft(plan, operation_id="op:created"), account_id="acct", athlete_id="7"
+    )
+    assert created.status.state is SaveState.SAVED
+    event = gateway.events[1201]
+    # Ein älterer Fehler konnte ein Event ohne externe Identität hinterlassen;
+    # dann findet die externe Suche nichts, der direkte Read zur bekannten
+    # Remote-ID muss den Vorgang dennoch zuordnen.
+    event.pop("external_id")
+
+    snapshot = coordinator.preview(
+        _draft(plan, operation_id="op:legacy"), account_id="acct", athlete_id="7"
+    ).snapshot
+    assert snapshot is not None
+    store.save(replace(snapshot, remote_id="1201"), SaveState.UNKNOWN)
+
+    reloaded = SaveCoordinator(EventWriteService(gateway), recorder=store)
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+    result = reloaded.reconcile("op:legacy")
+
+    assert result.status.state is SaveState.SAVED
+    assert result.status.remote_id == "1201"
+    assert len(gateway.create_calls) == 1
+    assert store.open_operations(account_id="acct", athlete_id="7") == []
+    conn.close()
+
+
+def test_update_auf_verschwundenes_event_wird_erledigt(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    snapshot = SaveCoordinator(EventWriteService(CreateGateway())).preview(
+        _draft(plan), account_id="acct", athlete_id="7"
+    ).snapshot
+    assert snapshot is not None
+    store.save(
+        replace(snapshot, mode="structure", kind="update", remote_id="999"),
+        SaveState.UNKNOWN,
+    )
+
+    reloaded = SaveCoordinator(
+        EventWriteService(CreateGateway()), recorder=store
+    )
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.FAILED
+    assert result.status.error is SaveErrorKind.NOT_FOUND
+    assert result.status.remote_id == "999"
+    assert "nicht mehr" in result.status.message
+    assert store.open_operations(account_id="acct", athlete_id="7") == []
+    conn.close()
+
+
+def test_externe_suche_hat_vorrang_vor_der_bekannten_remote_id(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    gateway.fail_read = True
+    coordinator = SaveCoordinator(EventWriteService(gateway), recorder=store)
+
+    first = coordinator.activate(_draft(plan), account_id="acct", athlete_id="7")
+    assert first.status.state is SaveState.SAVED_UNVERIFIED
+    gateway.read_calls.clear()
+
+    # Die externe Suche findet das Event. Der direkte Read zur bekannten
+    # Remote-ID würde einen Timeout liefern, darf aber gar nicht nötig sein.
+    reloaded = SaveCoordinator(EventWriteService(gateway), recorder=store)
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.SAVED
+    assert result.status.remote_id == "1201"
+    assert gateway.read_calls == []
     conn.close()

@@ -54,7 +54,9 @@ Vorgangspersistenz und die Rückleseprüfung.
   lokal einsortieren; kein Event-Write.
 - `GET /api/planner/operations` und
   `POST /api/planner/operations/{id}/reconcile` — offene Vorgänge und lesender
-  Abgleich. Ein bestätigter Reconcile wird lokal einsortiert (P26-Fix).
+  Abgleich. Ein bestätigter Reconcile wird lokal einsortiert (P26-Fix); ein 404
+  der bekannten Remote-ID ohne externen Treffer beendet den Vorgang endgültig
+  als `failed` (D-86).
 - Update und Create prüfen den zurückgelesenen Aufbau semantisch. Ein
   fehlgeschlagenes Rücklesen bleibt `savedUnverified`; es gibt keinen
   automatischen zweiten Write.
