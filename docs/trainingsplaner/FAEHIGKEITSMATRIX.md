@@ -14,9 +14,10 @@ Vollständigkeit und den fehlenden Nachweis bei jeder offenen Schreibfähigkeit.
 |---|---|---|
 | Kalender-Events lesen | `IntervalsClient.events()` → `GET /athlete/{id}/events`; `db.upsert_events()` erhält das Roh-JSON in `event.raw` | belegt |
 | `workout_doc` lesen | `plan.parse_workout()` liest `workout_doc.steps`, klappt Wiederholungen auf, wählt aber genau ein Ziel und verliert die Ende-Bedingung als Typ | offen |
-| Produkt-Schreibweg | Update-Service und Rückleseprüfung existieren; kein Produkt-Endpunkt, keine Konfliktsicherung, kein Produktiv-Schreibzugriff | teilweise belegt, produktiv gesperrt |
+| Produkt-Schreibweg | Update-/Create-Service, Rückleseprüfung und stabile externe Identität existieren; kein Produkt-Endpunkt, keine Konfliktsicherung, kein Produktiv-Schreibzugriff | teilweise belegt, produktiv gesperrt |
 | Gezieltes Event-Update | `IntervalsClient.update_event()` nutzt `PUT /athlete/{id}/events/{eventId}`; der Vertrag ist mit `respx` belegt, der Produkt-Endpunkt bleibt bis P21/P22 gesperrt | Testvertrag belegt, produktiv gesperrt |
-| Plan-/Aktivitätsbeziehung | Keine explizite Beziehung; `plan.matches()` ist eine Heuristik ohne Abschlussnachweis | offen |
+| Neuanlage mit stabiler App-Identität | `IntervalsClient.upsert_events()` mit `external_id`; Create-Service prüft Antwort-Identität und liest die Remote-ID nach | Testvertrag belegt, produktiv gesperrt |
+| Plan-/Aktivitätsbeziehung | Keine explizite Beziehung; `plan.matches()` ist eine Heuristik ohne Abschlussnachweis; eine neue `external_id` ist kein Beleg | offen |
 | Kanonische Mehrquellen-Aktivität | Dedupe löscht den Verlierer; keine dauerhafte Zuordnung mehrerer Quell-IDs | offen |
 
 ## Matrix

@@ -78,3 +78,8 @@ Strukturänderung abgelehnt, statt sie still zu verlieren.
 Abschnitt 8 (Meter/Minuten, Pace-Referenz, Rollen, relative Ziele,
 Wiederholungen, Erhaltung), die Typgrenze und die Abwesenheit von Node-,
 Demo- und berechneten Remote-Feldern.
+
+P20 ergänzt am Create-Payload die deterministische `external_id`
+(`tc:planner:<account>:<athlet>:<lokale-plan-id>`). Sie wird vor dem ersten
+Request festgelegt, bei einem Retry desselben Entwurfs wiederverwendet und
+nicht als Beleg für eine Aktivitätsbeziehung interpretiert.

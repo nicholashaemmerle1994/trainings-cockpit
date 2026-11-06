@@ -1924,3 +1924,78 @@ die HTTP-Form des vorhandenen Clients.
 ## 5. Nächstes Paket
 
 **P20 — Neuanlage mit stabiler Identität anschließen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P20
+
+**Stand:** 06.11.2026  
+**Paket:** P20 — Neuanlage mit stabiler Identität anschließen  
+**Basis:** Branch `feature/trainingsplaner`, HEAD nach P19
+
+## 1. Ergebnis
+
+- Jeder neue Entwurf erhält vor dem ersten Request eine deterministische
+  `external_id` aus `tc:planner:<account>:<athlet>:<lokale-plan-id>`. Ein
+  Retry desselben Entwurfs verwendet dieselbe ID; zwei bewusst getrennte
+  Entwürfe bleiben getrennt.
+- Die Neuanlage nutzt den im Bestand belegten Bulk-Upsert des vorhandenen
+  Clients (`POST /events/bulk?upsert=true`) und keinen zweiten Create-Pfad.
+- Die Antwort wird der lokalen Operation nur zugeordnet, wenn ihre
+  `external_id` übereinstimmt. Die tatsächliche Remote-ID wird aus der
+  Antwort übernommen und durch Rücklesen bestätigt; eine fehlende ID wird
+  nicht erfunden.
+- Fehlt die Remote-ID oder scheitert das Rücklesen, bleibt der Vorgang
+  `savedUnverified` und gesperrt. Ein Timeout wird `unknown`.
+- `reconcile` sucht ausschließlich lesend über externe Identität und den
+  geplanten Tag. Kein Treffer bleibt `unknown`; mehrere Treffer werden
+  `conflict`; ein bestätigter Treffer übernimmt die tatsächliche Remote-ID.
+  Es wird kein zweiter Create ausgelöst.
+- Zwei gleichnamige Einheiten am selben Tag erhalten zwei verschiedene
+  externe IDs und zwei verschiedene Remote-IDs.
+- Neue Pläne werden ohne Aktivitätsbeziehung gespeichert. Die externe ID ist
+  weder Abschluss- noch Matchingbeleg; Tests prüfen, dass vorhandene
+  Aufzeichnungen unverändert bleiben.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/event_write.py` — Create, Identitätsprüfung,
+  tatsächliche Remote-ID, `_reconcile_create`, Upsert-/Suchmethoden im
+  `IntervalsEventAdapter`.
+- `src/trainings_cockpit/planner/identities.py` / `serializer.py` — stabile
+  externe Identität bereits im Create-Payload (P18 vorbereitet, P20 genutzt).
+- `tests/test_planner_create.py` — stabile ID, Retry, gleiche Namen,
+  unbekannter Ausgang, fehlende ID, Mehrdeutigkeit, fremde externe ID,
+  fehlende Aktivitätsbeziehung und Abbrechen.
+- `web/src/components/PlanEditor.tsx` — Hinweis auf die weiterhin gesperrte
+  Produktspeicherung bis P21/P22.
+- `docs/trainingsplaner/SERIALIZER-VERTRAG.md`,
+  `docs/trainingsplaner/FAEHIGKEITSMATRIX.md`,
+  `docs/ENTSCHEIDUNGEN.md` — Vertrag, Status und D-78.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_create.py -q` | **10 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **347 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner tests/test_planner_create.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich; keine UI-Logikänderung |
+
+Es gab keinen Netzwerkaufruf gegen intervals.icu und keinen Produktiv-Write.
+Der Upsert-Vertrag ist nur über den vorhandenen Client und den kontrollierten
+Testadapter belegt.
+
+## 4. Offene Punkte
+
+- Produkt-API und UI-Speicheraktion bleiben bis zur Konfliktsicherung (P21)
+  und dauerhaften Vorgangszuordnung (P22) gesperrt.
+- Der Produkt-Endpunkt muss später dieselbe gespeicherte Zuordnung verwenden;
+  P20 hält sie im Arbeitsspeicher des Koordinators, P22 persistiert sie.
+- Die Reconciliation sucht im belegten Kalenderbereich ±7 Tage um den
+  geplanten Termin. Eine weiter entfernte Serververschiebung bleibt
+  `unknown`, statt geraten zu werden.
+
+## 5. Nächstes Paket
+
+**P21 — Externe Änderungen und Konflikte behandeln.**

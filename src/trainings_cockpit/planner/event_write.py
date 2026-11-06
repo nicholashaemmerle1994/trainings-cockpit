@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Protocol
 
 from .model import (
@@ -71,6 +71,8 @@ class EventGateway(Protocol):
     def update_event(
         self, remote_id: str, payload: Mapping[str, Any]
     ) -> Mapping[str, Any]: ...
+
+    def create_event(self, payload: Mapping[str, Any]) -> Mapping[str, Any]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,12 +242,86 @@ class EventWriteService:
                 error=SaveErrorKind.PERMISSION,
             )
         if snapshot.mode == "create":
+            return self._create(snapshot)
+        return self._update(snapshot)
+
+    def _create(self, snapshot: SaveSnapshot) -> WriteResult:
+        """Legt genau eine beabsichtigte Einheit über den belegten Upsertpfad an."""
+        external_id = snapshot.external_id or snapshot.payload.get("external_id")
+        if not isinstance(external_id, str) or not external_id.strip():
             return WriteResult(
                 SaveState.FAILED,
-                "Die Neuanlage wird erst in P20 angeschlossen.",
+                "Eine Neuanlage braucht vor dem ersten Request eine stabile externe Identität.",
                 error=SaveErrorKind.IDENTITY,
             )
-        return self._update(snapshot)
+        try:
+            response = self._gateway.create_event(snapshot.payload)
+        except BaseException as exc:  # noqa: BLE001 - Timeout ist ausdrücklich unklar
+            classified = classify_exception(exc)
+            if classified.state is SaveState.UNKNOWN:
+                return WriteResult(
+                    classified.state,
+                    "Die Anlage könnte angekommen sein. Der Vorgang wird lesend "
+                    "abgeglichen und nicht automatisch wiederholt.",
+                    external_id=external_id,
+                    error=classified.error,
+                    reconciliation_required=True,
+                )
+            return WriteResult(
+                classified.state,
+                classified.message,
+                external_id=external_id,
+                error=classified.error,
+                retryable=classified.retryable,
+            )
+        if not isinstance(response, Mapping):
+            return _unverified(
+                "Die Anlage wurde beantwortet, liefert aber keine prüfbare Remote-ID. "
+                "Es wird keine Erfolgs-ID erfunden.",
+                snapshot=snapshot,
+                remote_id=None,
+                error=SaveErrorKind.IDENTITY,
+            )
+        response_external = response.get("external_id")
+        if (
+            isinstance(response_external, str)
+            and response_external.strip()
+            and response_external != external_id
+        ):
+            return _unverified(
+                "Die Remote-Antwort trägt eine andere externe Identität und wird "
+                "nicht dieser lokalen Operation zugeordnet.",
+                snapshot=snapshot,
+                remote_id=None,
+                error=SaveErrorKind.IDENTITY,
+            )
+        response_id = response.get("id")
+        if response_id is None or str(response_id).strip() == "":
+            return _unverified(
+                "Die Anlage wurde bestätigt, aber ohne tatsächliche Remote-ID. "
+                "Der Vorgang bleibt zur lesenden Zuordnung offen; es wird keine ID erfunden.",
+                snapshot=snapshot,
+                remote_id=None,
+                error=SaveErrorKind.IDENTITY,
+            )
+        remote_id = str(response_id)
+        try:
+            raw = self._gateway.read_event(remote_id)
+        except BaseException as exc:  # noqa: BLE001
+            classified = classify_exception(exc)
+            return _unverified(
+                "Die Anlage wurde bestätigt, das Rücklesen ist aber fehlgeschlagen. "
+                "Die tatsächliche Remote-ID bleibt erhalten; es wird nicht erneut angelegt.",
+                snapshot=snapshot,
+                remote_id=remote_id,
+                error=classified.error or SaveErrorKind.ROUNDTRIP,
+            )
+        return self._confirm(
+            snapshot,
+            raw,
+            remote_id,
+            expected_external_id=external_id,
+        )
 
     def _update(self, snapshot: SaveSnapshot) -> WriteResult:
         remote_id = str(snapshot.remote_id) if snapshot.remote_id is not None else None
@@ -298,6 +374,8 @@ class EventWriteService:
         snapshot: SaveSnapshot,
         raw: Mapping[str, Any],
         remote_id: str,
+        *,
+        expected_external_id: str | None = None,
     ) -> WriteResult:
         try:
             remote = read_remote_event(
@@ -312,6 +390,17 @@ class EventWriteService:
                 f"Das Rücklesen ist nicht als geplantes Workout lesbar: {exc}",
                 snapshot=snapshot,
                 remote_id=remote_id,
+            )
+        if (
+            expected_external_id is not None
+            and remote.plan.external_id is not None
+            and remote.plan.external_id != expected_external_id
+        ):
+            return _unverified(
+                "Das zurückgelesene Event trägt eine andere externe Identität.",
+                snapshot=snapshot,
+                remote_id=remote_id,
+                error=SaveErrorKind.IDENTITY,
             )
         check = verify_roundtrip(
             snapshot.intended,
@@ -333,7 +422,9 @@ class EventWriteService:
         )
 
     def reconcile(self, snapshot: SaveSnapshot) -> WriteResult:
-        """Liest einen unklaren Update-Vorgang; wiederholt keinen Write."""
+        """Liest einen unklaren Vorgang; wiederholt keinen Write."""
+        if snapshot.mode == "create":
+            return self._reconcile_create(snapshot)
         remote_id = str(snapshot.remote_id) if snapshot.remote_id is not None else None
         if remote_id is None:
             return WriteResult(
@@ -406,6 +497,79 @@ class EventWriteService:
         )
 
 
+    def _reconcile_create(self, snapshot: SaveSnapshot) -> WriteResult:
+        external_id = snapshot.external_id or snapshot.payload.get("external_id")
+        if not isinstance(external_id, str) or not external_id.strip():
+            return WriteResult(
+                SaveState.UNKNOWN,
+                "Ohne externe Identität ist die Anlage nicht lesend zuzuordnen.",
+                error=SaveErrorKind.RECONCILIATION,
+                reconciliation_required=True,
+            )
+        find = getattr(self._gateway, "find_by_external_id", None)
+        if not callable(find):
+            return WriteResult(
+                SaveState.UNKNOWN,
+                "Der Adapter kann nicht nach der externen Identität suchen; "
+                "es wird nicht automatisch erneut angelegt.",
+                external_id=external_id,
+                error=SaveErrorKind.RECONCILIATION,
+                reconciliation_required=True,
+            )
+        try:
+            matches = list(find(external_id, str(snapshot.intended.date)))
+        except BaseException as exc:  # noqa: BLE001
+            classified = classify_exception(exc)
+            return WriteResult(
+                SaveState.UNKNOWN,
+                "Die lesende Zuordnung ist noch nicht möglich.",
+                external_id=external_id,
+                error=classified.error or SaveErrorKind.RECONCILIATION,
+                reconciliation_required=True,
+            )
+        if not matches:
+            return WriteResult(
+                SaveState.UNKNOWN,
+                "Es wurde noch kein passendes Remote-Event gefunden. "
+                "Der Vorgang bleibt offen; es wird nicht automatisch erneut angelegt.",
+                external_id=external_id,
+                error=SaveErrorKind.RECONCILIATION,
+                reconciliation_required=True,
+            )
+        if len(matches) > 1:
+            return WriteResult(
+                SaveState.CONFLICT,
+                "Mehrere Remote-Events tragen dieselbe externe Identität. "
+                "Die Zuordnung wird nicht geraten.",
+                external_id=external_id,
+                error=SaveErrorKind.CONFLICT,
+            )
+        raw = matches[0]
+        if not isinstance(raw, Mapping):
+            return WriteResult(
+                SaveState.UNKNOWN,
+                "Der gefundene Remote-Datensatz ist nicht prüfbar.",
+                external_id=external_id,
+                error=SaveErrorKind.RECONCILIATION,
+                reconciliation_required=True,
+            )
+        remote_id = raw.get("id")
+        if remote_id is None or str(remote_id).strip() == "":
+            return WriteResult(
+                SaveState.UNKNOWN,
+                "Der gefundene Datensatz trägt keine Remote-ID.",
+                external_id=external_id,
+                error=SaveErrorKind.RECONCILIATION,
+                reconciliation_required=True,
+            )
+        return self._confirm(
+            snapshot,
+            raw,
+            str(remote_id),
+            expected_external_id=external_id,
+        )
+
+
 class IntervalsEventAdapter:
     """Dünne Brücke auf den vorhandenen ``IntervalsClient``.
 
@@ -419,6 +583,8 @@ class IntervalsEventAdapter:
             raise TypeError("client muss event() anbieten.")
         if not callable(getattr(client, "update_event", None)):
             raise TypeError("client muss update_event() anbieten.")
+        if not callable(getattr(client, "upsert_events", None)):
+            raise TypeError("client muss upsert_events() anbieten.")
         self._client = client
 
     def read_event(self, remote_id: str) -> Mapping[str, Any]:
@@ -428,6 +594,32 @@ class IntervalsEventAdapter:
         self, remote_id: str, payload: Mapping[str, Any]
     ) -> Mapping[str, Any]:
         return self._client.update_event(int(remote_id), dict(payload))
+
+    def create_event(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        rows = self._client.upsert_events([dict(payload)])
+        if not isinstance(rows, list) or len(rows) != 1:
+            raise GatewayError(
+                "Der Upsert-Pfad hat nicht genau eine Einheit zurückgegeben."
+            )
+        row = rows[0]
+        if not isinstance(row, Mapping):
+            raise GatewayError("Der Upsert-Pfad lieferte kein Event-Objekt.")
+        return row
+
+    def find_by_external_id(
+        self, external_id: str, day: str
+    ) -> list[Mapping[str, Any]]:
+        """Sucht lesend im belegten Kalenderbereich um den geplanten Tag."""
+        if not callable(getattr(self._client, "events", None)):
+            raise GatewayError("Der Client kann Events nicht lesen.")
+        start = date.fromisoformat(day) - timedelta(days=7)
+        end = date.fromisoformat(day) + timedelta(days=7)
+        rows = self._client.events(start, end, category="WORKOUT")
+        return [
+            row
+            for row in rows
+            if isinstance(row, Mapping) and str(row.get("external_id")) == external_id
+        ]
 
 
 __all__ = [

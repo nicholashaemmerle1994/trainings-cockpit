@@ -1259,7 +1259,7 @@ export function DraftStatus({
           type="button"
           className="btn btn--primary"
           disabled
-          title="Der Serializer steht; der Speicherkoordinator folgt in P18."
+          title="Remote-Schreiben ist bis zur Konfliktsicherung (P21/P22) gesperrt."
         >
           Speichern
         </button>
