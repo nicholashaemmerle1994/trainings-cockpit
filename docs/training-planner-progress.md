@@ -2475,3 +2475,106 @@ Screenshots liegen lokal unter `data/screens/` (nicht committet), unter anderem
 ## 5. Nächstes Paket
 
 **P26 — Fachliche und integrierte Endabnahme.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P26
+
+**Stand:** 06.11.2026  
+**Paket:** P26 — Fachliche und integrierte Endabnahme  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `994d4fb`
+
+## 1. Ergebnis
+
+- Die risikobasierte Testmatrix aus Abschnitt 13 wurde gegen die vorhandene
+  Suite und die kontrollierten Planer-Fixtures ausgeführt. Der vollständige
+  Lauf ergab **375 passed**; `npm run build` führte `tsc --noEmit` und den
+  Vite-Build erfolgreich aus.
+- **Gefundener Fehler 1:** Ein frisch bestätigtes Event ohne berechnete
+  `duration_s`/`distance_m` zeigte in der Woche „Ohne Vorgabe“, obwohl sein
+  `workout_doc` lesbar war. Die Wochenprojektion übergibt dem vorhandenen
+  Parser jetzt den unveränderten Rohdatensatz als JSON-Text. Regressionstest:
+  `test_frisch_bestaetigtes_event_ohne_dauer_spalte_zeigt_seinen_workout_doc`.
+- **Gefundener Fehler 2:** Ein nach Reload lesend abgeglichener Create wurde
+  zwar als `saved` gemeldet, aber nicht in die lokale `event`-Tabelle
+  übernommen. Die Planerwoche blieb dadurch leer. `planner_reconcile` nutzt
+  jetzt denselben `_persist_confirmed`-Pfad wie der direkte Save. Regressionstest
+  in `test_planner_operations_api.py`.
+- Es gab **keinen Schreibzugriff gegen intervals.icu oder Garmin**. Die
+  Abnahme lief mit einer separaten SQLite-Kopie und einem lokalen, nur auf
+  `127.0.0.1` laufenden Kontrolladapter. Der Kontrolladapter baut aus der
+  kanonischen Beschreibung ein `workout_doc` und beantwortet GET/PUT/Bulk-POST.
+
+## 2. Manuelle Abläufe
+
+| Ablauf | Ergebnis |
+|---|---|
+| **A — einfacher Lauf** | Tages-Plus am Mittwoch, nur Text-Dropdown mit Laufen/Radfahren/Schwimmen, drei vertikale Radios, Startentwurf 45 min mit HF Zone 2. Gespeichert als Event `12300`; Woche und Wiederöffnung zeigten 45 min, Zone 2 und dieselbe Remote-ID. Kein zweites Event. |
+| **B — gemischte Intervalle** | F02 startete mit 36 min. Belastung 2 → 3 min ergab 40 min; Kind zuklappen/öffnen behielt `3`; zurück auf 2 min ergab 36 min. Letzte Erholung auslassen ergab lokal 34 min. Gruppe mit bewusster Namensänderung gespeichert (36 min, Gruppe erhalten), danach erneut geöffnet. Skip + explizites Auflösen ergab 34 min und neun Schritte; gespeichert und wieder geöffnet. Eine einzelne Belastung auf 4 min geändert, die übrigen Kopien blieben bei 2 min. |
+| **C — zusätzliche Einheit und Fehlerfall** | Am Montag zusätzlich „P26 Zusatz“ angelegt; die vorhandenen Einheit blieb unverändert. Der Kontrolladapter lieferte nach bestätigtem Commit einmal HTTP 500 beim Rücklesen. Die UI meldete den unklaren Zustand, keinen Erfolg und keinen zweiten Create. Nach Reload erschien der offene Vorgang; „Status prüfen“ bestätigte ihn. Danach standen Aufzeichnung, bestehender Plan und neuer Plan genau einmal am Tag. |
+| **D — Liste und Dashboard** | „Umfang“ hat im DOM keine Links, Buttons oder `tabindex`-Ziele; ein Klick auf die Karte änderte weder URL noch Woche. Der Planer öffnete über den eigenen Tab sieben Tage. Alte Liste `/woche?datum=2026-08-03` wurde durch `/planer?woche=2026-08-03` ersetzt, ohne Schleife. Alte Aktivität, Deep-Link `/aktivitaet/2`, Krafttraining und Rückkehr in die gewählte Woche funktionierten. Das Dashboard-Volumen blieb nach Wochenwechsel unverändert. |
+| **Langsame Wochenantwort** | Die Antwort für `2026-10-26` wurde um 2,2 s verzögert, während bereits `2026-11-02` gewählt war. Die späte Antwort überschrieb weder URL noch Anzeige. |
+
+## 3. F11–F15 und Randfälle
+
+| Prüfung | Nachweis |
+|---|---|
+| F11 getrennte Zeiträume | `test_f11_dashboard_und_planer_woche_liefern_verschiedene_summen`, Wochen-API-Test; Browser: Umfang bleibt rollierend, Planer Kalenderwoche |
+| F11 Umfang ohne Navigation | Browser-DOM: 0 Links, 0 Buttons, 0 `tabindex`; Klick ohne URL-/Wochenänderung |
+| F12 Identitäten/Beziehung | Fixture- und Validierungstests; im Vorschau-Datensatz existiert keine bestätigte Beziehung, daher nicht als echter UI-Klick behauptet |
+| F13 Durchführung außerhalb der Planwoche | `test_f13_zaehlt_die_aufzeichnung_nur_in_ihrer_tatsaechlichen_woche` |
+| F14 ältere Daten/Quellen | `test_planner_fixtures.py`, `test_planner_week_api.py`; leere Woche, nicht verfügbare Woche und Quellenausfall bleiben getrennt |
+| F15 Aktivitätsdetails/Sportarten | Bestehende Detailansicht geöffnet; zusätzlich Krafttraining `WeightTraining` kontrolliert eingespeist und geöffnet. Messreihe, Quelle und Werte blieben erhalten |
+| Alte Routen/Deep-Links | `/woche`, Datumspfad und `/aktivitaet/2` geprüft; kein Umfang-Link, keine Weiterleitungsschleife |
+| Timeout/Commit/Reload | `test_f09_nach_reload_genau_eine_einheit_und_kein_zweiter_create`, `test_bestaetigtes_create_mit_fehlgeschlagenem_read_behaelt_remote_id`, manueller Ablauf C |
+| Externe Änderung/Löschung | `tests/test_planner_conflicts.py` (44 gezielte Prüfungen zusammen mit F11–F15 und API-Fällen) |
+| Terminwechsel alte/neue Woche | `test_terminwechsel_aktualisiert_alte_und_neue_woche` |
+| Timeout-Klassifikation | `test_klassifikation_unterscheidet_timeout_von_bestaetigtem_fehler` |
+
+## 4. Grenzen der Abnahme
+
+- **Kein Live-Rundlauf.** Create, Update, Rücklesen und Konflikte sind gegen
+  den kontrollierten Adapter belegt. Ohne ausdrücklich vorgesehenen
+  Testdatensatz und Freigabe wurde kein produktiver Schreibzugriff gegen
+  intervals.icu ausgeführt. Die Live-Gegenprobe bleibt ausdrücklich offen.
+- **Skip-Gruppe ist nicht speicherbar.** „Letzte Erholung auslassen“ ist lokal
+  korrekt (34 min, neun Ausführungen), wird aber als Gruppe vor der
+  Payload-Erzeugung mit „nicht verlustfrei darstellbar“ abgelehnt. Der
+  abgesicherte `EditorShapeMetadata`-Schreibweg aus Abschnitt 8.10 hat noch
+  keinen lesenden Konsumenten. Die sichere Alternative ist das bewusste
+  Auflösen in Einzelabschnitte; das wurde in Ablauf B gespeichert und
+  wieder geöffnet.
+- **Keine bestätigte Plan-/Aktivitätsbeziehung im Vorschau-Bestand.** Die
+  Kette „Plan ansehen“ konnte deshalb nicht mit einer echten Beziehung
+  durchgeklickt werden; Routing und Projektion sind durch Fixtures/Tests
+  abgedeckt.
+- **Pagination.** Der vorhandene intervals-Client fragt Aktivitäten und Events
+  über einen Datumsbereich ab und setzt bei Events kein `limit`; die API
+  dokumentiert für Events „default is all“ und für Aktivitäten ein optionales
+  `limit`, aber keine Seiten-/Cursor-Parameter. Eine serverseitige Kappung
+  könnte die aktuelle Implementierung nicht erkennen. Garmin-Aktivitäten
+  werden dagegen in 100er-Seiten bis maximal 1000 geladen. Die ältere
+  Planerwoche ist nur so vollständig, wie sie im lokalen Bestand liegt
+  (`tc sync --days`, API maximal 730 Tage; Events zusätzlich 365 Tage voraus).
+- **Weitere offene API-Fähigkeiten:** absolute bpm, Leistungszonen,
+  benutzerdefinierte Zonen, verschachtelte Wiederholungen, mehrere Ziele pro
+  Schritt, Rampen/Lap-Taste/Spezialschritte, globale Zielpriorität und
+  `skip_final_recovery` als Gruppe. Diese bleiben gesperrt und werden nicht
+  als fertig dargestellt.
+- **Konfliktfenster.** Der Vorab-GET und der PUT sind keine atomare
+  Vorbedingung; die Restlücke ist in `docs/trainingsplaner/KONFLIKTE.md`
+  beschrieben.
+
+## 5. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/week.py` — Rohdatensatz für die
+  Vorgabedarstellung frisch gespeicherter Events.
+- `src/trainings_cockpit/api.py` — bestätigten Reconcile-Datensatz lokal
+  einsortieren.
+- `tests/test_planner_week_api.py`, `tests/test_planner_operations_api.py`,
+  `tests/test_planner_save_api.py` — Regressionen für beide Fehler.
+- Keine Produktivkomponente enthält einen neuen Demo- oder Simulationspfad.
+
+## 6. Nächstes Paket
+
+**P27 — Aufräumen und Übergabe.**

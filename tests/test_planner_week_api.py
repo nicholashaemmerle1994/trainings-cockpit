@@ -91,6 +91,39 @@ def test_planner_week_has_seven_days_and_separate_sources(client: TestClient) ->
     assert payload["query"]["key"] != payload["query"]["dashboard_key"]
 
 
+def test_frisch_bestaetigtes_event_ohne_dauer_spalte_zeigt_seinen_workout_doc(
+    client: TestClient,
+) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    raw = {
+        "id": 12300,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-04T00:00:00",
+        "type": "Run",
+        "name": "Frisch gespeichert",
+        "workout_doc": {
+            "steps": [
+                {
+                    "text": "Dauerlauf",
+                    "duration": 2700,
+                    "hr": {"units": "hr_zone", "value": 2},
+                }
+            ]
+        },
+    }
+    db.upsert_events(conn, [raw])
+    conn.close()
+
+    payload = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+    entry = next(entry for entry in payload["entries"] if entry["name"] == "Frisch gespeichert")
+
+    assert entry["planned"]["minutes"] == 45
+    assert entry["planned"]["known_seconds"] == 2700
+    assert payload["summary"]["open_plan"]["seconds"] == 2700
+
+
 def test_planner_koppelt_das_dashboard_nicht_an_die_gewaehlte_woche(client: TestClient) -> None:
     payload = client.get("/api/planner", params={"week": "2026-08-03"}).json()
     dashboard = client.get("/api/overview").json()

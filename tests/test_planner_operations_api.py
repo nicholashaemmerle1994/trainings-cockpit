@@ -143,6 +143,9 @@ def test_offener_vorgang_ueberlebt_reload_und_wird_abgeglichen(
     assert result["confirmed"]["remote_id"] == "9201"
     assert result["week"] == "2026-11-09"
     assert result["time_zone"] == "Europe/Vienna"
+    week = client.get("/api/planner", params={"week": "2026-11-09"}).json()
+    assert [entry["name"] for entry in week["entries"]] == ["Neue Einheit"]
+    assert week["entries"][0]["planned"]["minutes"] == 45
     assert gateway.calls == []
     assert len(gateway.find_calls) == 1
     # Abgeschlossen: erscheint nicht mehr als offener Vorgang.

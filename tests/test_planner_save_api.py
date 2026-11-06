@@ -224,6 +224,10 @@ def test_neue_einheit_wird_genau_einmal_angelegt(
     assert len(rows) == 1
     assert rows[0]["id"] == 1201
     assert rows[0]["name"] == "Abendlauf"
+    week = client.get("/api/planner", params={"week": "2026-11-09"}).json()
+    saved = next(entry for entry in week["entries"] if entry["name"] == "Abendlauf")
+    assert saved["planned"]["minutes"] == 45
+    assert saved["planned"]["known_seconds"] == 2700
 
     # Ein Wiederholungsversuch derselben Anlage wird als bereits bestätigter
     # Stand erkannt und erzeugt weder einen zweiten Request noch eine Einheit.

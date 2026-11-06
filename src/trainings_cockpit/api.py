@@ -357,6 +357,10 @@ def planner_reconcile(operation_id: str) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="Vorgang ist nicht offen") from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        # Ein lesend abgeglichener, bestätigter Datensatz gehört wie beim
+        # direkten Save in den vorhandenen lokalen Bestand. Sonst würde die
+        # Planerwoche den gerade bestätigten Create nicht zeigen.
+        _persist_confirmed(conn, outcome)
         confirmed = (
             plan_to_json(outcome.confirmed)
             if outcome.confirmed is not None

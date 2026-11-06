@@ -223,6 +223,12 @@ def _plan_view(
 
     raw = _json_object(row.get("raw"))
     event = dict(raw)
+    # ``plan.planned()`` erwartet den unveränderten Rohdatensatz als JSON-Text.
+    # Ohne diese Quelle würde ein frisch bestätigtes Event ohne berechnete
+    # Dauer-/Distanzspalten als „ohne Vorgabe“ erscheinen, obwohl sein
+    # workout_doc vollständig lesbar ist.
+    if isinstance(row.get("raw"), str) and row.get("raw").strip():
+        event["raw"] = row["raw"]
     event.setdefault("id", row.get("id"))
     event.setdefault("start_date_local", row.get("date"))
     event.setdefault("type", row.get("sport"))
