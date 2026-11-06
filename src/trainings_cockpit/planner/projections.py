@@ -7,6 +7,7 @@ Beziehung. Eine Aktivitätsreferenz wird nie in eine Planung umgedeutet.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
@@ -177,6 +178,61 @@ class TrainingRelationship:
         return f"relationship:{self.plan.account_id}:{self.plan.athlete_id}:{self.relationship_id}"
 
 
+class RelationshipProjectionError(ValueError):
+    """Eine Beziehung verweist auf eine Aktivität ohne bekannten tatsächlichen Tag."""
+
+
+def relationship_entries(
+    relationship: TrainingRelationship,
+    plan_date: LocalDate,
+    activity_dates: Mapping[str, LocalDate],
+) -> tuple[TrainingListEntry, ...]:
+    """Projiziert eine **bestätigte** Beziehung in die gemeinsame Wochenliste.
+
+    Jede Aktivität bleibt an ihrem tatsächlichen lokalen Tag. Liegt der
+    Plantermin in keiner dieser Tagesgruppen, entsteht am ursprünglichen
+    Plantermin zusätzlich eine reine ``completionReference`` ohne Ist-Werte.
+    Eine offene oder teilweise Beziehung erzeugt hier bewusst keinen
+    Erledigt-Eintrag; der Aufrufer stellt Plan und Aufzeichnungen dann getrennt
+    dar.
+    """
+    if not relationship.is_complete:
+        return ()
+    target = require_local_date(plan_date, "plan_date")
+    grouped: dict[str, list[ActivityReference]] = {}
+    missing: list[str] = []
+    for activity in relationship.activities:
+        day = activity_dates.get(activity.key)
+        if day is None:
+            missing.append(activity.key)
+            continue
+        grouped.setdefault(require_local_date(day, "activity_dates"), []).append(activity)
+    if missing:
+        raise RelationshipProjectionError(
+            "Unbekannte Aktivitätstage für: " + ", ".join(sorted(missing))
+        )
+
+    entries: list[TrainingListEntry] = [
+        LinkedListEntry(
+            date=day,
+            plan=relationship.plan,
+            activities=tuple(grouped[day]),
+            relationship_id=relationship.relationship_id,
+        )
+        for day in sorted(grouped)
+    ]
+    if target not in grouped:
+        entries.append(
+            CompletionReferenceListEntry(
+                date=target,
+                plan=relationship.plan,
+                activity_dates=tuple(sorted(grouped)),
+                relationship_id=relationship.relationship_id,
+            )
+        )
+    return tuple(entries)
+
+
 def list_entry_key(entry: TrainingListEntry) -> str:
     """Typisierter Schlüssel; Plan 123 und Aktivität 123 kollidieren nicht."""
     if not isinstance(
@@ -192,10 +248,12 @@ __all__ = [
     "LinkedListEntry",
     "PlannedListEntry",
     "RecordedListEntry",
+    "RelationshipProjectionError",
     "RelationshipStatus",
     "TrainingListEntry",
     "TrainingRange",
     "TrainingRelationship",
     "list_entry_key",
+    "relationship_entries",
 ]
 

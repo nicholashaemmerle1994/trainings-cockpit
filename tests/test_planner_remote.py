@@ -1,0 +1,306 @@
+"""P04: Remote-Leseadapter, Erhaltungsregeln und Anzeigeprojektion."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+from planner_fixtures import load_case, load_remote
+
+from trainings_cockpit.planner import (
+    CompletionReferenceListEntry,
+    DistanceEnd,
+    Editability,
+    LinkedListEntry,
+    NotAPlannedWorkout,
+    PaceTarget,
+    PaceUnit,
+    PlanId,
+    PlannedWorkout,
+    PlanReference,
+    RelationshipId,
+    RelationshipProjectionError,
+    RelationshipStatus,
+    RestrictionCode,
+    StepNode,
+    StepRole,
+    TimeEnd,
+    TrainingRelationship,
+    UnsupportedNode,
+    Value,
+    ValueRange,
+    activity_date,
+    activity_reference_from_record,
+    iter_nodes,
+    read_remote_event,
+    recorded_entry_from_record,
+    relationship_entries,
+    sport_label,
+)
+
+ACCOUNT = "fixture-account"
+ATHLETE = "fixture-athlete"
+FETCHED = "2026-11-08T09:15:00+01:00"
+
+
+def read_event(name: str):
+    event = load_remote(name)["event"]
+    return read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        account_id=ACCOUNT,
+        athlete_id=ATHLETE,
+        zone_sets={"Run": "run-hr", "Ride": "ride-hr", "Swim": "swim-hr"},
+    )
+
+
+def test_f01_liest_identitaet_termin_aufbau_und_quelle() -> None:
+    event = load_remote("simple-zone-run.json")["event"]
+    result = read_event("simple-zone-run.json")
+    plan = result.plan
+
+    assert plan.remote_id is not None
+    assert str(plan.remote_id) == "9101"
+    assert plan.name == "Ruhiger Dauerlauf"
+    assert plan.sport == "Run"
+    assert plan.date == "2026-11-02"
+    assert plan.local_time is None
+    assert plan.time_zone == "Europe/Vienna"
+    assert len(plan.nodes) == 1
+    assert isinstance(plan.nodes[0], StepNode)
+    assert plan.nodes[0].end == TimeEnd(2700)
+    assert plan.nodes[0].target.zone_id == "run-hr-2"
+    assert plan.nodes[0].target.zone_set_id == "run-hr"
+    assert plan.editability is Editability.FULL
+    assert result.source.raw == event
+    assert result.source.raw_workout_text == event["description"]
+
+
+def test_f02_liest_wiederholung_und_getrennte_ziele() -> None:
+    plan = read_event("repeated-intervals.json").plan
+    repeat = plan.nodes[1]
+
+    assert [node.kind for node in plan.nodes] == ["step", "repeat", "step"]
+    assert repeat.repetitions == 4
+    assert [child.name for child in repeat.children] == ["Belastung", "Erholung"]
+    assert [child.role for child in repeat.children] == [StepRole.WORK, StepRole.RECOVERY]
+    assert isinstance(repeat.children[0].target, PaceTarget)
+    assert repeat.children[0].target.unit is PaceUnit.SECONDS_PER_KM
+    assert repeat.children[0].target.values == ValueRange(330, 345)
+    assert repeat.children[1].target.zone_id == "run-hr-1"
+    assert plan.nodes[0].role is StepRole.WARMUP
+    assert plan.nodes[-1].role is StepRole.COOLDOWN
+
+
+def test_f04_distanz_plus_geschaetzte_dauer_bleibt_distanz() -> None:
+    event = load_remote("distance-step.json")["event"]
+    distance_step = event["workout_doc"]["steps"][1]["steps"][0]
+    plan = read_event("distance-step.json").plan
+    repeat = plan.nodes[1]
+    work = repeat.children[0]
+
+    assert distance_step["duration_source"] == "estimated"
+    assert distance_step["duration"] == 348
+    assert isinstance(work.end, DistanceEnd)
+    assert work.end.metres == 1000
+    assert work.target == PaceTarget(PaceUnit.SECONDS_PER_KM, Value(330))
+
+
+def test_f07_erhaelt_unbekanntes_und_begrenzt_die_editierbarkeit() -> None:
+    event = load_remote("unknown-content.json")["event"]
+    result = read_event("unknown-content.json")
+    plan = result.plan
+    unsupported = [node for node in iter_nodes(plan.nodes) if isinstance(node, UnsupportedNode)]
+
+    assert [node.kind for node in plan.nodes] == ["step", "unsupported", "unsupported"]
+    assert len(unsupported) == 2
+    assert all(node.source_ref.startswith("/workout_doc/steps/") for node in unsupported)
+    assert plan.local_time == "09:15"
+    assert plan.editability is Editability.METADATA_ONLY
+    assert plan.is_metadata_editable is True
+    assert plan.is_structure_editable is False
+    assert RestrictionCode.UNKNOWN_CONTENT in plan.restriction_codes
+    assert RestrictionCode.MULTIPLE_TARGETS in plan.restriction_codes
+    assert RestrictionCode.RAMP_OR_SPECIAL_STEP in plan.restriction_codes
+    assert plan.notes == "Importierte Zusatznotiz, absichtlich nicht strukturiert."
+
+    assert result.source.raw == event
+    assert result.source.raw["workout_doc"]["unknown_doc_field"] == {"keep": ["a", "b", 3]}
+    assert result.source.raw["weather"]["wind"] == "unbekannt"
+    assert result.source.raw_workout_text == event["description"]
+
+    renamed = replace(plan, name="Sicher umbenannt")
+    assert renamed.nodes == plan.nodes
+    assert result.source.raw == event
+
+
+def test_unbekannte_sportart_bleibt_neutral_und_lesbar() -> None:
+    event = {
+        "id": 9901,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-10T17:00:00",
+        "type": "UnderwaterHockey",
+        "name": "Unbekannte Einheit",
+        "workout_doc": {"steps": [{"text": "Spielen", "duration": 600}]},
+    }
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+    )
+
+    assert result.plan.sport == "UnderwaterHockey"
+    assert sport_label(result.plan.sport) == "Andere Sportart"
+    assert result.plan.local_time == "17:00"
+    assert isinstance(result.plan.nodes[0], StepNode)
+
+
+def test_fehlgeleitete_remote_zone_bleibt_als_unbekannt_erhalten() -> None:
+    event = {
+        "id": 9903,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-10T18:00:00",
+        "type": "Run",
+        "name": "Unklare Zone",
+        "workout_doc": {
+            "steps": [
+                {
+                    "text": "Dauerlauf",
+                    "duration": 600,
+                    "hr": {"units": "hr_zone", "value": 0},
+                }
+            ]
+        },
+    }
+    result = read_remote_event(event, fetched_at=FETCHED, time_zone="Europe/Vienna")
+
+    assert isinstance(result.plan.nodes[0], UnsupportedNode)
+    assert result.plan.editability is Editability.METADATA_ONLY
+    assert RestrictionCode.UNKNOWN_CONTENT in result.plan.restriction_codes
+
+
+def test_remote_schreibrecht_wird_beruecksichtigt() -> None:
+    event = load_remote("simple-zone-run.json")["event"]
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        writable=False,
+    )
+
+    assert result.plan.editability is Editability.READ_ONLY
+    assert result.plan.is_metadata_editable is False
+    assert RestrictionCode.REMOTE_READ_ONLY in result.plan.restriction_codes
+    assert result.plan.editability_reason
+
+
+def test_nicht_workout_event_wird_nicht_als_planung_gelesen() -> None:
+    event = {
+        "id": 9902,
+        "category": "NOTE",
+        "start_date_local": "2026-11-10",
+        "type": "Run",
+        "name": "Notiz",
+    }
+    with pytest.raises(NotAPlannedWorkout):
+        read_remote_event(event, fetched_at=FETCHED, time_zone="Europe/Vienna")
+
+
+def test_aufzeichnung_bleibt_auf_dem_aktivitaetspfad() -> None:
+    case = load_case("F15")
+    record = case["activities"][2]
+    reference = activity_reference_from_record(
+        record,
+        account_id=ACCOUNT,
+        athlete_id=ATHLETE,
+    )
+    entry = recorded_entry_from_record(record, account_id=ACCOUNT, athlete_id=ATHLETE)
+
+    assert record["sport"] == "WeightTraining"
+    assert sport_label(record["sport"]) == "Kraft"
+    assert reference.activity_id.value == record["activityId"]
+    assert entry.date == "2026-11-04"
+    assert not isinstance(reference, PlannedWorkout)
+    assert entry.kind == "recorded"
+
+    # Zwei Quellabbilder derselben Aufzeichnung bleiben eine kanonische Referenz.
+    f12 = load_case("F12")["activities"][0]
+    merged = activity_reference_from_record(f12, account_id=ACCOUNT, athlete_id=ATHLETE)
+    assert merged.activity_id.value == "123"
+    assert len(merged.source_refs) == 2
+    assert {ref.source for ref in merged.source_refs} == {"garmin", "intervals"}
+    assert activity_date(f12) == "2026-11-08"
+
+
+def test_f12_projiziert_bestaetigte_beziehung_ohne_zweite_aufzeichnung() -> None:
+    case = load_case("F12")
+    p1 = case["plans"][0]
+    a1 = case["activities"][0]
+    plan_ref = PlanReference(PlanId(p1["localId"]), ACCOUNT, ATHLETE)
+    activity = activity_reference_from_record(a1, account_id=ACCOUNT, athlete_id=ATHLETE)
+    relation = TrainingRelationship(
+        relationship_id=RelationshipId("rel:1"),
+        plan=plan_ref,
+        activities=(activity,),
+        status=RelationshipStatus.CONFIRMED,
+        completion_confirmed=True,
+    )
+
+    entries = relationship_entries(relation, p1["date"], {activity.key: a1["date"]})
+    kinds = [entry.kind for entry in entries]
+
+    assert kinds == ["linked"]
+    assert isinstance(entries[0], LinkedListEntry)
+    assert entries[0].date == "2026-11-08"
+    assert entries[0].activities == (activity,)
+
+
+def test_f13_projiziert_erledigt_hinweis_am_plantermin() -> None:
+    case = load_case("F13")
+    plan_ref = PlanReference(PlanId("plan:P1"), ACCOUNT, ATHLETE)
+    activity = activity_reference_from_record(
+        case["activities"][0], account_id=ACCOUNT, athlete_id=ATHLETE
+    )
+    relation = TrainingRelationship(
+        relationship_id=RelationshipId("rel:1301"),
+        plan=plan_ref,
+        activities=(activity,),
+        status=RelationshipStatus.CONFIRMED,
+        completion_confirmed=True,
+    )
+
+    entries = relationship_entries(relation, "2026-11-08", {activity.key: "2026-11-09"})
+
+    assert [entry.kind for entry in entries] == ["linked", "completionReference"]
+    linked, completion = entries
+    assert linked.date == "2026-11-09"
+    assert isinstance(completion, CompletionReferenceListEntry)
+    assert completion.date == "2026-11-08"
+    assert completion.activity_dates == ("2026-11-09",)
+    assert completion.plan.plan_id == plan_ref.plan_id
+
+
+def test_offene_beziehung_erzeugt_keinen_erledigt_eintrag() -> None:
+    case = load_case("F13")
+    plan_ref = PlanReference(PlanId("plan:P1"), ACCOUNT, ATHLETE)
+    activity = activity_reference_from_record(
+        case["activities"][0], account_id=ACCOUNT, athlete_id=ATHLETE
+    )
+    partial = TrainingRelationship(
+        relationship_id=RelationshipId("rel:partial"),
+        plan=plan_ref,
+        activities=(activity,),
+        status=RelationshipStatus.PARTIAL,
+        completion_confirmed=False,
+    )
+
+    assert relationship_entries(partial, "2026-11-08", {activity.key: "2026-11-09"}) == ()
+
+    with pytest.raises(RelationshipProjectionError):
+        confirmed = replace(
+            partial,
+            status=RelationshipStatus.CONFIRMED,
+            completion_confirmed=True,
+        )
+        relationship_entries(confirmed, "2026-11-08", {})
