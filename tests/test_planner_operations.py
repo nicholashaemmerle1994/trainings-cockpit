@@ -502,3 +502,28 @@ def test_update_auf_verschwundenes_event_wird_erledigt(tmp_path) -> None:
     assert "nicht mehr" in result.status.message
     assert store.open_operations(account_id="acct", athlete_id="7") == []
     conn.close()
+
+
+def test_externe_suche_hat_vorrang_vor_der_bekannten_remote_id(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    gateway.fail_read = True
+    coordinator = SaveCoordinator(EventWriteService(gateway), recorder=store)
+
+    first = coordinator.activate(_draft(plan), account_id="acct", athlete_id="7")
+    assert first.status.state is SaveState.SAVED_UNVERIFIED
+    gateway.read_calls.clear()
+
+    # Die externe Suche findet das Event. Der direkte Read zur bekannten
+    # Remote-ID würde einen Timeout liefern, darf aber gar nicht nötig sein.
+    reloaded = SaveCoordinator(EventWriteService(gateway), recorder=store)
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.SAVED
+    assert result.status.remote_id == "1201"
+    assert gateway.read_calls == []
+    conn.close()

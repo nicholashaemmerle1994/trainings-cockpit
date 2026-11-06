@@ -537,10 +537,56 @@ class EventWriteService:
                 reconciliation_required=True,
             )
 
-        # Kennt der Vorgang bereits eine Remote-ID aus der Create-Antwort, ist
-        # das der direkteste Leseanker. Fehlt das Event, ist die Neuanlage
-        # endgültig gescheitert; die externe Suche bleibt der zweite Weg.
         attempted_id = str(snapshot.remote_id) if snapshot.remote_id is not None else None
+        try:
+            matches = list(find(external_id, str(snapshot.intended.date)))
+        except BaseException as exc:  # noqa: BLE001
+            classified = classify_exception(exc)
+            return WriteResult(
+                SaveState.UNKNOWN,
+                "Die lesende Zuordnung ist noch nicht möglich.",
+                remote_id=attempted_id,
+                external_id=external_id,
+                error=classified.error or SaveErrorKind.RECONCILIATION,
+                reconciliation_required=True,
+            )
+        if matches:
+            if len(matches) > 1:
+                return WriteResult(
+                    SaveState.CONFLICT,
+                    "Mehrere Remote-Events tragen dieselbe externe Identität. "
+                    "Die Zuordnung wird nicht geraten.",
+                    external_id=external_id,
+                    error=SaveErrorKind.CONFLICT,
+                )
+            raw = matches[0]
+            if not isinstance(raw, Mapping):
+                return WriteResult(
+                    SaveState.UNKNOWN,
+                    "Der gefundene Remote-Datensatz ist nicht prüfbar.",
+                    external_id=external_id,
+                    error=SaveErrorKind.RECONCILIATION,
+                    reconciliation_required=True,
+                )
+            remote_id = raw.get("id")
+            if remote_id is None or str(remote_id).strip() == "":
+                return WriteResult(
+                    SaveState.UNKNOWN,
+                    "Der gefundene Datensatz trägt keine Remote-ID.",
+                    external_id=external_id,
+                    error=SaveErrorKind.RECONCILIATION,
+                    reconciliation_required=True,
+                )
+            return self._confirm(
+                snapshot,
+                raw,
+                str(remote_id),
+                expected_external_id=external_id,
+            )
+
+        # Die externe Suche ist der erste Weg. Erst wenn sie nichts findet,
+        # entscheidet die aus der Create-Antwort bekannte Remote-ID: Sie kann
+        # ein Event ohne passende externe Identität oder dessen Löschung belegen.
         attempted_raw: Mapping[str, Any] | None = None
         attempted_missing = False
         if attempted_id is not None:
@@ -563,81 +609,36 @@ class EventWriteService:
                 if isinstance(raw, Mapping):
                     attempted_raw = raw
 
-        try:
-            matches = list(find(external_id, str(snapshot.intended.date)))
-        except BaseException as exc:  # noqa: BLE001
-            classified = classify_exception(exc)
+        if attempted_raw is not None:
+            # Die externe Suche findet nichts, die bekannte Remote-ID liefert
+            # aber ein Event: Es gehört zu dieser Anlage, nur trägt es (etwa
+            # aus einem älteren Fehler) keine passende externe Identität.
+            assert attempted_id is not None
+            return self._confirm(
+                snapshot,
+                attempted_raw,
+                attempted_id,
+                expected_external_id=None,
+            )
+        if attempted_missing:
+            # Die Anlage hat eine Remote-ID erhalten, das Event ist aber nicht
+            # mehr vorhanden. Es gibt nichts zu löschen und keinen Grund, den
+            # Vorgang dauerhaft offen zu halten.
             return WriteResult(
-                SaveState.UNKNOWN,
-                "Die lesende Zuordnung ist noch nicht möglich.",
+                SaveState.FAILED,
+                "Die Neuanlage ist in intervals.icu nicht vorhanden. "
+                "Der Vorgang wird verworfen; es wird nichts neu angelegt.",
                 remote_id=attempted_id,
                 external_id=external_id,
-                error=classified.error or SaveErrorKind.RECONCILIATION,
-                reconciliation_required=True,
+                error=SaveErrorKind.NOT_FOUND,
             )
-        if not matches:
-            if attempted_raw is not None:
-                # Die externe Suche findet nichts, die bekannte Remote-ID
-                # liefert aber ein Event: Es gehört zu dieser Anlage, nur
-                # trägt es (etwa aus einem älteren Fehler) keine passende
-                # externe Identität. Der direkte Read entscheidet.
-                return self._confirm(
-                    snapshot,
-                    attempted_raw,
-                    attempted_id,
-                    expected_external_id=None,
-                )
-            if attempted_missing:
-                # Die Anlage hat eine Remote-ID erhalten, das Event ist aber
-                # nicht mehr vorhanden. Es gibt nichts zu löschen und keinen
-                # Grund, den Vorgang dauerhaft offen zu halten.
-                return WriteResult(
-                    SaveState.FAILED,
-                    "Die Neuanlage ist in intervals.icu nicht vorhanden. "
-                    "Der Vorgang wird verworfen; es wird nichts neu angelegt.",
-                    remote_id=attempted_id,
-                    external_id=external_id,
-                    error=SaveErrorKind.NOT_FOUND,
-                )
-            return WriteResult(
-                SaveState.UNKNOWN,
-                "Es wurde noch kein passendes Remote-Event gefunden. "
-                "Der Vorgang bleibt offen; es wird nicht automatisch erneut angelegt.",
-                external_id=external_id,
-                error=SaveErrorKind.RECONCILIATION,
-                reconciliation_required=True,
-            )
-        if len(matches) > 1:
-            return WriteResult(
-                SaveState.CONFLICT,
-                "Mehrere Remote-Events tragen dieselbe externe Identität. "
-                "Die Zuordnung wird nicht geraten.",
-                external_id=external_id,
-                error=SaveErrorKind.CONFLICT,
-            )
-        raw = matches[0]
-        if not isinstance(raw, Mapping):
-            return WriteResult(
-                SaveState.UNKNOWN,
-                "Der gefundene Remote-Datensatz ist nicht prüfbar.",
-                external_id=external_id,
-                error=SaveErrorKind.RECONCILIATION,
-                reconciliation_required=True,
-            )
-        remote_id = raw.get("id")
-        if remote_id is None or str(remote_id).strip() == "":
-            return WriteResult(
-                SaveState.UNKNOWN,
-                "Der gefundene Datensatz trägt keine Remote-ID.",
-                external_id=external_id,
-                error=SaveErrorKind.RECONCILIATION,
-                reconciliation_required=True,
-            )
-        return self._confirm(
-            snapshot,
-            raw,
-            str(remote_id),
-            expected_external_id=external_id,
+        return WriteResult(
+            SaveState.UNKNOWN,
+            "Es wurde noch kein passendes Remote-Event gefunden. "
+            "Der Vorgang bleibt offen; es wird nicht automatisch erneut angelegt.",
+            external_id=external_id,
+            error=SaveErrorKind.RECONCILIATION,
+            reconciliation_required=True,
         )
 
 
