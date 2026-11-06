@@ -323,6 +323,7 @@ function PlanNodeBranch({
       className={[
         "plan-node-item",
         node.kind === "repeat" ? "plan-node-item--group" : "",
+        selected ? "plan-node-item--selected" : "",
       ]
         .filter(Boolean)
         .join(" ")}

@@ -3412,6 +3412,11 @@ button.plan-node:hover {
   background: var(--bg-surface-raised);
 }
 
+/* Der gewählte Block bildet mit seinem Editor eine Karte. */
+.plan-node-item--selected > .plan-inline {
+  border-color: var(--accent-line);
+}
+
 .plan-inline__context {
   margin: 0 0 var(--space-3);
   font-size: 11.5px;
