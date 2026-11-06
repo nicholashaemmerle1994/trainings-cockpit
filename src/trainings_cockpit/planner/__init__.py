@@ -7,6 +7,14 @@ Mengen und die getrennten Ist-/Plan-Summen. Es gibt hier keinen Netzwerkaufruf
 und keinen Produkt-Schreibpfad.
 """
 
+from .conflicts import (
+    CONFLICT_ACTIONS,
+    ConflictAssessment,
+    ConflictKind,
+    RemoteVersion,
+    assess_update_conflict,
+    changed_content_fields,
+)
 from .dates import (
     add_calendar_days,
     add_calendar_weeks,
@@ -145,6 +153,7 @@ from .serializer import (
     prepare_write,
     serialize_workout_text,
 )
+from .shapes import node_shape
 from .summaries import (
     OpenPlanTotals,
     PlanRecord,
@@ -202,6 +211,9 @@ from .write import (
 
 __all__ = [
     "ActivityId",
+    "CONFLICT_ACTIONS",
+    "ConflictAssessment",
+    "ConflictKind",
     "CONTROLLED_REMOTE_FIELDS",
     "CREATE_ONLY_REMOTE_FIELDS",
     "DraftProjectionError",
@@ -214,8 +226,10 @@ __all__ = [
     "PRESERVED_REMOTE_FIELDS",
     "PreparedWrite",
     "RelationshipProjectionError",
+    "RemoteVersion",
     "RemoteWorkout",
     "activity_date",
+    "assess_update_conflict",
     "activity_reference_from_record",
     "add_calendar_days",
     "add_calendar_weeks",
@@ -237,6 +251,8 @@ __all__ = [
     "local_today",
     "LocalDate",
     "NoTarget",
+    "changed_content_fields",
+    "node_shape",
     "NodeId",
     "OpenEnd",
     "ObjectKind",

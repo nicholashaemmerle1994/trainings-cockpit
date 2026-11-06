@@ -18,20 +18,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Protocol
 
-from .model import (
-    DistanceEnd,
-    NoTarget,
-    PaceTarget,
-    PlannedWorkout,
-    PowerTarget,
-    RepeatNode,
-    StepNode,
-    TimeEnd,
-    UnsupportedNode,
-    Value,
-    WorkoutNode,
-    ZoneTarget,
-)
+from .conflicts import ConflictAssessment, ConflictKind, assess_update_conflict
+from .model import PlannedWorkout
 from .remote import read_remote_event
 from .save import (
     SaveErrorKind,
@@ -40,14 +28,22 @@ from .save import (
     WriteResult,
     classify_exception,
 )
+from .shapes import plan_shape
 
 
 class GatewayError(RuntimeError):
     """Ein Fehler des Event-Gateways mit optionalem HTTP-Status."""
 
-    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        conflict: ConflictAssessment | None = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.conflict = conflict
 
 
 class GatewayNotFound(GatewayError):
@@ -59,8 +55,13 @@ class GatewayNotFound(GatewayError):
 
 
 class GatewayConflict(GatewayError):
-    def __init__(self, message: str) -> None:
-        super().__init__(message, status_code=409)
+    def __init__(
+        self,
+        message: str,
+        *,
+        conflict: ConflictAssessment | None = None,
+    ) -> None:
+        super().__init__(message, status_code=409, conflict=conflict)
 
 
 class EventGateway(Protocol):
@@ -79,72 +80,6 @@ class EventGateway(Protocol):
 class RoundtripCheck:
     valid: bool
     reason: str | None = None
-
-
-def _num(value: float) -> float:
-    return round(float(value), 6)
-
-
-def _target_shape(target: Any) -> tuple[Any, ...]:
-    if isinstance(target, NoTarget):
-        return ("none",)
-    if isinstance(target, ZoneTarget):
-        return ("zone", target.metric.value, target.zone_id)
-    if isinstance(target, PowerTarget):
-        values = target.values
-        if isinstance(values, Value):
-            return ("power", target.unit.value, "value", _num(values.value))
-        return ("power", target.unit.value, "range", _num(values.min), _num(values.max))
-    if isinstance(target, PaceTarget):
-        values = target.values
-        if isinstance(values, Value):
-            return ("pace", target.unit.value, "value", _num(values.value))
-        return ("pace", target.unit.value, "range", _num(values.min), _num(values.max))
-    # Absolute bpm und andere nicht serialisierbare Ziele sind kein
-    # bestätigter Schreibfall; der Vergleich meldet sie ausdrücklich.
-    return ("unsupported", type(target).__name__)
-
-
-def _node_shape(node: WorkoutNode) -> tuple[Any, ...]:
-    if isinstance(node, UnsupportedNode):
-        return ("unsupported", node.source_ref)
-    if isinstance(node, StepNode):
-        end = node.end
-        if isinstance(end, TimeEnd):
-            end_shape = ("time", _num(end.seconds))
-        elif isinstance(end, DistanceEnd):
-            end_shape = ("distance", _num(end.metres))
-        else:
-            end_shape = ("open",)
-        return (
-            "step",
-            node.name,
-            node.role.value,
-            end_shape,
-            _target_shape(node.target),
-            node.notes,
-        )
-    if isinstance(node, RepeatNode):
-        return (
-            "repeat",
-            node.name,
-            node.repetitions,
-            node.skip_final_recovery,
-            tuple(_node_shape(child) for child in node.children),
-        )
-    raise TypeError(f"Unbekannter Knoten: {type(node).__name__}")
-
-
-def plan_shape(plan: PlannedWorkout) -> dict[str, Any]:
-    """Vergleichsprojektion ohne Renderzustand, lokale IDs oder Abrufzeiten."""
-    return {
-        "name": plan.name,
-        "sport": plan.sport,
-        "date": plan.date,
-        "local_time": plan.local_time,
-        "notes": plan.notes,
-        "nodes": tuple(_node_shape(node) for node in plan.nodes),
-    }
 
 
 _NOT_GIVEN = object()
@@ -332,6 +267,7 @@ class EventWriteService:
                 error=SaveErrorKind.IDENTITY,
             )
         try:
+            self._check_remote_conflict(snapshot, remote_id)
             if self._preflight is not None:
                 self._preflight(snapshot)
             response = self._gateway.update_event(remote_id, snapshot.payload)
@@ -496,6 +432,72 @@ class EventWriteService:
             error=SaveErrorKind.CONFLICT,
         )
 
+
+    def _check_remote_conflict(self, snapshot: SaveSnapshot, remote_id: str) -> None:
+        """Liest vor dem Update und blockiert bei relevanter Remote-Abweichung.
+
+        Der Vergleich ist eine Vorabprüfung, keine atomare Vorbedingung: Die
+        Lücke zwischen diesem GET und dem folgenden PUT ist in
+        ``docs/trainingsplaner/KONFLIKTE.md`` dokumentiert. Für die Erkennung
+        einer externen Löschung oder eines entzogenen Schreibrechts reicht der
+        vorhandene Lesezugriff aus; ein 404 wird nie zu einem Create.
+        """
+        try:
+            raw = self._gateway.read_event(remote_id)
+        except BaseException as exc:  # noqa: BLE001 - Lesezugriff klassifizieren
+            status = getattr(exc, "status_code", None)
+            if status == 404:
+                conflict = assess_update_conflict(
+                    snapshot.base,
+                    None,
+                    remote_id=remote_id,
+                    baseline_notes=snapshot.base_notes,
+                )
+                raise GatewayConflict(
+                    "Die Einheit wurde extern gelöscht. Sie wird nicht automatisch neu angelegt.",
+                    conflict=conflict,
+                ) from exc
+            raise
+        try:
+            remote = read_remote_event(
+                raw,
+                fetched_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+                time_zone=snapshot.intended.time_zone,
+                account_id=snapshot.account_id,
+                athlete_id=snapshot.athlete_id,
+            )
+        except (TypeError, ValueError) as exc:
+            conflict = ConflictAssessment(
+                kind=ConflictKind.STRUCTURE,
+                reason=(
+                    "Die Remote-Einheit ist nicht mehr als geplantes Workout lesbar. "
+                    "Der lokale Entwurf bleibt erhalten."
+                ),
+                baseline=snapshot.base,
+                remote=None,
+                remote_id=remote_id,
+                changed_fields=("structure",),
+            )
+            raise GatewayConflict(conflict.reason, conflict=conflict) from exc
+
+        writable = snapshot.writable and (
+            snapshot.mode != "structure" or remote.plan.is_structure_editable
+        )
+        conflict = assess_update_conflict(
+            snapshot.base,
+            remote.plan,
+            remote_id=remote_id,
+            writable=writable,
+            reason=(
+                "Der Remote-Aufbau ist inzwischen nicht mehr strukturell editierbar."
+                if snapshot.mode == "structure"
+                and not remote.plan.is_structure_editable
+                else snapshot.writable_reason
+            ),
+            baseline_notes=snapshot.base_notes,
+        )
+        if conflict is not None:
+            raise GatewayConflict(conflict.reason, conflict=conflict)
 
     def _reconcile_create(self, snapshot: SaveSnapshot) -> WriteResult:
         external_id = snapshot.external_id or snapshot.payload.get("external_id")

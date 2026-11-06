@@ -132,7 +132,7 @@ class ControlledGateway:
         self.read_calls.append(remote_id)
         if self.fail_read is not None:
             raise self.fail_read
-        if self.fail_read_after_update > 0:
+        if self.fail_read_after_update > 0 and self.update_calls:
             self.fail_read_after_update -= 1
             raise TimeoutError("Rücklesen zu spät")
         return copy.deepcopy(self.events[int(remote_id)])
@@ -194,7 +194,9 @@ def test_datumsaenderung_behaelt_uhrzeit_und_event_id() -> None:
     plan, source, remote = _fixture("F01")
     remote = copy.deepcopy(remote)
     remote["start_date_local"] = "2026-11-03T09:15:00"
-    plan = replace(plan, local_time="09:15")
+    # Basis, lokaler Entwurf und Remote müssen vor der P21-Vorabprüfung
+    # denselben Ausgangszustand beschreiben.
+    plan = replace(plan, date="2026-11-03", local_time="09:15")
     gateway = ControlledGateway({9101: remote})
     service = EventWriteService(gateway)
     draft = WorkoutDraft.start(plan, source)
@@ -271,6 +273,7 @@ def test_fehlende_berechtigung_schreibt_nichts() -> None:
 def test_fehlendes_ruecklesen_ist_nicht_gleich_fehler() -> None:
     plan, source, remote = _fixture("F01")
     gateway = ControlledGateway({9101: remote})
+    # P21 liest vor dem Write; nur der Read nach dem Update schlägt hier fehl.
     gateway.fail_read_after_update = 1
     service = EventWriteService(gateway)
     draft = WorkoutDraft.start(plan, source)

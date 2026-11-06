@@ -1999,3 +1999,72 @@ Testadapter belegt.
 ## 5. Nächstes Paket
 
 **P21 — Externe Änderungen und Konflikte behandeln.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P21
+
+**Stand:** 06.11.2026  
+**Paket:** P21 — Externe Änderungen und Konflikte behandeln  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `3411282` plus P21-Arbeitsstand
+
+## 1. Ergebnis
+
+- Der Update-Pfad liest vor dem Write den aktuellen Remotezustand über die
+  ursprüngliche Event-ID und vergleicht ihn mit der Basis. Name, Sport, Termin,
+  Uhrzeit, Remote-Notizen und Aufbau werden getrennt ausgewertet; abgeleitete
+  Felder, interne Knoten-IDs und Abrufzeiten erzeugen keinen Konflikt.
+- Die gemeinsame Vergleichsprojektion liegt in `planner/shapes.py` und wird von
+  Rundlaufprüfung und Konfliktvergleich genutzt. Notizen werden mit den im
+  Basissnapshot tatsächlich vorhandenen Remote-Notizen verglichen.
+- Konfliktarten: externe Löschung (404), Berechtigungsänderung, Struktur,
+  Metadaten und Identität. Alle blockieren den Write; es gibt keinen Create-
+  Fallback und keine generische Baumverschmelzung.
+- Lokaler Entwurf und neuere Remoteversion bleiben getrennte Datenstände. Die
+  Antwort nennt die drei minimalen Aktionen aus Abschnitt 9.8; „eigene Fassung
+  trotzdem übernehmen“ ist ohne atomare Vorbedingung bewusst nicht enthalten.
+- Es gibt keinen belegten `If-Match`-/Versionsvertrag. Der Vorabvergleich und
+  die verbleibende Lücke zwischen GET und PUT sind in
+  `docs/trainingsplaner/KONFLIKTE.md` dokumentiert; eine atomare Garantie wird
+  nicht behauptet.
+- F10: externe Struktur- und Namensänderung führt zu `conflict`/`structure`, der
+  lokale 30-Minuten-Entwurf bleibt erhalten, die Remote-Fassung mit 25 Minuten
+  bleibt separat lesbar, Update- und Create-Aufrufe bleiben aus.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/conflicts.py` — Vergleichsprojektion,
+  Konfliktarten, getrennte Datenstände und minimale Aktionen.
+- `src/trainings_cockpit/planner/shapes.py` — gemeinsame fachliche
+  Normalisierung für Rundlauf und Konflikt.
+- `src/trainings_cockpit/planner/event_write.py` — Vorab-Lesen, Löschungs- und
+  Berechtigungsprüfung vor dem Update, Konfliktübertrag.
+- `src/trainings_cockpit/planner/save.py` — Konflikt im Statusmodell.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `tests/test_planner_conflicts.py` — F10, Löschung, Berechtigung, Metadaten,
+  Aktionen und Lesefehler.
+- `tests/test_planner_update.py` — Basis/Remote im Datumstest konsistent;
+  Rücklesefehler zählt erst nach einem Update.
+- `docs/trainingsplaner/KONFLIKTE.md` — Vertrag, Aktionen und Restlücke.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_conflicts.py -q` | **6 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest -q` | **353 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check …` (P21-Dateien) | ohne Befund |
+
+Es gab keinen Netzwerkaufruf gegen intervals.icu und keinen Produktiv-Write.
+
+## 4. Offene Punkte
+
+- Die drei Konfliktaktionen sind im Backend-Vertrag vorhanden; die sichtbare
+  Konfliktansicht und der Produkt-Endpunkt folgen mit der Speicheroberfläche in
+  P23.
+- Die Restlücke zwischen Vorab-GET und PUT bleibt ohne serverseitige
+  Vorbedingung bestehen und ist dokumentiert.
+
+## 5. Nächstes Paket
+
+**P22 — Unklare Ergebnisse und dauerhafte Vorgangszuordnung.**

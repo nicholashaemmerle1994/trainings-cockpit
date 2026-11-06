@@ -20,7 +20,7 @@ from enum import StrEnum
 from typing import Any
 
 from .model import PlannedWorkout
-from .remote import plan_shape
+from .shapes import plan_shape
 
 
 class ConflictKind(StrEnum):
@@ -83,12 +83,14 @@ class ConflictAssessment:
     reason: str
     baseline: PlannedWorkout | None
     remote: PlannedWorkout | None
+    remote_id: str = ""
     changed_fields: tuple[str, ...] = ()
     actions: tuple[str, ...] = CONFLICT_ACTIONS
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, ConflictKind):
             object.__setattr__(self, "kind", ConflictKind(self.kind))
+        object.__setattr__(self, "remote_id", str(self.remote_id))
         object.__setattr__(self, "changed_fields", tuple(self.changed_fields))
         object.__setattr__(self, "actions", tuple(self.actions))
         if self.baseline is not None and not isinstance(self.baseline, PlannedWorkout):
@@ -100,6 +102,7 @@ class ConflictAssessment:
         return {
             "kind": self.kind.value,
             "reason": self.reason,
+            "remote_id": self.remote_id,
             "changed_fields": list(self.changed_fields),
             "actions": list(self.actions),
             "baseline": None if self.baseline is None else _plan_summary(self.baseline),
@@ -113,14 +116,19 @@ def _plan_summary(plan: PlannedWorkout) -> dict[str, Any]:
     return {
         "remote_id": str(plan.remote_id) if plan.remote_id is not None else None,
         "local_id": str(plan.local_id),
+        "external_id": plan.external_id,
         "name": shape["name"],
         "sport": shape["sport"],
         "date": shape["date"],
         "local_time": shape["local_time"],
         "notes": shape["notes"],
         "editability": plan.editability.value,
+        "editability_reason": plan.editability_reason,
         "nodes": _json_nodes(shape["nodes"]),
     }
+
+
+_NOT_GIVEN = object()
 
 
 def _json_nodes(nodes: object) -> list[Any]:
@@ -144,10 +152,20 @@ def _json_nodes(nodes: object) -> list[Any]:
 def changed_content_fields(
     baseline: PlannedWorkout,
     remote: PlannedWorkout,
+    *,
+    baseline_notes: str | None | object = _NOT_GIVEN,
 ) -> tuple[str, ...]:
-    """Relevante Felder, die sich zwischen Basis und Remote unterscheiden."""
+    """Relevante Felder, die sich zwischen Basis und Remote unterscheiden.
+
+    ``baseline_notes`` erlaubt dem Aufrufer, die tatsächlich im Basissnapshot
+    vorhandenen Remote-Notizen zu vergleichen. Das lokale Planmodell kann
+    zusätzlich redaktionelle Fixture-Notizen tragen; sie sind kein Remote-
+    Inhalt und dürfen keinen Scheinkonflikt erzeugen.
+    """
     before = plan_shape(baseline)
     after = plan_shape(remote)
+    if baseline_notes is not _NOT_GIVEN:
+        before = {**before, "notes": baseline_notes}
     fields: list[str] = []
     for field in METADATA_FIELDS:
         if before.get(field) != after.get(field):
@@ -166,6 +184,7 @@ def assess_update_conflict(
     remote_id: str,
     writable: bool = True,
     reason: str | None = None,
+    baseline_notes: str | None | object = _NOT_GIVEN,
 ) -> ConflictAssessment | None:
     """Vergleicht eine Update-Basis mit dem aktuell gelesenen Remotezustand.
 
@@ -180,7 +199,8 @@ def assess_update_conflict(
             "Die Einheit wurde extern gelöscht. Sie wird nicht automatisch neu angelegt.",
             baseline,
             None,
-            actions=("return_to_draft", "discard_local"),
+            remote_id,
+            actions=CONFLICT_ACTIONS,
         )
     if not writable or not remote.is_metadata_editable:
         return ConflictAssessment(
@@ -190,6 +210,7 @@ def assess_update_conflict(
             or "Die Remote-Einheit ist inzwischen schreibgeschützt.",
             baseline,
             remote,
+            remote_id,
             changed_fields=("editability",),
             actions=("view_remote", "return_to_draft"),
         )
@@ -205,10 +226,11 @@ def assess_update_conflict(
             "Die externe Identität der Remote-Einheit hat sich geändert.",
             baseline,
             remote,
+            remote_id,
             changed_fields=("external_id",),
             actions=("view_remote", "return_to_draft"),
         )
-    fields = changed_content_fields(baseline, remote)
+    fields = changed_content_fields(baseline, remote, baseline_notes=baseline_notes)
     if not fields:
         return None
     structural = "structure" in fields or "sport" in fields
@@ -223,6 +245,7 @@ def assess_update_conflict(
         description,
         baseline,
         remote,
+        remote_id,
         changed_fields=fields,
     )
 
