@@ -3,6 +3,7 @@ import type {
   Overview,
   PlanDetail,
   PlanDraftProjection,
+  PlannerDeleteResponse,
   PlannerOperationsResponse,
   PlannerSaveResponse,
   PlannerWeekResponse,
@@ -57,6 +58,10 @@ export const api = {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    }),
+  deletePlan: (eventId: number) =>
+    request<PlannerDeleteResponse>(`/api/planner/plan/${eventId}`, {
+      method: "DELETE",
     }),
   openOperations: () =>
     request<PlannerOperationsResponse>("/api/planner/operations"),

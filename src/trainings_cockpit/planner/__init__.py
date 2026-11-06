@@ -34,6 +34,7 @@ from .dates import (
     week_days,
     week_label,
 )
+from .delete import DeleteGateway, DeleteOutcome, EventDeleteService
 from .details import build_local_plan_payload, build_plan_detail
 from .drafts import (
     START_TEMPLATES,
@@ -224,6 +225,9 @@ __all__ = [
     "ConflictKind",
     "CONTROLLED_REMOTE_FIELDS",
     "CREATE_ONLY_REMOTE_FIELDS",
+    "DeleteGateway",
+    "DeleteOutcome",
+    "EventDeleteService",
     "DraftProjectionError",
     "START_TEMPLATES",
     "SUPPORTED_NEW_SPORTS",

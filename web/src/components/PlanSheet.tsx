@@ -35,6 +35,7 @@ import type {
   PlanGraphTrack,
   PlanNode,
   PlannerConflict,
+  PlannerDeleteResponse,
   PlannerSaveResponse,
 } from "../types";
 import {
@@ -136,6 +137,7 @@ export function PlanSheet({
   online,
   onClose,
   onSaved,
+  onDeleted,
   onPending,
   revision = 0,
 }: {
@@ -146,6 +148,7 @@ export function PlanSheet({
   online: boolean;
   onClose: () => void;
   onSaved?: (result: PlannerSaveResponse) => void;
+  onDeleted?: (result: PlannerDeleteResponse) => void;
   onPending?: () => void;
   revision?: number;
 }) {
@@ -170,6 +173,9 @@ export function PlanSheet({
   const [saveLocked, setSaveLocked] = useState(false);
   const [conflict, setConflict] = useState<PlannerConflict | null>(null);
   const [remoteOpen, setRemoteOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [recovery, setRecovery] = useState<StoredPlannerDraft | null>(null);
   const draftActive = useRef(false);
   const requestSeq = useRef(0);
@@ -228,6 +234,9 @@ export function PlanSheet({
     setSaveLocked(false);
     setConflict(null);
     setRemoteOpen(false);
+    setDeleteOpen(false);
+    setDeleting(false);
+    setDeleteError(null);
     setRecovery(null);
     editingRef.current = false;
 
@@ -675,6 +684,43 @@ export function PlanSheet({
       );
     } finally {
       if (seq === saveSeq.current) setSaving(false);
+    }
+  };
+
+  const removePlan = async () => {
+    const id = eventId ?? data?.id ?? null;
+    if (id == null || isNew || deleting) return;
+    if (
+      !online ||
+      (typeof navigator !== "undefined" && !navigator.onLine)
+    ) {
+      setDeleteError(
+        "Offline – die Einheit wurde nicht gelöscht. Es wurde nichts remote geändert.",
+      );
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const result = await api.deletePlan(id);
+      if (!mountedRef.current) return;
+      clearLocalDraft();
+      draftActive.current = false;
+      dirtyRef.current = false;
+      editingRef.current = false;
+      if (onDeleted) onDeleted(result);
+      else onClose();
+    } catch (cause: unknown) {
+      if (!mountedRef.current) return;
+      setDeleteError(
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? "Offline – die Einheit wurde nicht gelöscht. Es wurde nichts remote geändert."
+          : cause instanceof Error
+            ? cause.message
+            : "Löschen fehlgeschlagen.",
+      );
+    } finally {
+      if (mountedRef.current) setDeleting(false);
     }
   };
 
@@ -1184,6 +1230,19 @@ export function PlanSheet({
           saveError={saveError}
           conflict={conflict}
           remoteOpen={remoteOpen}
+          online={online}
+          deleteOpen={deleteOpen}
+          deleting={deleting}
+          deleteError={deleteError}
+          onDeleteOpen={() => {
+            setDeleteError(null);
+            setDeleteOpen(true);
+          }}
+          onDeleteCancel={() => {
+            setDeleteError(null);
+            setDeleteOpen(false);
+          }}
+          onConfirmDelete={() => void removePlan()}
           recovery={recovery}
           onRestoreRecovery={restoreRecovery}
           onDiscardRecovery={discardRecovery}
@@ -1246,6 +1305,13 @@ function PlanBody({
   saveError,
   conflict,
   remoteOpen,
+  online,
+  deleteOpen,
+  deleting,
+  deleteError,
+  onDeleteOpen,
+  onDeleteCancel,
+  onConfirmDelete,
   recovery,
   onRestoreRecovery,
   onDiscardRecovery,
@@ -1309,6 +1375,13 @@ function PlanBody({
   saveError: string | null;
   conflict: PlannerConflict | null;
   remoteOpen: boolean;
+  online: boolean;
+  deleteOpen: boolean;
+  deleting: boolean;
+  deleteError: string | null;
+  onDeleteOpen: () => void;
+  onDeleteCancel: () => void;
+  onConfirmDelete: () => void;
   recovery: StoredPlannerDraft | null;
   onRestoreRecovery: () => void;
   onDiscardRecovery: () => void;
@@ -1676,6 +1749,75 @@ function PlanBody({
           bleiben in der bestehenden Aktivitätsansicht.
         </p>
       </section>
+
+      {!editing && !isNew && (
+        <section className="plan-delete" aria-labelledby="plan-delete-title">
+          {!deleteOpen ? (
+            <>
+              <div className="plan-delete__row">
+                <div>
+                  <h2 id="plan-delete-title">Einheit löschen</h2>
+                  <p>
+                    Entfernt die Planung aus dem Trainingskalender und aus
+                    intervals.icu. Eine aufgezeichnete Einheit bleibt erhalten.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={onDeleteOpen}
+                  disabled={!online}
+                >
+                  Löschen
+                </button>
+              </div>
+              {!online && (
+                <p className="plan-delete__hint" role="status">
+                  Offline – Löschen ist erst wieder mit Verbindung möglich.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <h2 id="plan-delete-title">Einheit endgültig löschen?</h2>
+              <p>
+                „{planName || data.sport_label}“ am {date} wird aus dem
+                Trainingskalender entfernt. Ist die Einheit in intervals.icu
+                noch vorhanden, wird sie dort ebenfalls gelöscht. Das lässt
+                sich nicht rückgängig machen.
+              </p>
+              {!online && (
+                <p className="plan-delete__hint" role="status">
+                  Offline – die Einheit wurde nicht gelöscht.
+                </p>
+              )}
+              {deleteError && (
+                <p className="plan-delete__error" role="alert">
+                  {deleteError}
+                </p>
+              )}
+              <div className="plan-delete__actions">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={onDeleteCancel}
+                  disabled={deleting}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  className="btn plan-delete__confirm"
+                  onClick={onConfirmDelete}
+                  disabled={deleting || !online}
+                >
+                  {deleting ? "Wird gelöscht…" : "Endgültig löschen"}
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
       {editing && conflict && (
         <section className="plan-conflict" aria-label="Remote-Konflikt">

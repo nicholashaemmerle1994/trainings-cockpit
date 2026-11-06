@@ -344,6 +344,31 @@ def delete_unlisted(
     return len(weg)
 
 
+def delete_unlisted_events(
+    conn: sqlite3.Connection,
+    start: date,
+    end: date,
+    listed: set[str],
+) -> int:
+    """Geplante Einheiten löschen, die die Quelle im Zeitraum nicht mehr führt.
+
+    Wird eine Einheit in intervals.icu gelöscht, verschwindet sie beim nächsten
+    Sync auch aus dem Trainingsplaner. Wie bei den Aktivitäten (D-54) gilt das
+    nur für den nachweislich gelesenen Zeitraum; nichts außerhalb wird
+    angefasst.
+    """
+    rows = conn.execute(
+        "SELECT id FROM event WHERE date BETWEEN ? AND ?",
+        (start.isoformat(), end.isoformat()),
+    ).fetchall()
+    weg = [(int(row["id"]),) for row in rows if str(row["id"]) not in listed]
+    if not weg:
+        return 0
+    conn.executemany("DELETE FROM event WHERE id = ?", weg)
+    conn.commit()
+    return len(weg)
+
+
 def upsert_events(conn: sqlite3.Connection, rows: Iterable[dict[str, Any]]) -> int:
     now = datetime.now().isoformat(timespec="seconds")
     count = 0
@@ -437,6 +462,17 @@ def activity_by_row_id(conn: sqlite3.Connection, row_id: int) -> dict[str, Any] 
 def event_by_id(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM event WHERE id = ?", (event_id,)).fetchone()
     return dict(row) if row else None
+
+
+def delete_event(conn: sqlite3.Connection, event_id: int) -> bool:
+    """Eine geplante Einheit aus dem lokalen Bestand entfernen.
+
+    Gelöscht wird der Plan, nicht das Training: eine zugehörige Aufzeichnung
+    bleibt bestehen. Gibt zurück, ob es die Zeile noch gab.
+    """
+    cur = conn.execute("DELETE FROM event WHERE id = ?", (event_id,))
+    conn.commit()
+    return cur.rowcount > 0
 
 
 def upsert_stream(
