@@ -68,9 +68,13 @@ Vorgangspersistenz und die Rückleseprüfung.
 - **Live-Rundlauf:** Alle Schreibbelege stammen aus kontrollierten Adaptern.
   Eine echte intervals.icu-Gegenprobe mit einem dafür vorgesehenen
   Testdatensatz und Freigabe steht aus.
-- **Plan-/Aktivitätsbeziehung:** Der Produktbestand führt weiterhin keine
-  dauerhaft bestätigte Beziehung. Die Anzeige kann einen übergebenen Vertrag
-  darstellen, erzeugt aber keine Beziehung und keinen Write.
+- **Plan-/Aktivitätsbeziehung:** Seit D-85 führt `plan_link` manuell bestätigte
+  und ausdrücklich getrennte Paare dauerhaft. Die Wochenanzeige verbindet eine
+  Planung und eine Aufzeichnung automatisch nur, wenn sie am selben Tag
+  dieselbe Sportart (bekannte Varianten zusammengefasst) haben und die einzigen
+  offenen Einheiten sind; automatische Paare werden beim Lesen berechnet und
+  nicht gespeichert. Mehrdeutige Fälle ordnet der Athlet im Einheiten-Blatt zu.
+  Ein Link erzeugt keinen Event-Write.
 - **Konflikte:** Der Vorab-GET und der PUT sind keine atomare Vorbedingung.
   Die Restlücke ist in `KONFLIKTE.md` dokumentiert.
 - **Ältere Wochen/Pagination:** Die intervals-Abfrage nutzt einen

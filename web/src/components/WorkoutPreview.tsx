@@ -11,7 +11,8 @@ export function WorkoutPreview({
 }: {
   sport: string;
   name: string;
-  meta: string;
+  /** Text oder eine kurze Zusatzzeile (z. B. der Planbezug). */
+  meta: ReactNode;
   trailing?: ReactNode;
   onClick: () => void;
 }) {

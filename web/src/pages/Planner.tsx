@@ -14,6 +14,7 @@ import {
   type StoredPlannerDraft,
 } from "../plannerDraftStore";
 import { fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
+import { plannedMeta } from "../plannerFormat";
 import { usePlannerWeek, type PlannerSourceName } from "../plannerQuery";
 import { addDays, currentPlannerWeek } from "../routing";
 import type {
@@ -27,45 +28,8 @@ import type {
   PlannerWeekResponse,
 } from "../types";
 
-function approx(value: string, estimated: boolean): string {
-  return estimated ? `≈ ${value}` : value;
-}
-
 function withStart(start: string | null, text: string): string {
   return start ? `${start} · ${text}` : text;
-}
-
-function plannedMeta(entry: PlannerEntry): string {
-  const planned = entry.planned;
-  if (!planned) return "Ohne Vorgabe";
-  // In der Wochenliste zählt die belegte Teilmenge, nicht die vom
-  // bestehenden Parser geschätzte Gesamtdauer. Sonst sähe F04 wie eine
-  // exakte 51-Minuten-Einheit aus, obwohl nur 28 min + 4 km belegt sind.
-  const duration =
-    planned.known_seconds != null
-      ? fmtMinutes(planned.known_seconds / 60)
-      : approx(
-          fmtMinutes(planned.minutes),
-          planned.estimated === "dauer",
-        );
-  const distance =
-    planned.known_distance_metres != null
-      ? fmtKm(planned.known_distance_metres / 1000)
-      : approx(
-          fmtKm(planned.km),
-          planned.estimated === "distanz",
-        );
-  const mixed =
-    planned.known_seconds != null && planned.known_distance_metres != null;
-  const parts = mixed
-    ? [duration, distance]
-    : planned.primary === "distance"
-      ? [distance, duration]
-      : [duration, distance];
-  const visible = parts.filter((part) => part !== "—" && part !== "≈ —");
-  let text = mixed ? visible.join(" + ") : visible.join(" · ");
-  if (planned.has_unknown) text = text ? `${text} · unvollständig` : "Angaben unvollständig";
-  return withStart(entry.start, text || "Ohne Vorgabe");
 }
 
 function actualMeta(entry: PlannerEntry): string {
@@ -77,13 +41,21 @@ function actualMeta(entry: PlannerEntry): string {
   return withStart(entry.start, parts.join(" · ") || "Ohne Messwerte");
 }
 
-function linkedMeta(entry: PlannerEntry): string {
+function linkedMeta(entry: PlannerEntry, linked?: PlannerEntry) {
   const parts = [actualMeta(entry)];
-  if ((entry.activities?.length ?? 0) > 1) {
-    parts.push(`${entry.activities?.length} Aufzeichnungen`);
-  }
-  if (entry.plan?.name) parts.push(`Plan: ${entry.plan.name}`);
-  return parts.join(" · ");
+  const count = linked?.activities?.length ?? 0;
+  if (count > 1) parts.push(`${count} Aufzeichnungen`);
+  // Der Plan hängt am übergeordneten linked-Eintrag, nicht an der einzelnen
+  // Aufzeichnung. Auf schmalen Schirmen steht er als eigene, gekürzte Zeile,
+  // damit die Ist-Werte nicht mitten im Planbezug umbrechen.
+  return (
+    <>
+      {parts.join(" · ")}
+      {linked?.plan?.name && (
+        <span className="train-meta-plan">Plan: {linked.plan.name}</span>
+      )}
+    </>
+  );
 }
 
 function entrySport(entry: PlannerEntry): string {
@@ -415,6 +387,8 @@ export function Planner({
           onOpenPlan={onOpenPlan}
           top={openPlan == null}
           revision={revision}
+          linkPlans
+          onLinkChanged={onDataChanged}
         />
       )}
       {openPlan != null && (
@@ -621,7 +595,7 @@ function EntryRows({
             key={view.key}
             sport={entrySport(view)}
             name={view.name || entryName(view)}
-            meta={linkedMeta(view)}
+            meta={linkedMeta(view, entry)}
             onClick={() => {
               const rowId = view.activity?.row_id ?? view.activity_row_id;
               if (rowId != null) onOpenUnit(rowId);

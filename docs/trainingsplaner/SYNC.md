@@ -65,12 +65,16 @@ geschrieben.
 
 ## 6. Beziehungen
 
-Bestätigte Plan-/Aktivitätsbeziehungen werden weiterhin ausschließlich aus dem
-übergebenen Beziehungsvertrag dargestellt. Änderungen daran aktualisieren die
-gemeinsame Listenprojektion und die getrennten Summen; sie erzeugen keinen
-Event-Write. Eine Durchführung außerhalb der Planwoche bleibt als
-Abschlussreferenz am abweichenden Plantermin erreichbar, ohne die
-Aktivitätswoche umzuschreiben.
+Ausdrückliche Plan-/Aktivitätsbeziehungen kommen aus der Tabelle `plan_link`
+(manuell zugeordnet oder ausdrücklich getrennt). Automatische Paare werden
+nicht gespeichert: Sie entstehen beim Lesen, wenn am selben lokalen Tag
+dieselbe Sportart (bekannte Varianten zusammengefasst) genau einmal als
+Planung und genau einmal als Aufzeichnung vorliegt. Der Wochenleser löst beides
+in den vorhandenen Beziehungsvertrag auf; Änderungen aktualisieren die
+gemeinsame Listenprojektion und die getrennten Summen. Sie erzeugen keinen
+Event-Write und kopieren keine Messwerte. Eine Durchführung außerhalb der
+Planwoche bleibt als Abschlussreferenz am abweichenden Plantermin erreichbar,
+ohne die Aktivitätswoche umzuschreiben.
 
 ## 7. Produkt-Endpunkte
 
