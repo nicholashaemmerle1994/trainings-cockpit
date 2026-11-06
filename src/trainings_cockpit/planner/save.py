@@ -259,6 +259,7 @@ class SaveOutcome:
     status: SaveStatus
     snapshot: SaveSnapshot | None = None
     confirmed: Any | None = None
+    remote_raw: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -382,24 +383,54 @@ def classify_exception(exc: BaseException) -> WriteResult:
     )
 
 
+_SHARED_LOCK = threading.RLock()
+_SHARED_ACTIVE: dict[str, SaveOperation] = {}
+_SHARED_STATUS: dict[str, SaveStatus] = {}
+_SHARED_LAST: dict[str, tuple[str, SaveStatus]] = {}
+_SHARED_RECONCILING: set[str] = set()
+
+
 class SaveCoordinator:
-    """Genau eine aktive Operation pro geplanter Einheit."""
+    """Genau eine aktive Operation pro geplanter Einheit.
+
+    ``shared=True`` verbindet mehrere Koordinatoren desselben Prozesses (der
+    Produkt-Endpunkt baut je Request einen). Ohne diese gemeinsame Grenze
+    könnten zwei gleichzeitige Requests für dieselbe Einheit zwei Writes
+    starten. Tests und Einzelaufrufe bleiben mit ``shared=False`` getrennt.
+    """
 
     def __init__(
         self,
         runner: SaveRunner,
         *,
         recorder: OperationRecorder | None = None,
+        shared: bool = False,
     ) -> None:
         if not callable(getattr(runner, "execute", None)):
             raise TypeError("runner muss ein SaveRunner mit execute() sein.")
         self._runner = runner
         self._recorder = recorder
-        self._lock = threading.RLock()
-        self._active: dict[str, SaveOperation] = {}
-        self._status: dict[str, SaveStatus] = {}
-        self._last_saved: dict[str, tuple[str, SaveStatus]] = {}
-        self._reconciling: set[str] = set()
+        if shared:
+            self._lock = _SHARED_LOCK
+            self._active = _SHARED_ACTIVE
+            self._status = _SHARED_STATUS
+            self._last_saved = _SHARED_LAST
+            self._reconciling = _SHARED_RECONCILING
+        else:
+            self._lock = threading.RLock()
+            self._active = {}
+            self._status = {}
+            self._last_saved = {}
+            self._reconciling = set()
+
+    @classmethod
+    def reset_shared_state(cls) -> None:
+        """Nur für Tests und einen kontrollierten Prozessneustart."""
+        with _SHARED_LOCK:
+            _SHARED_ACTIVE.clear()
+            _SHARED_STATUS.clear()
+            _SHARED_LAST.clear()
+            _SHARED_RECONCILING.clear()
 
     # ------------------------------------------------------------ Zustand
     def status_for(
@@ -614,21 +645,9 @@ class SaveCoordinator:
             return SaveOutcome(status, snapshot)
 
         key = plan_key(account_id=account, athlete_id=athlete, local_id=snapshot.local_id)
-        persistence_error = self._record(snapshot, SaveState.SAVING)
-        if persistence_error is not None:
-            return SaveOutcome(
-                SaveStatus(
-                    SaveState.FAILED,
-                    "Der Vorgang konnte vor dem Senden nicht gesichert werden. "
-                    "Es wurde nichts an die Remote-Quelle gesendet.",
-                    operation_id=snapshot.operation_id,
-                    remote_id=snapshot.remote_id.value if snapshot.remote_id else None,
-                    external_id=snapshot.external_id,
-                    error=SaveErrorKind.RECONCILIATION,
-                    persistence_error=persistence_error,
-                ),
-                snapshot,
-            )
+        # Prüfung, Persistenz und Registrierung liegen unter demselben Lock:
+        # sonst könnten parallele Aufrufe mehrere "saving"-Vorgänge anlegen,
+        # obwohl nur ein Adapteraufruf erlaubt ist.
         with self._lock:
             active = self._active.get(key)
             if active is not None:
@@ -636,6 +655,23 @@ class SaveCoordinator:
             cached = self._last_saved.get(key)
             if cached is not None and cached[0] == snapshot.fingerprint:
                 return SaveOutcome(cached[1], snapshot, None)
+            persistence_error = self._record(snapshot, SaveState.SAVING)
+            if persistence_error is not None:
+                return SaveOutcome(
+                    SaveStatus(
+                        SaveState.FAILED,
+                        "Der Vorgang konnte vor dem Senden nicht gesichert werden. "
+                        "Es wurde nichts an die Remote-Quelle gesendet.",
+                        operation_id=snapshot.operation_id,
+                        remote_id=(
+                            snapshot.remote_id.value if snapshot.remote_id else None
+                        ),
+                        external_id=snapshot.external_id,
+                        error=SaveErrorKind.RECONCILIATION,
+                        persistence_error=persistence_error,
+                    ),
+                    snapshot,
+                )
             saving = SaveStatus(
                 SaveState.SAVING,
                 "Wird gespeichert …",
@@ -726,7 +762,7 @@ class SaveCoordinator:
             else:
                 # SAVING/UNKNOWN bleiben aktiv und damit gesperrt.
                 pass
-        return SaveOutcome(status, snapshot, result.confirmed)
+        return SaveOutcome(status, snapshot, result.confirmed, result.remote_raw)
 
     # ------------------------------------------------------------ Wiederaufnahme
     def restore_open(self, *, account_id: str, athlete_id: str) -> list[SaveOutcome]:
@@ -776,6 +812,10 @@ class SaveCoordinator:
                 persistence_error=None,
             )
             with self._lock:
+                if key in self._active:
+                    # Ein laufender Vorgang wird nicht durch einen älteren
+                    # persistierten Stand überschrieben.
+                    continue
                 self._active[key] = SaveOperation(
                     snapshot=snapshot,
                     key=key,
@@ -801,10 +841,10 @@ class SaveCoordinator:
             if operation is None:
                 for status in self._status.values():
                     if status.operation_id is not None and str(status.operation_id) == wanted:
-                        return SaveOutcome(status, None, None)
+                        return SaveOutcome(status, None, None, None)
                 raise KeyError(f"Vorgang {wanted!r} ist nicht offen.")
             if operation.key in self._reconciling:
-                return SaveOutcome(self._status[operation.key], operation.snapshot, None)
+                return SaveOutcome(self._status[operation.key], operation.snapshot, None, None)
             self._reconciling.add(operation.key)
 
         try:

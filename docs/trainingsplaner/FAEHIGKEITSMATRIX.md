@@ -14,9 +14,9 @@ Vollständigkeit und den fehlenden Nachweis bei jeder offenen Schreibfähigkeit.
 |---|---|---|
 | Kalender-Events lesen | `IntervalsClient.events()` → `GET /athlete/{id}/events`; `db.upsert_events()` erhält das Roh-JSON in `event.raw` | belegt |
 | `workout_doc` lesen | `plan.parse_workout()` liest `workout_doc.steps`, klappt Wiederholungen auf, wählt aber genau ein Ziel und verliert die Ende-Bedingung als Typ | offen |
-| Produkt-Schreibweg | Update-/Create-Service, Rückleseprüfung, stabile externe Identität, Konfliktsicherung und dauerhafte Vorgangszuordnung existieren; Produkt-Endpunkt und UI-Speichern folgen in P23 | Testvertrag belegt, Produktivschreiben noch gesperrt |
-| Gezieltes Event-Update | `IntervalsClient.update_event()` nutzt `PUT /athlete/{id}/events/{eventId}`; der Vertrag ist mit `respx` belegt. Vorabvergleich und Vorgangspersistenz sind belegt; der Produkt-Endpunkt folgt in P23 | Testvertrag belegt, produktiv noch gesperrt |
-| Neuanlage mit stabiler App-Identität | `IntervalsClient.upsert_events()` mit `external_id`; Create-Service prüft Antwort-Identität, liest die Remote-ID nach und hält den Vorgang über Reload | Testvertrag belegt, produktiv noch gesperrt |
+| Produkt-Schreibweg | Update-/Create-Service, Rückleseprüfung, stabile externe Identität, Konfliktsicherung, Vorgangspersistenz und Produkt-Endpunkte `…/save` existieren; die UI speichert darüber | belegt; Testadapter statt Netzwerklauf |
+| Gezieltes Event-Update | `IntervalsClient.update_event()` nutzt `PUT /athlete/{id}/events/{eventId}`; der Vertrag ist mit `respx` belegt. Vorabvergleich, Vorgangspersistenz und Produkt-Endpunkt sind belegt | belegt |
+| Neuanlage mit stabiler App-Identität | `IntervalsClient.upsert_events()` mit `external_id`; Create-Service prüft Antwort-Identität, liest die Remote-ID nach und hält den Vorgang über Reload | belegt |
 | Plan-/Aktivitätsbeziehung | Keine explizite Beziehung; `plan.matches()` ist eine Heuristik ohne Abschlussnachweis; eine neue `external_id` ist kein Beleg | offen |
 | Kanonische Mehrquellen-Aktivität | Dedupe löscht den Verlierer; keine dauerhafte Zuordnung mehrerer Quell-IDs | offen |
 

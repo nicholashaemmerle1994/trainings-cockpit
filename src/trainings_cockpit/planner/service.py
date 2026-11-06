@@ -17,6 +17,19 @@ from .event_write import EventWriteService, IntervalsEventAdapter
 
 
 @contextmanager
+def event_read_service(settings: Settings):
+    """Nur lesender Zugriff auf ein aktuelles Remote-Event."""
+    if not settings.intervals_key:
+        raise RuntimeError("Kein intervals.icu-Key konfiguriert.")
+    with IntervalsClient(
+        settings.intervals_key,
+        settings.intervals_athlete,
+        settings.base_url,
+    ) as client:
+        yield client
+
+
+@contextmanager
 def event_write_service(settings: Settings) -> Iterator[EventWriteService]:
     """Öffnet den vorhandenen Client und schließt ihn nach dem Vorgang."""
     if not settings.intervals_key:
@@ -29,4 +42,4 @@ def event_write_service(settings: Settings) -> Iterator[EventWriteService]:
         yield EventWriteService(IntervalsEventAdapter(client))
 
 
-__all__ = ["event_write_service"]
+__all__ = ["event_read_service", "event_write_service"]

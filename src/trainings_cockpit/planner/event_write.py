@@ -355,6 +355,7 @@ class EventWriteService:
             remote_id=remote_id,
             external_id=snapshot.external_id,
             confirmed=remote.plan,
+            remote_raw=dict(raw),
         )
 
     def reconcile(self, snapshot: SaveSnapshot) -> WriteResult:
@@ -410,6 +411,7 @@ class EventWriteService:
                 remote_id=remote_id,
                 external_id=snapshot.external_id,
                 confirmed=remote.plan,
+                remote_raw=dict(raw),
             )
         if snapshot.base is not None and verify_roundtrip(
             snapshot.base,

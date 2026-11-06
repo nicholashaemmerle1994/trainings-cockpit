@@ -54,8 +54,12 @@ def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("TC_GOALS", "[]")
     monkeypatch.setenv("TC_TIME_ZONE", "Europe/Vienna")
     api.get_settings.cache_clear()
+    from trainings_cockpit.planner import SaveCoordinator
+
+    SaveCoordinator.reset_shared_state()
     with TestClient(api.app) as test_client:
         yield test_client
+    SaveCoordinator.reset_shared_state()
     api.get_settings.cache_clear()
 
 
@@ -137,6 +141,8 @@ def test_offener_vorgang_ueberlebt_reload_und_wird_abgeglichen(
     assert result["status"]["remote_id"] == "9201"
     assert result["status"]["reconciliation_required"] is False
     assert result["confirmed"]["remote_id"] == "9201"
+    assert result["week"] == "2026-11-09"
+    assert result["time_zone"] == "Europe/Vienna"
     assert gateway.calls == []
     assert len(gateway.find_calls) == 1
     # Abgeschlossen: erscheint nicht mehr als offener Vorgang.

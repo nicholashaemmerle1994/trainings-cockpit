@@ -2147,3 +2147,129 @@ Es gab keinen Netzwerkaufruf gegen intervals.icu und keinen Produktiv-Write.
 ## 5. Nächstes Paket
 
 **P23 — Bidirektionalen Sync und alle betroffenen Ansichten verbinden.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P23
+
+**Stand:** 06.11.2026  
+**Paket:** P23 — Bidirektionalen Sync und alle betroffenen Ansichten verbinden  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `3d15075`
+
+## 1. Ergebnis
+
+- Es gibt jetzt den Produkt-Speicherweg: `POST /api/planner/plan/{event_id}/save`
+  für bestehende Entwürfe und `POST /api/planner/draft/save` für Neuanlagen.
+  Beide bauen denselben `WorkoutDraft`, verwenden `SaveCoordinator`,
+  `EventWriteService` und die persistierte Vorgangszuordnung. Die UI sendet erst
+  beim bewussten Speichern.
+- Ein bestätigter Remote-Datensatz wird über seine tatsächliche Event-ID in die
+  vorhandene `event`-Tabelle geschrieben (`planner/syncmerge.py`). Der nächste
+  Sync liest dieselbe ID; eine lokal gespeicherte Änderung erscheint genau
+  einmal mit derselben Identität. Der `merge_confirmed_event`-Pfad ruft keinen
+  Event-Schreibweg auf und kann keine Read→Write-Schleife erzeugen.
+- Ein bestätigtes Create mit fehlgeschlagenem Read bleibt `savedUnverified`; die
+  Remote-ID bleibt erhalten, aber der lokale Bestand wird nicht mit einer
+  unbelegten Darstellung überschrieben.
+- `GET /api/planner/plan/{event_id}/remote` liest die aktuelle Remoteversion für
+  „Entwurf verwerfen, Remote übernehmen“ und sortiert sie lokal über dieselbe
+  Event-ID ein. Das ist ein Lesevorgang, kein Event-Write.
+- Wochenliste, Planungsdetails, Aktivitätsdetails, rollierende
+  Dashboard-Kennzahlen und die Tagesvorschau hängen an einer gemeinsamen
+  Revision. Nach Sync oder bestätigtem Write werden sie neu geladen. Bei einem
+  Terminwechsel werden alte und neue Woche entwertet und die neue Woche
+  geöffnet.
+- Der lokale Wochen-Cache verwirft bei einem Accountwechsel seinen Inhalt; die
+  Planer-Seite wird über die Account-Identität neu aufgebaut. Offene Vorgänge
+  sind serverseitig an Account/Athlet gebunden.
+- Offene Vorgänge erscheinen als ruhiger Hinweis in der Wochenansicht mit
+  „Status prüfen“; der Abgleich bleibt lesend und legt nichts automatisch neu
+  an.
+- Der Produkt-Endpunkt verwendet eine prozessweite Koordinator-Grenze: zwei
+  gleichzeitige Requests für dieselbe Einheit starten nur einen Write und
+  hinterlassen genau einen offenen Vorgang.
+- Der Editor zeigt die drei Konfliktwege aus 9.8, deaktiviert „Speichern“
+  während eines sichtbaren Konflikts, bewahrt den lokalen Entwurf und kann die
+  Remoteversion bewusst übernehmen. `savedUnverified`/`unknown` sperren weitere
+  Speicherversuche und verweisen auf den lesenden Abgleich.
+- Aktivitäts-Sync: dieselbe kanonische Zeile wird bei einer Korrektur
+  aktualisiert; Woche, Dashboard und `/api/unit/{row_id}` zeigen danach
+  dieselben neuen Werte ohne Doppelzählung.
+- Beziehungen bleiben reine Darstellung: die vorhandene Projektion und die
+  getrennten Summen werden verwendet, ein Beziehungswechsel erzeugt keinen
+  Event-Write.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/drafts.py` — gemeinsame Bausteine für
+  Projektion und speicherbaren Entwurf, Schreibfähigkeit im Draft-Meta.
+- `src/trainings_cockpit/planner/syncmerge.py` — bestätigte Events idempotent
+  über die tatsächliche Event-ID einsortieren, Identität lesen.
+- `src/trainings_cockpit/planner/service.py` — Lese- und Schreibbrücke zum
+  vorhandenen `IntervalsClient`.
+- `src/trainings_cockpit/planner/event_write.py` — bestätigten Rohdatensatz im
+  Ergebnis mitführen.
+- `src/trainings_cockpit/planner/save.py` — Ergebnis-Rohdaten und
+  Remote-ID-Persistenz.
+- `src/trainings_cockpit/planner/details.py` — Schreibfähigkeit der
+  Leseansicht.
+- `src/trainings_cockpit/api.py` — Speicher-Endpunkte, Remote-Lese-Endpunkt,
+  Account-Identität in Woche/Overview, Wochenangabe beim Abgleich.
+- `web/src/api.ts`, `web/src/types.ts` — Speicher-, Konflikt-, Vorgangs- und
+  Remote-Verträge.
+- `web/src/components/PlanSheet.tsx` — Speichern, Konfliktansicht, drei
+  Aktionen, Remote übernehmen, Revision und Stale-Schutz.
+- `web/src/components/PlanEditor.tsx` — Speicherstatus und aktive
+  Speichern-Aktion statt dauerhaft gesperrtem Knopf.
+- `web/src/components/UnitSheet.tsx` — Neuladen über die kanonische Zeile nach
+  Sync/Write.
+- `web/src/pages/Planner.tsx` — Revision, Cache-Entwertung, offene Vorgänge,
+  Wochenwechsel nach Terminänderung.
+- `web/src/plannerQuery.ts` — Revision, Account-Cache und gezielte
+  Entwertung.
+- `web/src/App.tsx` — Dashboard-/Vorschau-Neuladen nach Sync und Save,
+  Account-Neuaufbau der Planer-Seite.
+- `web/src/styles.css` — Konflikt- und Vorgangshinweise im bestehenden
+  Designsystem.
+- `tests/test_planner_save_api.py` — Update, Terminwechsel, Konflikt,
+  Neuanlage/Upsert, Aktivitätskorrektur, Remote-Übernahme, keine Beziehung.
+- `tests/test_planner_operations.py` — zusätzlich ein gleichzeitiger
+  Speicherversuch mit genau einem Write und einem offenen Vorgang.
+- `tests/test_planner_conflicts.py`, `tests/test_planner_operations_api.py` —
+  Konflikt- und Abgleichverträge.
+- `docs/trainingsplaner/SYNC.md`, `docs/trainingsplaner/FAEHIGKEITSMATRIX.md` —
+  Sync-Vertrag und Schreibstatus.
+
+## 3. Prüfung
+
+| Befehl / Prüfung | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest -q` | **372 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check …` (P23-Dateien) | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+| Sichtprüfung 390 × 844 | Woche, Editor mit aktivem Speichern, Konflikt mit drei Aktionen, Remote-Übernahme |
+| Sichtprüfung 1440 × 1000 | Wochenansicht, Desktop-Layout ohne Überlauf |
+| Browser-Konsole | keine Fehler im geführten Ablauf |
+
+Der Sichtprüfserver lief auf `127.0.0.1:8099` mit einer separaten
+Fixture-Datenbank und einem kontrollierten Testadapter; es gab keinen
+Netzwerkaufruf gegen intervals.icu oder Garmin. Screenshots liegen lokal unter
+`data/screens/` (`p23-week-390.png`, `p23-editor-390.png`,
+`p23-conflict-390.png`, `p23-adopt-remote-390.png`, `p23-week-1440.png`) und
+sind nicht committet.
+
+## 4. Offene Punkte
+
+- Der Server hat weiterhin keinen separaten Accountwechsel-Dialog. Die
+  vorhandene Account-/Athletenzuordnung wird respektiert; ein Wechsel baut die
+  Planer-Seite neu auf und der Operations-Store filtert serverseitig.
+- Der bestehende Bestand persistiert weiterhin keine explizite
+  Plan-/Aktivitätsbeziehung. Die Darstellung und die getrennten Summen sind
+  vorbereitet und getestet; der Produktpfad liefert derzeit eine leere
+  Beziehungsliste.
+- Ein `savedUnverified`-Vorgang bleibt absichtlich gesperrt, bis der lesende
+  Abgleich ihn bestätigt. Die UI zeigt dafür den Vorgangshinweis.
+
+## 5. Nächstes Paket
+
+**P24 — Navigation, Wiederherstellung und Fehlerzustände vervollständigen.**

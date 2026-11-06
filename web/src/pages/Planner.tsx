@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AddWorkoutSheet, type NewPlanConfig } from "../components/AddWorkoutSheet";
 import { IconBack, IconForward, IconPlus } from "../components/icons";
 import { PlanSheet } from "../components/PlanSheet";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { StatusBadge } from "../components/ui";
 import { UnitSheet } from "../components/UnitSheet";
+import { api } from "../api";
 import { WorkoutPreview } from "../components/WorkoutPreview";
 import { fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
 import { usePlannerWeek, type PlannerSourceName } from "../plannerQuery";
@@ -13,6 +14,8 @@ import type {
   PlannerDay,
   PlannerEntry,
   PlannerSource,
+  PlannerOperation,
+  PlannerSaveResponse,
   PlannerSummaryEntry,
   PlannerWeekResponse,
 } from "../types";
@@ -108,6 +111,8 @@ export function Planner({
   onOpenUnit,
   onClosePlan,
   onCloseUnit,
+  revision = 0,
+  onDataChanged,
 }: {
   week: string;
   timeZone: string;
@@ -118,10 +123,66 @@ export function Planner({
   onOpenUnit: (rowId: number) => void;
   onClosePlan: () => void;
   onCloseUnit: () => void;
+  revision?: number;
+  onDataChanged?: () => void;
 }) {
-  const { data, loading, stale, error, retrying, reload } = usePlannerWeek(week);
+  const { data, loading, stale, error, retrying, reload, invalidate } =
+    usePlannerWeek(week, revision);
   const [addDay, setAddDay] = useState<string | null>(null);
   const [newPlan, setNewPlan] = useState<NewPlanConfig | null>(null);
+  const [operations, setOperations] = useState<PlannerOperation[]>([]);
+  const [reconciling, setReconciling] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .openOperations()
+      .then((result) => {
+        if (alive) setOperations(result.items);
+      })
+      .catch(() => {
+        /* Ein nicht erreichbarer Vorgangsstatus macht die Woche nicht leer. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [revision]);
+
+  const handleSaved = (result: PlannerSaveResponse) => {
+    invalidate([week, result.old_week, result.week]);
+    onDataChanged?.();
+    setOperations((current) =>
+      current.filter(
+        (item) => item.operation_id !== result.status.operation_id,
+      ),
+    );
+    if (result.week && result.week !== week) {
+      // Der Wochenwechsel schließt den Planbezug bereits; ein zusätzliches
+      // closePlan würde die alte Woche wieder in die Route schreiben.
+      onWeekChange(result.week);
+    } else if (openPlan != null) {
+      onClosePlan();
+    }
+    setNewPlan(null);
+  };
+
+  const reconcile = async (operation: PlannerOperation) => {
+    setReconciling(operation.operation_id);
+    try {
+      const result = await api.reconcileOperation(operation.operation_id);
+      invalidate([week, result.week]);
+      setOperations((current) =>
+        current.filter((item) => item.operation_id !== operation.operation_id),
+      );
+      onDataChanged?.();
+      if (result.week && result.week !== week) onWeekChange(result.week);
+      else reload();
+    } catch {
+      /* Der Vorgang bleibt sichtbar; der nächste Reload versucht es erneut. */
+    } finally {
+      setReconciling(null);
+    }
+  };
 
   const currentWeek = useMemo(
     () => currentPlannerWeek(new Date(), timeZone),
@@ -175,6 +236,37 @@ export function Planner({
         </div>
       )}
 
+      {operations.length > 0 && (
+        <section className="planner-operation" aria-label="Offene Speichervorgänge">
+          <p>
+            {operations.length === 1
+              ? "Ein Speichervorgang ist noch offen."
+              : `${operations.length} Speichervorgänge sind noch offen.`}{" "}
+            Der Status wird lesend geprüft; es wird nichts automatisch erneut
+            angelegt.
+          </p>
+          {operations.map((operation) => (
+            <div key={operation.operation_id} className="planner-operation__row">
+              <span>
+                {operation.mode === "create" ? "Neuanlage" : "Änderung"} ·{" "}
+                {operation.state}
+                {operation.remote_id ? ` · Event ${operation.remote_id}` : ""}
+              </span>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                disabled={reconciling === operation.operation_id}
+                onClick={() => void reconcile(operation)}
+              >
+                {reconciling === operation.operation_id
+                  ? "Wird geprüft…"
+                  : "Status prüfen"}
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
       {!resolved && loading && <PlannerSkeleton />}
 
       {resolved && (
@@ -225,15 +317,25 @@ export function Planner({
           plan={unitPlan}
           onOpenPlan={onOpenPlan}
           top={openPlan == null}
+          revision={revision}
         />
       )}
       {openPlan != null && (
-        <PlanSheet eventId={openPlan} onClose={onClosePlan} />
+        <PlanSheet
+          eventId={openPlan}
+          onClose={onClosePlan}
+          onSaved={handleSaved}
+          onPending={onDataChanged}
+          revision={revision}
+        />
       )}
       {newPlan != null && (
         <PlanSheet
           newPlan={newPlan}
           onClose={() => setNewPlan(null)}
+          onSaved={handleSaved}
+          onPending={onDataChanged}
+          revision={revision}
         />
       )}
       {addDay != null && (

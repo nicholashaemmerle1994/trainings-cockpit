@@ -1204,12 +1204,22 @@ export function DraftStatus({
   dirty,
   nodes,
   onDiscard,
+  saving = false,
+  canSave = false,
+  saveMessage = null,
+  saveError = null,
+  onSave,
 }: {
   projection: PlanDraftProjection | null;
   buffers: DraftFieldBuffers;
   dirty: boolean;
   nodes: PlanNode[];
   onDiscard: () => void;
+  saving?: boolean;
+  canSave?: boolean;
+  saveMessage?: string | null;
+  saveError?: string | null;
+  onSave?: () => void;
 }): ReactNode {
   const fieldCount = Object.keys(buffers).length;
   const invalid = projection
@@ -1222,19 +1232,22 @@ export function DraftStatus({
   const structural = issues.find((issue) =>
     ["empty_workout", "empty_repeat", "no_executed_steps"].includes(issue.code),
   );
-  const status = structural
-    ? structural.message
-    : nodes.length === 0
-      ? "Aufbau leer · Speichern gesperrt"
-      : invalid
-        ? `${invalid} ${invalid === 1 ? "Feld ist" : "Felder sind"} unvollständig`
-        : openEnds
-          ? `${openEnds} ${openEnds === 1 ? "Abschnitt hat" : "Abschnitte haben"} noch kein Ende`
-          : dirty
-            ? "Ungespeicherte Änderungen"
-            : fieldCount > 0
-              ? "Keine fachliche Änderung"
-              : "Entwurf unverändert";
+  let status = "Entwurf unverändert";
+  if (fieldCount > 0) status = "Keine fachliche Änderung";
+  if (dirty) status = "Ungespeicherte Änderungen";
+  if (openEnds > 0) {
+    status = `${openEnds} ${
+      openEnds === 1 ? "Abschnitt hat" : "Abschnitte haben"
+    } noch kein Ende`;
+  }
+  if (invalid > 0) {
+    status = `${invalid} ${invalid === 1 ? "Feld ist" : "Felder sind"} unvollständig`;
+  }
+  if (nodes.length === 0) status = "Aufbau leer · Speichern gesperrt";
+  if (structural) status = structural.message;
+  if (saveMessage) status = saveMessage;
+  if (saveError) status = saveError;
+  if (saving) status = "Wird gespeichert …";
   return (
     <div className="plan-savebar">
       <div>
@@ -1248,7 +1261,9 @@ export function DraftStatus({
           {status}
         </span>
         <span className="plan-savebar__hint">
-          Lokal · kein Remote-Schreibvorgang
+          {saving
+            ? "Ein Schreibvorgang zur Zeit."
+            : "Speichert in intervals.icu · Rückleseprüfung inklusive"}
         </span>
       </div>
       <div className="plan-savebar__actions">
@@ -1258,10 +1273,15 @@ export function DraftStatus({
         <button
           type="button"
           className="btn btn--primary"
-          disabled
-          title="Remote-Schreiben ist bis zur Konfliktsicherung (P21/P22) gesperrt."
+          disabled={!canSave || saving}
+          onClick={onSave}
+          title={
+            !canSave && !saving
+              ? "Der Entwurf ist unvollständig oder unverändert."
+              : undefined
+          }
         >
-          Speichern
+          {saving ? "Wird gespeichert …" : "Speichern"}
         </button>
       </div>
     </div>

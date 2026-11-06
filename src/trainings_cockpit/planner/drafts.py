@@ -585,8 +585,16 @@ def _draft_meta(
             for issue in validation.issues
         ],
         "write": {
-            "available": False,
-            "reason": "Die Remote-Speicherung wird in P18 angeschlossen.",
+            "available": is_new or (base is not None and base.is_metadata_editable),
+            "reason": (
+                "Neuanlage ist lokal vorbereitet."
+                if is_new
+                else (
+                    "Bestehende Planung ist speicherbar."
+                    if base is not None and base.is_metadata_editable
+                    else "Diese Planung ist remote nicht editierbar."
+                )
+            ),
         },
     }
 
@@ -651,20 +659,12 @@ def _starter_nodes(
     )
 
 
-def build_new_draft_projection(
+def _build_new_draft(
     body: object,
     *,
     time_zone: str,
-    account_id: str = "default",
-    athlete_id: str = "default",
     zone_profiles: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Baut einen rein lokalen neuen Entwurf ohne Remote-Event.
-
-    Der Endpunkt ist kein Create: Er liest und schreibt kein Event. Die lokale
-    Identität stammt ausschließlich aus ``draft_id``; eine Remote-ID existiert
-    erst nach einem späteren bestätigten Speichern.
-    """
+) -> tuple[WorkoutDraft, PlannedWorkout, Any]:
     payload = _body_mapping(body)
     if payload.get("remote_id") is not None:
         raise DraftProjectionError(
@@ -675,9 +675,7 @@ def build_new_draft_projection(
         raise DraftProjectionError("Ein neuer Entwurf braucht eine stabile draft_id.")
     sport = str(payload.get("sport") or "")
     if sport not in SUPPORTED_NEW_SPORTS:
-        raise DraftProjectionError(
-            "Sportart muss Run, Ride oder Swim sein."
-        )
+        raise DraftProjectionError("Sportart muss Run, Ride oder Swim sein.")
     try:
         date = require_local_date(payload.get("date"))
     except ValueError as exc:
@@ -716,7 +714,26 @@ def build_new_draft_projection(
     draft = WorkoutDraft.new(current, draft_id=draft_id)
     draft.field_buffers = buffers
     validation = validate_draft(draft)
+    return draft, current, validation
 
+
+def build_new_draft_projection(
+    body: object,
+    *,
+    time_zone: str,
+    account_id: str = "default",
+    athlete_id: str = "default",
+    zone_profiles: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Baut einen rein lokalen neuen Entwurf ohne Remote-Event.
+
+    Der Endpunkt ist kein Create: Er liest und schreibt kein Event. Die lokale
+    Identität stammt ausschließlich aus ``draft_id``; eine Remote-ID existiert
+    erst nach einem späteren bestätigten Speichern.
+    """
+    draft, current, validation = _build_new_draft(
+        body, time_zone=time_zone, zone_profiles=zone_profiles
+    )
     projection = build_local_plan_payload(
         current,
         fetched_at=datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -733,7 +750,17 @@ def build_new_draft_projection(
     return projection
 
 
-def build_draft_projection(
+def build_new_draft(
+    body: object,
+    *,
+    time_zone: str,
+    zone_profiles: Mapping[str, Any] | None = None,
+) -> WorkoutDraft:
+    """Der speicherbare lokale Entwurf einer Neuanlage, ohne Remote-Aufruf."""
+    return _build_new_draft(body, time_zone=time_zone, zone_profiles=zone_profiles)[0]
+
+
+def _build_existing_draft(
     row: Mapping[str, Any],
     body: object,
     *,
@@ -741,8 +768,7 @@ def build_draft_projection(
     account_id: str = "default",
     athlete_id: str = "default",
     zone_profiles: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Baut den lokalen Entwurf und liefert seine validierte Darstellung."""
+) -> tuple[WorkoutDraft, PlannedWorkout, Any, Any, dict[str, Any]]:
     payload = _body_mapping(body)
     from .details import _event_from_row
 
@@ -765,7 +791,27 @@ def build_draft_projection(
     draft.current = current
     draft.field_buffers = buffers
     validation = validate_draft(draft)
+    return draft, current, validation, remote, event
 
+
+def build_draft_projection(
+    row: Mapping[str, Any],
+    body: object,
+    *,
+    time_zone: str,
+    account_id: str = "default",
+    athlete_id: str = "default",
+    zone_profiles: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Baut den lokalen Entwurf und liefert seine validierte Darstellung."""
+    draft, current, validation, remote, event = _build_existing_draft(
+        row,
+        body,
+        time_zone=time_zone,
+        account_id=account_id,
+        athlete_id=athlete_id,
+        zone_profiles=zone_profiles,
+    )
     projection = build_plan_payload(
         current,
         remote.source,
@@ -784,10 +830,32 @@ def build_draft_projection(
     return projection
 
 
+def build_draft(
+    row: Mapping[str, Any],
+    body: object,
+    *,
+    time_zone: str,
+    account_id: str = "default",
+    athlete_id: str = "default",
+    zone_profiles: Mapping[str, Any] | None = None,
+) -> WorkoutDraft:
+    """Der speicherbare lokale Entwurf einer bestehenden Planung."""
+    return _build_existing_draft(
+        row,
+        body,
+        time_zone=time_zone,
+        account_id=account_id,
+        athlete_id=athlete_id,
+        zone_profiles=zone_profiles,
+    )[0]
+
+
 __all__ = [
     "DraftProjectionError",
+    "build_draft",
     "START_TEMPLATES",
     "SUPPORTED_NEW_SPORTS",
     "build_draft_projection",
+    "build_new_draft",
     "build_new_draft_projection",
 ]

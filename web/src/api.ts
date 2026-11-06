@@ -4,6 +4,8 @@ import type {
   Overview,
   PlanDetail,
   PlanDraftProjection,
+  PlannerOperationsResponse,
+  PlannerSaveResponse,
   PlannerWeekResponse,
   SessionDetail,
   SyncResult,
@@ -41,11 +43,36 @@ export const api = {
     ),
   planDetail: (eventId: number) =>
     request<PlanDetail>(`/api/planner/plan/${eventId}`),
+  planRemote: (eventId: number) =>
+    request<PlanDetail>(`/api/planner/plan/${eventId}/remote`),
   planDraft: (eventId: number, body: unknown) =>
     request<PlanDraftProjection>(`/api/planner/plan/${eventId}/draft`, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    }),
+  savePlan: (eventId: number, body: unknown) =>
+    request<PlannerSaveResponse>(`/api/planner/plan/${eventId}/save`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  saveNewPlan: (body: unknown) =>
+    request<PlannerSaveResponse>("/api/planner/draft/save", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  openOperations: () =>
+    request<PlannerOperationsResponse>("/api/planner/operations"),
+  reconcileOperation: (operationId: string) =>
+    request<{
+      status: PlannerSaveResponse["status"];
+      confirmed: unknown | null;
+      week: string | null;
+      time_zone: string;
+    }>(`/api/planner/operations/${encodeURIComponent(operationId)}/reconcile`, {
+      method: "POST",
     }),
   newPlanDraft: (body: unknown) =>
     request<PlanDraftProjection>("/api/planner/draft/new", {

@@ -237,8 +237,11 @@ def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
     editable = plan.is_structure_editable
     return {
         "write": {
-            "available": False,
-            "reason": "Der Serializer steht; der Speicherkoordinator folgt in P18.",
+            "available": plan.is_metadata_editable,
+            "reason": (
+                plan.editability_reason
+                or "Planung ist über den vorhandenen Update-Pfad speicherbar."
+            ),
         },
         "targets": {
             "heartRateZone": {

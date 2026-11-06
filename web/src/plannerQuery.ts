@@ -11,6 +11,7 @@ interface PlannerLoadState {
   error: string | null;
   retrying: PlannerSourceName | null;
   reload: (source?: PlannerSourceName) => void;
+  invalidate: (weeks: Array<string | null | undefined>) => void;
 }
 
 /**
@@ -20,8 +21,9 @@ interface PlannerLoadState {
  * wird nur übernommen, wenn es zu genau der Woche gehört, die zuletzt gewählt
  * wurde. Eine langsame Vorwoche kann die neue Woche daher nicht überschreiben.
  */
-export function usePlannerWeek(week: string): PlannerLoadState {
+export function usePlannerWeek(week: string, revision = 0): PlannerLoadState {
   const cache = useRef(new Map<string, PlannerWeekResponse>());
+  const account = useRef<string | null>(null);
   const generation = useRef(0);
   const [data, setData] = useState<PlannerWeekResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +52,12 @@ export function usePlannerWeek(week: string): PlannerLoadState {
       // Antwort muss zu ihrem eigenen Query-Schlüssel gehören.
       if (run !== generation.current) return;
       if (payload.week !== targetWeek) return;
+      // Ein Accountwechsel entwertet den lokalen Wochen-Cache vollständig;
+      // eine Antwort eines anderen Accounts wird nie übernommen.
+      if (account.current !== null && payload.account_id !== account.current) {
+        cache.current.clear();
+      }
+      account.current = payload.account_id;
       cache.current.set(targetWeek, payload);
       setData(payload);
       setStale(false);
@@ -71,7 +79,7 @@ export function usePlannerWeek(week: string): PlannerLoadState {
       // Eine noch laufende Antwort dieser Woche wird beim Wechsel irrelevant.
       generation.current += 1;
     };
-  }, [load, week]);
+  }, [load, week, revision]);
 
   const reload = useCallback(
     (source?: PlannerSourceName) => {
@@ -80,5 +88,11 @@ export function usePlannerWeek(week: string): PlannerLoadState {
     [load, week],
   );
 
-  return { data, loading, stale, error, retrying, reload };
+  const invalidate = useCallback((weeks: Array<string | null | undefined>) => {
+    for (const target of weeks) {
+      if (target) cache.current.delete(target);
+    }
+  }, []);
+
+  return { data, loading, stale, error, retrying, reload, invalidate };
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sqlite3
 from dataclasses import replace
 
 from planner_fixtures import build_plan_from_case, load_case
@@ -103,8 +104,14 @@ def _draft(plan, operation_id: str = "op:f09"):
     return WorkoutDraft.new(plan, draft_id="draft:f09", operation_id=operation_id)
 
 
-def _conn(tmp_path):
-    conn = db.connect(tmp_path / "planner.db")
+def _conn(tmp_path, *, thread_safe: bool = False):
+    if thread_safe:
+        conn = sqlite3.connect(
+            tmp_path / "planner.db", timeout=30, check_same_thread=False
+        )
+        conn.row_factory = sqlite3.Row
+    else:
+        conn = db.connect(tmp_path / "planner.db")
     db.init_db(conn)
     return conn
 
@@ -156,6 +163,39 @@ def test_vorgang_ist_vor_dem_dispatch_gespeichert(tmp_path) -> None:
     assert row["remote_id"] == "1201"
     assert row["account_id"] == "acct"
     assert row["athlete_id"] == "7"
+    conn.close()
+
+
+def test_parallele_aktivierungen_erzeugen_nur_einen_offenen_vorgang(tmp_path) -> None:
+    import threading
+
+    conn = _conn(tmp_path, thread_safe=True)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    coordinator = SaveCoordinator(
+        EventWriteService(gateway), recorder=store, shared=True
+    )
+    draft = _draft(plan)
+    outcomes = []
+    lock = threading.Lock()
+
+    def run():
+        result = coordinator.activate(draft, account_id="acct", athlete_id="7")
+        with lock:
+            outcomes.append(result)
+
+    threads = [threading.Thread(target=run) for _ in range(10)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(gateway.create_calls) == 1
+    assert len(outcomes) == 10
+    assert {str(item.status.operation_id) for item in outcomes} == {"op:f09"}
+    assert conn.execute("SELECT COUNT(*) FROM planner_operation").fetchone()[0] == 1
     conn.close()
 
 

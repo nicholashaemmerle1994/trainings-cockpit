@@ -33,6 +33,8 @@ import type {
   PlanGraphSegment,
   PlanGraphTrack,
   PlanNode,
+  PlannerConflict,
+  PlannerSaveResponse,
 } from "../types";
 import {
   DraftStatus,
@@ -116,10 +118,16 @@ export function PlanSheet({
   eventId,
   newPlan,
   onClose,
+  onSaved,
+  onPending,
+  revision = 0,
 }: {
   eventId?: number;
   newPlan?: NewPlanConfig | null;
   onClose: () => void;
+  onSaved?: (result: PlannerSaveResponse) => void;
+  onPending?: () => void;
+  revision?: number;
 }) {
   const [data, setData] = useState<PlanDetail | null>(null);
   const [projection, setProjection] = useState<PlanDraftProjection | null>(null);
@@ -136,8 +144,15 @@ export function PlanSheet({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveLocked, setSaveLocked] = useState(false);
+  const [conflict, setConflict] = useState<PlannerConflict | null>(null);
+  const [remoteOpen, setRemoteOpen] = useState(false);
   const draftActive = useRef(false);
   const requestSeq = useRef(0);
+  const saveSeq = useRef(0);
   const headScroll = useHeadScroll();
   const isNew = newPlan != null;
 
@@ -173,6 +188,12 @@ export function PlanSheet({
     setSelected(null);
     setError(null);
     setDraftError(null);
+    setSaving(false);
+    setSaveMessage(null);
+    setSaveError(null);
+    setSaveLocked(false);
+    setConflict(null);
+    setRemoteOpen(false);
 
     if (newPlan) {
       // „Weiter“ legt nur einen lokalen Entwurf an. Dieser Request ist kein
@@ -231,6 +252,28 @@ export function PlanSheet({
   }, [eventId, newPlan]);
 
   useEffect(() => {
+    if (revision === 0 || editing || isNew || eventId == null || draftActive.current) return;
+    // Ein bestätigter Sync/Write aktualisiert die Leseansicht, aber nie einen
+    // offenen Entwurf.
+    let alive = true;
+    api
+      .planDetail(eventId)
+      .then((next) => {
+        if (!alive || draftActive.current) return;
+        setData(next);
+        setPlanName(next.name);
+        setPlanDate(next.date);
+        setNodes(next.nodes);
+      })
+      .catch(() => {
+        /* Die vorhandene Ansicht bleibt stehen; der nächste Reload versucht es erneut. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [revision, editing, isNew, eventId]);
+
+  useEffect(() => {
     if (!editing || !data) return;
     const seq = ++requestSeq.current;
     const timer = window.setTimeout(() => {
@@ -281,6 +324,28 @@ export function PlanSheet({
     ? current != null
     : current != null &&
       semanticallyDirty(data ?? current, planName, nodes, planDate);
+  const structuralBlock = projection?.draft.issues.some((issue) =>
+    ["empty_workout", "empty_repeat", "no_executed_steps", "open_end"].includes(
+      issue.code,
+    ),
+  );
+  const invalidField = projection
+    ? Object.values(projection.draft.field_states).some(
+        (state) => state.validity !== "valid",
+      )
+    : false;
+  const canSave =
+    editing &&
+    dirty &&
+    !saving &&
+    projection != null &&
+    projection.draft.valid &&
+    projection.draft.write.available &&
+    !saveLocked &&
+    conflict == null &&
+    !structuralBlock &&
+    !invalidField &&
+    nodes.length > 0;
 
   const startEdit = () => {
     if (!data || !data.rights.can_edit_structure) return;
@@ -321,6 +386,93 @@ export function PlanSheet({
     setAddOpen(false);
     setSelected(null);
     setExpanded(null);
+  };
+
+  const save = async () => {
+    if (!canSave || saving) return;
+    const seq = ++saveSeq.current;
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+    setConflict(null);
+    setRemoteOpen(false);
+    try {
+      const body = newPlan
+        ? newDraftRequest({
+            draftId: newPlan.draftId,
+            sport: newPlan.sport,
+            date: planDate,
+            name: planName,
+            template: newPlan.template,
+            nodes,
+            buffers,
+          })
+        : data?.id != null
+          ? draftRequest(planName, nodes, buffers, planDate)
+          : null;
+      if (!body) throw new Error("Planung nicht gefunden.");
+      const result = newPlan
+        ? await api.saveNewPlan(body)
+        : await api.savePlan(data!.id!, body);
+      // Eine verspätete Antwort eines älteren Speicherversuchs darf den
+      // neueren Zustand nicht überschreiben.
+      if (seq !== saveSeq.current) return;
+      if (result.status.state === "saved" || result.status.state === "clean") {
+        setSaveMessage(result.status.message);
+        onSaved?.(result);
+        return;
+      }
+      if (result.status.state === "conflict") {
+        setConflict(result.status.conflict);
+        setSaveMessage(result.status.message);
+        return;
+      }
+      setSaveLocked(result.status.locked);
+      setSaveError(result.status.message);
+      setSaveMessage(result.status.message);
+      if (result.status.locked) onPending?.();
+    } catch (cause: unknown) {
+      if (seq !== saveSeq.current) return;
+      setSaveError(
+        cause instanceof Error ? cause.message : "Speichern fehlgeschlagen.",
+      );
+    } finally {
+      if (seq === saveSeq.current) setSaving(false);
+    }
+  };
+
+  const adoptRemote = async () => {
+    setConflict(null);
+    setRemoteOpen(false);
+    setSaveError(null);
+    setSaveMessage(null);
+    if (isNew || eventId == null) {
+      onClose();
+      return;
+    }
+    try {
+      const next = await api.planRemote(eventId);
+      draftActive.current = false;
+      setEditing(false);
+      setProjection(null);
+      setBuffers({});
+      setEndKinds({});
+      setTargetEditors({});
+      setUndo(null);
+      setAddOpen(false);
+      setSelected(null);
+      setExpanded(null);
+      setData(next);
+      setPlanName(next.name);
+      setPlanDate(next.date);
+      setNodes(next.nodes);
+    } catch (cause: unknown) {
+      setSaveError(
+        cause instanceof Error
+          ? cause.message
+          : "Die Remoteversion konnte nicht geladen werden.",
+      );
+    }
   };
 
   const onSelect = (nodeId: string) => {
@@ -781,6 +933,19 @@ export function PlanSheet({
           onAddOpen={setAddOpen}
           registerHead={headScroll.register}
           dirty={dirty}
+          saving={saving}
+          canSave={canSave}
+          saveMessage={saveMessage}
+          saveError={saveError}
+          conflict={conflict}
+          remoteOpen={remoteOpen}
+          onSave={() => void save()}
+          onViewRemote={() => setRemoteOpen(true)}
+          onReturnToDraft={() => {
+            setConflict(null);
+            setRemoteOpen(false);
+          }}
+          onAdoptRemote={() => void adoptRemote()}
         />
       )}
     </Sheet>
@@ -824,6 +989,16 @@ function PlanBody({
   onAddOpen,
   registerHead,
   dirty,
+  saving,
+  canSave,
+  saveMessage,
+  saveError,
+  conflict,
+  remoteOpen,
+  onSave,
+  onViewRemote,
+  onReturnToDraft,
+  onAdoptRemote,
 }: {
   data: PlanDetail;
   editing: boolean;
@@ -871,6 +1046,16 @@ function PlanBody({
   onAddOpen: (open: boolean) => void;
   registerHead: (nodeId: string, element: HTMLButtonElement | null) => void;
   dirty: boolean;
+  saving: boolean;
+  canSave: boolean;
+  saveMessage: string | null;
+  saveError: string | null;
+  conflict: PlannerConflict | null;
+  remoteOpen: boolean;
+  onSave: () => void;
+  onViewRemote: () => void;
+  onReturnToDraft: () => void;
+  onAdoptRemote: () => void;
 }) {
   const date = fmtDateLong(planDate || data.date);
   const repetitions = data.graph.repetition_groups.reduce(
@@ -1103,6 +1288,57 @@ function PlanBody({
         </p>
       </section>
 
+      {editing && conflict && (
+        <section className="plan-conflict" aria-label="Remote-Konflikt">
+          <h2>Remote wurde zwischenzeitlich geändert</h2>
+          <p>{conflict.reason}</p>
+          <p className="plan-conflict__fields">
+            Betroffen: {conflict.changed_fields.join(", ") || "unbekannt"}
+          </p>
+          {conflict.remote ? (
+            <div className="plan-conflict__versions">
+              <div>
+                <span>Eigener Entwurf</span>
+                <strong>{conflict.baseline?.name || planName || "Ohne Namen"}</strong>
+                <span>{conflict.baseline?.date ?? planDate}</span>
+              </div>
+              <div>
+                <span>Remote</span>
+                <strong>{conflict.remote.name || "Ohne Namen"}</strong>
+                <span>{conflict.remote.date}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="plan-conflict__deleted">
+              Die Einheit existiert remote nicht mehr. Sie wird nicht automatisch
+              neu angelegt.
+            </p>
+          )}
+          {remoteOpen && conflict.remote && (
+            <div className="plan-conflict__remote" role="region" aria-label="Remoteversion">
+              <p>
+                {conflict.remote.sport} · {conflict.remote.date}
+                {conflict.remote.local_time ? ` · ${conflict.remote.local_time}` : ""}
+              </p>
+              <p>{conflict.remote.nodes.length} Abschnitte in der Remote-Fassung.</p>
+            </div>
+          )}
+          <div className="plan-conflict__actions">
+            {conflict.remote && (
+              <button type="button" className="btn btn--ghost" onClick={onViewRemote}>
+                Remote ansehen
+              </button>
+            )}
+            <button type="button" className="btn btn--ghost" onClick={onReturnToDraft}>
+              Zum Entwurf
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={onAdoptRemote}>
+              Entwurf verwerfen, Remote übernehmen
+            </button>
+          </div>
+        </section>
+      )}
+
       {editing && (
         <DraftStatus
           projection={projection}
@@ -1110,6 +1346,11 @@ function PlanBody({
           dirty={dirty}
           nodes={nodes}
           onDiscard={onDiscard}
+          saving={saving}
+          canSave={canSave}
+          saveMessage={saveMessage}
+          saveError={saveError}
+          onSave={onSave}
         />
       )}
 

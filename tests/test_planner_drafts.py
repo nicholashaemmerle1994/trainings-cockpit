@@ -87,7 +87,7 @@ def test_detail_liefert_zonen_profil_und_getrennte_adapterfaehigkeit(
     assert targets["heartRateBpm"]["local"] is True
     assert targets["heartRateBpm"]["editable"] is False
     assert targets["heartRateBpm"]["gate"] == "absolute_hr"
-    assert payload["capabilities"]["write"]["available"] is False
+    assert payload["capabilities"]["write"]["available"] is True
 
     snapshot = payload["source_snapshot"]
     assert snapshot["remote_id"] == str(event["id"])
@@ -812,7 +812,7 @@ def test_neuer_entwurf_ist_lokal_und_hat_keine_remote_id(client: TestClient) -> 
     assert draft["draft"]["base_local_id"] is None
     assert draft["draft"]["remote_id"] is None
     assert draft["draft"]["valid"] is True
-    assert draft["draft"]["write"]["available"] is False
+    assert draft["draft"]["write"]["available"] is True
     assert len(draft["nodes"]) == 1
     assert draft["nodes"][0]["end"] == {"kind": "time", "seconds": 2700, "text": "45 min"}
     assert draft["nodes"][0]["target"]["zone_id"] == "run-hr-2"

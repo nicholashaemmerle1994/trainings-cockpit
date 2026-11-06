@@ -45,6 +45,7 @@ export default function App() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [revision, setRevision] = useState(0);
   const [popup, setPopup] = useState<string | null>(null);
   const [pull, setPull] = useState(0);
   const pullRef = useRef(0);
@@ -168,6 +169,10 @@ export default function App() {
     try {
       await api.sync();
       const fresh = await load();
+      // Der Sync aktualisiert Wochenliste, Aktivitätsdetails und die
+      // rollierende Dashboard-Karte. Veraltete Antworten werden über die
+      // Revisionsnummer und die Query-Generation verworfen.
+      setRevision((current) => current + 1);
       // Die Zeit kommt aus dem Datensatz, nicht aus der Uhr des Geräts — sonst
       // steht im Kopf eine andere Minute als im Hinweis.
       if (fresh) setPopup(`Aktualisiert ${clockTime(fresh.generated_at)}`);
@@ -176,6 +181,11 @@ export default function App() {
     } finally {
       setSyncing(false);
     }
+  }, [load]);
+
+  const handlePlannerChanged = useCallback(() => {
+    void load();
+    setRevision((current) => current + 1);
   }, [load]);
 
   // Ziehen zum Nachladen: nur am oberen Rand, nur mit einem Finger.
@@ -257,6 +267,7 @@ export default function App() {
         {route.tab === "today" && <Today data={data} />}
         {route.tab === "planner" && (
           <Planner
+            key={data.account_id ?? data.athlete.name}
             week={selectedWeek}
             timeZone={data.time_zone}
             onWeekChange={changeWeek}
@@ -266,6 +277,8 @@ export default function App() {
             onOpenUnit={openUnit}
             onClosePlan={closePlan}
             onCloseUnit={closeUnit}
+            revision={revision}
+            onDataChanged={handlePlannerChanged}
           />
         )}
         {route.tab === "fuel" && <Fuel />}

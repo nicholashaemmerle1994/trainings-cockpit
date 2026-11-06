@@ -78,6 +78,8 @@ export interface Goal {
 }
 
 export interface Overview {
+  account_id?: string;
+  athlete_id?: string;
   athlete: { name: string; id: string };
   time_zone: string;
   goals: Goal[];
@@ -314,6 +316,8 @@ export interface PlannerSummaryEntry {
 }
 
 export interface PlannerWeekResponse {
+  account_id: string;
+  athlete_id: string;
   week: string;
   from: string;
   to: string;
@@ -695,6 +699,84 @@ export interface FuelPlan {
   notes: { tone: string; text: string }[];
   modes: { key: string; label: string; hint: string }[];
   sources: { key: string; label: string; hint: string }[];
+}
+
+export type PlannerSaveState =
+  | "clean"
+  | "dirty"
+  | "invalid"
+  | "saving"
+  | "saved"
+  | "failed"
+  | "conflict"
+  | "unknown"
+  | "savedUnverified";
+
+export interface PlannerConflictVersion {
+  remote_id: string | null;
+  local_id: string;
+  external_id: string | null;
+  name: string;
+  sport: string;
+  date: string;
+  local_time: string | null;
+  notes: string | null;
+  editability: string;
+  editability_reason: string | null;
+  nodes: unknown[];
+}
+
+export interface PlannerConflict {
+  kind: "deleted" | "permission" | "structure" | "metadata" | "identity";
+  reason: string;
+  remote_id: string;
+  changed_fields: string[];
+  actions: string[];
+  baseline: PlannerConflictVersion | null;
+  remote: PlannerConflictVersion | null;
+}
+
+export interface PlannerSaveStatus {
+  state: PlannerSaveState;
+  message: string;
+  operation_id: string | null;
+  remote_id: string | null;
+  external_id: string | null;
+  error: string | null;
+  retryable: boolean;
+  reconciliation_required: boolean;
+  locked: boolean;
+  conflict: PlannerConflict | null;
+  persistence_error: string | null;
+}
+
+export interface PlannerSaveResponse {
+  status: PlannerSaveStatus;
+  confirmed: unknown | null;
+  event_id: string | null;
+  week: string | null;
+  old_week: string | null;
+  time_zone: string;
+  generated_at: string;
+}
+
+export interface PlannerOperation {
+  operation_id: string;
+  local_id: string;
+  draft_id: string;
+  remote_id: string | null;
+  external_id: string | null;
+  mode: string;
+  kind: string;
+  state: string;
+  created_at: string;
+  reconciliation_required: boolean;
+}
+
+export interface PlannerOperationsResponse {
+  account_id: string;
+  athlete_id: string;
+  items: PlannerOperation[];
 }
 
 export interface SyncResult {

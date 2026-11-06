@@ -25,11 +25,14 @@ from .planner.dates import (
     parse_week_parameter,
     planner_week_range,
     rolling_dashboard_range,
+    start_of_planner_week,
 )
 from .planner.details import build_plan_detail
 from .planner.drafts import (
     DraftProjectionError,
+    build_draft,
     build_draft_projection,
+    build_new_draft,
     build_new_draft_projection,
 )
 from .planner.operations import (
@@ -37,9 +40,10 @@ from .planner.operations import (
     plan_to_json,
     retention_cutoff,
 )
-from .planner.save import SaveCoordinator, SaveState
-from .planner.service import event_write_service
+from .planner.save import SaveCoordinator, SaveOutcome, SaveState
+from .planner.service import event_read_service, event_write_service
 from .planner.summaries import recorded_seconds
+from .planner.syncmerge import merge_confirmed_event
 from .planner.week import (
     SOURCE_COMPLETE,
     SOURCE_EMPTY,
@@ -87,6 +91,7 @@ def overview(days: int = Query(90, ge=7, le=365)) -> dict[str, Any]:
     today = date.fromisoformat(local_today(settings.time_zone))
     with connection() as conn:
         data = metrics.build_overview(conn, today=today, days=days)
+        data["account_id"], data["athlete_id"] = account_context(conn)
     data["goals"] = _goals(settings, today)
     data["time_zone"] = settings.time_zone
     return data
@@ -223,6 +228,8 @@ def _planner_week(conn: sqlite3.Connection, parameter: str | None) -> dict[str, 
         activities_coverage=activities_coverage,
         speeds_kmh=speeds,
     )
+    payload["account_id"] = account_id
+    payload["athlete_id"] = athlete_id
     payload["generated_at"] = datetime.now().astimezone().isoformat(
         timespec="seconds"
     )
@@ -326,7 +333,7 @@ def planner_reconcile(operation_id: str) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="Offener Vorgang nicht gefunden")
         try:
             with event_write_service(settings) as service:
-                coordinator = SaveCoordinator(service, recorder=store)
+                coordinator = SaveCoordinator(service, recorder=store, shared=True)
                 coordinator.restore_open(
                     account_id=account_id, athlete_id=athlete_id
                 )
@@ -340,10 +347,173 @@ def planner_reconcile(operation_id: str) -> dict[str, Any]:
             if outcome.confirmed is not None
             else None
         )
+        date_value = (
+            outcome.confirmed.date
+            if outcome.confirmed is not None
+            else (
+                outcome.snapshot.intended.date
+                if outcome.snapshot is not None
+                else None
+            )
+        )
         return {
             "status": outcome.status.as_dict(),
             "confirmed": confirmed,
+            "week": (
+                start_of_planner_week(date_value, settings.time_zone)
+                if date_value is not None
+                else None
+            ),
+            "time_zone": settings.time_zone,
         }
+
+
+def _save_response(
+    outcome: SaveOutcome,
+    *,
+    time_zone: str,
+    old_week: str | None,
+) -> dict[str, Any]:
+    snapshot = outcome.snapshot
+    confirmed = outcome.confirmed
+    date_value = (
+        confirmed.date
+        if confirmed is not None
+        else (snapshot.intended.date if snapshot is not None else None)
+    )
+    week = (
+        start_of_planner_week(date_value, time_zone) if date_value is not None else None
+    )
+    return {
+        "status": outcome.status.as_dict(),
+        "confirmed": plan_to_json(confirmed) if confirmed is not None else None,
+        "event_id": outcome.status.remote_id,
+        "week": week,
+        "old_week": old_week,
+        "time_zone": time_zone,
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+
+
+def _persist_confirmed(conn: Any, outcome: SaveOutcome) -> None:
+    """Nur bestätigte Reads in den vorhandenen Bestand übernehmen."""
+    if outcome.status.state is not SaveState.SAVED or outcome.remote_raw is None:
+        return
+    merge_confirmed_event(conn, outcome.remote_raw)
+
+
+@app.post("/api/planner/plan/{event_id}/save")
+def plan_save(event_id: int, body: dict[str, Any]) -> dict[str, Any]:
+    """Speichert einen bestehenden Entwurf über den bestätigten Update-Pfad."""
+    settings = get_settings()
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        account_id, athlete_id = account_context(conn)
+        try:
+            draft = build_draft(
+                row,
+                body,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except DraftProjectionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        old_week = (
+            start_of_planner_week(draft.base.date, settings.time_zone)
+            if draft.base
+            else None
+        )
+        store = SqliteOperationStore(conn)
+        try:
+            with event_write_service(settings) as service:
+                coordinator = SaveCoordinator(service, recorder=store, shared=True)
+                outcome = coordinator.activate(
+                    draft,
+                    account_id=account_id,
+                    athlete_id=athlete_id,
+                    writable=draft.current.is_metadata_editable,
+                    writable_reason=draft.current.editability_reason,
+                )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        _persist_confirmed(conn, outcome)
+        return _save_response(outcome, time_zone=settings.time_zone, old_week=old_week)
+
+
+@app.post("/api/planner/draft/save")
+def new_plan_save(body: dict[str, Any]) -> dict[str, Any]:
+    """Legt genau eine neue Einheit über den bestätigten Create-Pfad an."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            draft = build_new_draft(
+                body,
+                time_zone=settings.time_zone,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except DraftProjectionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        store = SqliteOperationStore(conn)
+        try:
+            with event_write_service(settings) as service:
+                coordinator = SaveCoordinator(service, recorder=store, shared=True)
+                outcome = coordinator.activate(
+                    draft,
+                    account_id=account_id,
+                    athlete_id=athlete_id,
+                    writable=True,
+                )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        _persist_confirmed(conn, outcome)
+        return _save_response(outcome, time_zone=settings.time_zone, old_week=None)
+
+
+@app.get("/api/planner/plan/{event_id}/remote")
+def plan_remote(event_id: int) -> dict[str, Any]:
+    """Liest die aktuelle Remoteversion und übernimmt sie als Lese-Datenstand.
+
+    Die Aktion ist rein lesend gegenüber intervals.icu. Der bestätigte
+    Remote-Datensatz wird lokal über dieselbe Event-ID eingesortiert; es gibt
+    keinen Event-Write.
+    """
+    settings = get_settings()
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        try:
+            with event_read_service(settings) as client:
+                raw = client.event(event_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        if not isinstance(raw, dict) or str(raw.get("id")) != str(event_id):
+            raise HTTPException(
+                status_code=409,
+                detail="Die Remote-Antwort gehört nicht zu dieser Event-ID.",
+            )
+        merge_confirmed_event(conn, raw)
+        updated = db.event_by_id(conn, event_id)
+        account_id, athlete_id = account_context(conn)
+        try:
+            return build_plan_detail(
+                updated or row,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
 
 
 @app.get("/api/planner/plan/{event_id}")

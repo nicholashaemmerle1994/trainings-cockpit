@@ -24,6 +24,7 @@ export function UnitSheet({
   plan,
   onOpenPlan,
   top = true,
+  revision = 0,
 }: {
   rowId: number;
   onClose: () => void;
@@ -32,6 +33,8 @@ export function UnitSheet({
   onOpenPlan?: (planId: number) => void;
   /** Liegt ein Planblatt darüber, schließt Escape nur dieses. */
   top?: boolean;
+  /** Ein Sync/abgeschlossener Write lädt dieselbe Aufzeichnung neu. */
+  revision?: number;
 }) {
   const [data, setData] = useState<UnitDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +54,7 @@ export function UnitSheet({
     return () => {
       alive = false;
     };
-  }, [rowId]);
+  }, [rowId, revision]);
 
   return (
     <Sheet crumb="Einheit" label={data ? data.name : "Einheit"} onClose={onClose} top={top}>
