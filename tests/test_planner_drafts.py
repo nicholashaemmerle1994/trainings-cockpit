@@ -605,6 +605,122 @@ def test_p14_verschieben_behaelt_alle_knoten_ids(client: TestClient) -> None:
     assert draft["known"]["seconds"] == 2160
 
 
+def test_p15_f02_skip_und_drei_minuten_variante(client: TestClient) -> None:
+    event = _event_for("F02")
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    group = _find_node(detail["nodes"], kind="repeat")
+    work = _find_node(detail["nodes"], role="work")
+
+    body = {
+        "name": detail["name"],
+        "nodes": [
+            {**node, "skip_final_recovery": True}
+            if node["node_id"] == group["node_id"]
+            else node
+            for node in detail["nodes"]
+        ],
+        "field_buffers": {},
+    }
+    skipped = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert skipped.status_code == 200
+    skipped_draft = skipped.json()
+    assert skipped_draft["known"]["seconds"] == 2040
+    assert skipped_draft["known"]["executions"] == 9
+    assert skipped_draft["draft"]["valid"] is True
+
+    body["nodes"] = detail["nodes"]
+    body["field_buffers"] = {
+        f"{work['node_id']}:end.value": _buffer(
+            work, "end.value", "duration", "3"
+        )
+    }
+    three_minutes = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert three_minutes.status_code == 200
+    three_draft = three_minutes.json()
+    assert three_draft["known"]["seconds"] == 2400
+    assert three_draft["known"]["executions"] == 10
+
+
+def test_p15_gruppenname_und_wiederholungszahl_werden_bearbeitet(
+    client: TestClient,
+) -> None:
+    event = _event_for("F02")
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    group = _find_node(detail["nodes"], kind="repeat")
+
+    body = {
+        "name": detail["name"],
+        "nodes": detail["nodes"],
+        "field_buffers": {
+            f"{group['node_id']}:name": _buffer(group, "name", "text", "Serie"),
+            f"{group['node_id']}:repetitions": _buffer(
+                group, "repetitions", "integer", "5"
+            ),
+        },
+    }
+    response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+
+    assert response.status_code == 200
+    draft = response.json()
+    updated = _find_node(draft["nodes"], kind="repeat")
+    assert updated["name"] == "Serie"
+    assert updated["repetitions"] == 5
+    assert draft["known"]["seconds"] == 2400
+    assert draft["known"]["executions"] == 12
+
+
+def test_p15_f06_drei_varianten_werden_im_entwurf_abgewiesen(
+    client: TestClient,
+) -> None:
+    event = _event()
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    empty_repeat = {
+        "kind": "repeat",
+        "node_id": "node:f06-empty",
+        "name": "Leere Gruppe",
+        "repetitions": 3,
+        "skip_final_recovery": False,
+        "children": [],
+    }
+    only_recovery = {
+        "kind": "repeat",
+        "node_id": "node:f06-recovery",
+        "name": "Nur Erholung",
+        "repetitions": 1,
+        "skip_final_recovery": True,
+        "children": [
+            {
+                "kind": "step",
+                "node_id": "node:f06-recovery-child",
+                "name": "Erholung",
+                "role": "recovery",
+                "end": {"kind": "time", "seconds": 30},
+                "target": {"kind": "none", "text": "Ohne Ziel"},
+            }
+        ],
+    }
+    variants = [
+        ("keine Wurzelbausteine", []),
+        ("Wiederholungsgruppe ohne Kinder", [empty_repeat]),
+        ("nur ausgelassene Erholung", [only_recovery]),
+    ]
+
+    for label, nodes in variants:
+        response = client.post(
+            f"/api/planner/plan/{event['id']}/draft",
+            json={"name": detail["name"], "nodes": nodes, "field_buffers": {}},
+        )
+        assert response.status_code == 200, label
+        draft = response.json()
+        assert draft["draft"]["valid"] is False, label
+        codes = {issue["code"] for issue in draft["draft"]["issues"]}
+        assert "no_executed_steps" in codes or "empty_workout" in codes, label
+        assert draft["known"]["executions"] == 0, label
+
+
 def test_p13_importierte_zusatzziele_bleiben_erhalten(client: TestClient) -> None:
     event = _event_for("F07")
     _store(client, event)
@@ -623,3 +739,33 @@ def test_p13_importierte_zusatzziele_bleiben_erhalten(client: TestClient) -> Non
     assert detail["source_snapshot"]["raw_workout_text"] == event["description"]
     assert draft["source_snapshot"]["raw_workout_text"] == event["description"]
 
+
+def test_p15_ungueltige_und_zu_grosse_wiederholungszahl_blockieren(
+    client: TestClient,
+) -> None:
+    event = _event_for("F02")
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    group = _find_node(detail["nodes"], kind="repeat")
+
+    for raw, expected in [
+        ("0", "mindestens 1"),
+        ("2,5", "ganze Zahl"),
+        ("9007199254740992", "höchstens"),
+    ]:
+        body = {
+            "name": detail["name"],
+            "nodes": detail["nodes"],
+            "field_buffers": {
+                f"{group['node_id']}:repetitions": _buffer(
+                    group, "repetitions", "integer", raw
+                )
+            },
+        }
+        response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+        assert response.status_code == 200, raw
+        state = response.json()["draft"]["field_states"][
+            f"{group['node_id']}:repetitions"
+        ]
+        assert state["validity"] == "invalid", raw
+        assert expected in state["message"], raw

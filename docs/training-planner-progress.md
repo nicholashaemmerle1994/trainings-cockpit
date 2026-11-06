@@ -1506,3 +1506,117 @@ Feldpuffer und UI-Zustand liegen im Browser, die fachliche Projektion entsteht
 serverseitig aus derselben Ausführungsfolge wie Summen und Diagramm. Der
 Draft-Endpunkt liest die gespeicherte Basis und schreibt nichts. `OpenEnd`
 existiert nur im Entwurf und ist nicht speicherbar.
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P13–P15
+
+**Stand:** 06.11.2026  
+**Pakete:** P13 — Pace, Watt und gemischte Ziele; P14 — Einzelabschnitte
+hinzufügen, entfernen und verschieben; P15 — Wiederholungsgruppen vollständig
+bearbeiten  
+**Basis:** Branch `feature/trainingsplaner`, HEAD nach P12
+
+## 1. Ergebnis P13 — Ziele
+
+- Pace wird als Einzelwert und Bereich bearbeitet; die Felder heißen
+  „Schneller“ und „Langsamer“. `5:30–5:45 min/km` bleibt ein Bereich, die
+  schnellere Grenze liegt oben. `5:75` wird mit einem konkreten Fehler zu den
+  Sekunden 00–59 erklärt; vertauschte Grenzen werden nicht still sortiert,
+  sondern am Obergrenzenfeld erklärt.
+- Leistung wird als Watt-Einzelwert, Wattbereich und `% FTP` bearbeitet. `0 W`
+  bleibt ein gültiger Wert und wird nicht als fehlend gedeutet. Watt ↔ `% FTP`
+  übernimmt keine Zahl der alten Einheit.
+- „Ohne Ziel“ ist eine gültige Auswahl ohne Intensitätsfelder; beim Wechsel
+  werden die alten Zielpuffer entfernt, damit ein alter Pacefehler nicht
+  unsichtbar das Speichern blockiert.
+- Zielart- und Einheitenwechsel folgen Abschnitt 6.4: Zeit/Distanz und
+  Pace/Watt/% FTP löschen den alten Wert; Meter/Kilometer und min/km ↔
+  min/100 m rechnen nur gültige Werte echt um. Neue Zielarten starten ohne
+  Zahlen der alten Einheit.
+- `format_target_label` ist die gemeinsame Quelle für Kopfzeile und
+  Diagrammsegment; `targetFieldSpec` im Frontend ist die gemeinsame Quelle für
+  Feldtitel und Hinweise. Die Fähigkeitsmatrix bleibt bindend:
+  Leistungszonen und absolute bpm sind sichtbar erklärt, aber nicht
+  freigeschaltet.
+- Importierte zusätzliche Ziele bleiben als `UnsupportedNode` samt Rohsnapshot
+  erhalten; der Entwurf vereinfacht sie nicht global.
+
+## 2. Ergebnis P14 — Aufbau ändern
+
+- „Baustein hinzufügen“ bietet Einzelabschnitt und Wiederholungsblock. Neue
+  Wurzelbausteine erhalten eine neue stabile ID, stehen am Ende und öffnen
+  direkt.
+- Entfernen arbeitet nur auf dem lokalen Entwurf. Ein einstufiger Snapshot hält
+  Knoten, Feldpuffer, Endarten, Zieleditoren, Auswahl und aufgeklappten Block;
+  „Rückgängig“ stellt ihn vollständig wieder her. Jede spätere fachliche
+  Änderung verwirft den Snapshot.
+- Nach dem Entfernen wird das nächste Geschwister, sonst das vorherige, sonst
+  die Elterngruppe, sonst kein Block ausgewählt.
+- Pfeile verschieben nur innerhalb derselben Liste. Am ersten/letzten Platz sind
+  sie deaktiviert; Knoten-IDs bleiben unverändert. Es gibt keinen Remote-Delete.
+- Nach dem Entfernen aller Abschnitte bleibt „Baustein hinzufügen“ erreichbar,
+  der Speichern-Knopf bleibt gesperrt und der Status nennt den leeren Aufbau.
+
+## 3. Ergebnis P15 — Wiederholungsgruppen
+
+- Der Wiederholungsblock ist ein neuer Wurzelbaustein. Gruppenname und positive
+  ganzzahlige Wiederholungszahl sind bearbeitet; leere, nicht ganzzahlige und
+  oberhalb der sicheren JSON-Ganzzahl liegende Werte werden erklärt.
+- „Schritt im Block“ legt einen Schritt nur in der gewählten Gruppe an. Der
+  Kindeditor trägt „Gilt für alle N Wiederholungen“; die Pfeile bewegen Kinder
+  ausschließlich innerhalb dieser Gruppe.
+- „Letzte Erholung auslassen“ ist nur aktiv, wenn das letzte Kind als Erholung
+  gekennzeichnet ist. Nach Hinzufügen, Entfernen, Umsortieren und Rollenwechsel
+  wird die Regel neu geprüft und die Option kontrolliert deaktiviert.
+- „In einzelne Abschnitte auflösen“ erzeugt die tatsächliche Ausführungsfolge
+  mit neuen IDs und eigenen Objekten. Anzahl, Reihenfolge, Werte, Rollen,
+  Notizen und das Auslassen der letzten Erholung bleiben erhalten; Ablauf und
+  Summe ändern sich nicht. Das Auflösen ist bei unvollständigen Feldern,
+  leerer Gruppe und technisch zu großer Expansion gesperrt und nennt den Grund.
+- F02 ergibt unverändert 36 Minuten und zehn Ausführungen; mit ausgelassener
+  letzter Erholung 34 Minuten und neun Ausführungen; mit 3-Minuten-Belastung
+  40 Minuten. F06 wird in allen drei Varianten im Entwurf abgewiesen.
+
+## 4. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/validation.py` — Pacefehler, vertauschte
+  Pacegrenzen, gemeinsame Zielbeschriftung.
+- `src/trainings_cockpit/planner/details.py` — Zieltexte und
+  Fähigkeitsangaben für Pace/Watt/% FTP/Leistungszonen.
+- `src/trainings_cockpit/planner/profile.py` — Graphsegmente lesen dieselbe
+  Zielbeschriftung.
+- `src/trainings_cockpit/planner/drafts.py` — Zielpuffer, Gruppenname und
+  Wiederholungszahl, Bereichsgrenzen, sichere Ganzzahl.
+- `web/src/plannerDraft.ts` — zentrale Ziel-/Feldbeschreibung, stabile neue IDs,
+  Hinzufügen/Entfernen/Verschieben/Auflösen, Skip-Normalisierung.
+- `web/src/components/PlanEditor.tsx`, `PlanSheet.tsx` — Zieleditor,
+  Bausteinleiste, Undo, Gruppen- und Kindeditor, Verschieben/Entfernen.
+- `web/src/types.ts`, `web/src/styles.css` — Vertrag und Gestaltung.
+- `tests/test_planner_drafts.py` — neue Fälle für P13–P15.
+- `docs/ENTSCHEIDUNGEN.md` — D-73.
+
+## 5. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest -o addopts=''` | **276 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner tests/test_planner_drafts.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+| F02 im Browser | 36 min; letzte Erholung auslassen → 34 min; Belastung 3 min → 40 min |
+| Auflösen im Browser | 34 min und neun unabhängige Schritte; Rückgängig stellt die Gruppe wieder her |
+| Entfernen im Browser | F02 ohne Gruppe → 20 min; Rückgängig → wieder 36/40 min |
+| Leerer Aufbau im Browser | Hinzufügen bleibt erreichbar, Speichern gesperrt, Status nennt den leeren Aufbau |
+| Zielwechsel im Browser | Pace → Leistung → `% FTP` → Pace; keine alte Zahl, `0 W` gültig, `5:75` und vertauschte Grenzen erklärt |
+
+Sichtprüfung bei 390 × 844 und 1440 × 1000; die Referenzen `08-approved-inline-block-editor.png` (P4) und `09-approved-add-workout.png` (P5) wurden geöffnet. Screenshots unter `data/screens/`:
+`p13-pace-390.png`, `p13-pace-1440.png`, `p13-target-final-390.png`,
+`p14-undo-390.png`, `p14-empty-390.png`, `p15-group-390.png`,
+`p15-group-1440.png`, `p15-child-context-390.png`.
+
+## 6. Offene Punkte
+
+- Speichern und Synchronisieren folgen in P17; der Editor bleibt bewusst lokal.
+- Leistungszonen und absolute bpm bleiben laut Fähigkeitsmatrix gesperrt.
+- P16 verbindet den Tages-Plus-Knopf mit dem Anlegeablauf und dem vorhandenen
+  Editor.
