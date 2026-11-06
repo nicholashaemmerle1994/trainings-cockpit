@@ -59,7 +59,8 @@ from .primitives import LocalDate, require_local_date, require_text, require_tim
 from .projections import RecordedListEntry
 
 #: Bekannte Dokumentfelder, die der Adapter fachlich liest. Alles andere im
-#: `workout_doc` bleibt im Snapshot und begrenzt die Strukturbearbeitung.
+#: `workout_doc` bleibt im Snapshot; nur ein Feld außerhalb dieser Menge und
+#: außerhalb der berechneten `_DERIVED_DOC_FIELDS` begrenzt die Strukturbearbeitung.
 _KNOWN_DOC_FIELDS = {"steps", "notes", "name", "description", "type"}
 
 #: Felder, die intervals.icu selbst bei jedem `workout_doc` **berechnet** und

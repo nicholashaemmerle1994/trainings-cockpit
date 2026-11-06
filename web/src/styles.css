@@ -2524,7 +2524,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 .planner-week-current {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
   padding: 0 var(--space-3);
   color: var(--text-muted);
   font-size: var(--text-label);

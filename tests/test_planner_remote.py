@@ -193,6 +193,42 @@ def test_zeitvorgabe_mit_geschaetzter_distanz_bleibt_zeit() -> None:
     assert result.plan.editability is Editability.FULL
 
 
+def test_berechnete_felder_verdecken_echtes_unbekanntes_feld_nicht() -> None:
+    # Die Positivliste der berechneten Felder darf nur diese Felder ausnehmen.
+    # Ein zusätzliches, echtes unbekanntes Feld muss weiterhin begrenzen und
+    # in der Begründung stehen — sonst würde die Subtraktion zu breit wirken.
+    event = {
+        "id": 9123,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-06T00:00:00",
+        "type": "Run",
+        "name": "Gemischte Felder",
+        "workout_doc": {
+            "steps": [{"text": "Dauerlauf", "duration": 2700}],
+            "locales": [],
+            "distance": 0,
+            "duration": 2700,
+            "average_watts": 0,
+            "unknown_doc_field": {"keep": True},
+        },
+    }
+
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        zone_sets={"Run": "run-hr"},
+    )
+    plan = result.plan
+
+    assert plan.editability is Editability.METADATA_ONLY
+    assert RestrictionCode.UNKNOWN_CONTENT in plan.restriction_codes
+    assert plan.editability_reason is not None
+    assert "unknown_doc_field" in plan.editability_reason
+    assert "average_watts" not in plan.editability_reason
+    assert "Unbekannte Dokumentfelder: unknown_doc_field" in plan.editability_reason
+
+
 def test_f07_erhaelt_unbekanntes_und_begrenzt_die_editierbarkeit() -> None:
     event = load_remote("unknown-content.json")["event"]
     result = read_event("unknown-content.json")
