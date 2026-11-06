@@ -1850,3 +1850,77 @@ Es gab keinen Netzwerkaufruf und keinen Produktiv-Schreibzugriff.
 ## 5. Nächstes Paket
 
 **P19 — Update bestehender Einheiten anschließen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P19
+
+**Stand:** 06.11.2026  
+**Paket:** P19 — Update bestehender Einheiten anschließen  
+**Basis:** Branch `feature/trainingsplaner`, HEAD nach P18
+
+## 1. Ergebnis
+
+- `EventWriteService` führt ein Update ausschließlich über die ursprüngliche
+  Remote-Event-ID aus. Der Payload stammt aus `PreparedWrite`; `name`, Datum
+  und Struktur bleiben getrennte Modi.
+- Schreibberechtigung (`writable`) und Remote-Editierbarkeit werden vor dem
+  Adapteraufruf geprüft. Ein `readOnly`-Entwurf endet bereits an der
+  Schreibgrenze.
+- Eine Antwort mit fremder Event-ID wird verworfen; die ursprüngliche ID bleibt
+  erhalten, es entsteht kein Create.
+- Nach dem Write wird das Event zurückgelesen. `verify_roundtrip` vergleicht
+  den fachlichen Ablauf nach Abschnitt 8.8: Name, Sport, Termin, Uhrzeit,
+  erhaltene Remote-Notizen, Anzahl/Reihenfolge, Gruppensemantik, Rollen,
+  Ende-Bedingungen, Zielarten, Einheiten und Werte. Interne Knoten-IDs und
+  lokale Plan-IDs zählen nicht als Unterschied.
+- Nur ein vollständig bestätigter Rundlauf liefert `saved` und `confirmed`.
+  Ein fehlgeschlagenes Rücklesen oder eine Abweichung ergibt
+  `savedUnverified`; die Event-ID bleibt erhalten und es wird nicht erneut
+  geschrieben.
+- Ein 404 bleibt `failed`/`not_found`. Es gibt keinen Create-Fallback.
+- Ein optionaler `preflight`-Hook blockiert bei einem erkannten Konflikt vor
+  dem Write; die vollständige Konfliktsicherung bleibt P21.
+- `IntervalsClient.update_event()` nutzt `PUT /athlete/{id}/events/{eventId}`.
+  Der Vertrag ist mit `respx` belegt; kein Produkt-Endpunkt ruft ihn auf.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/event_write.py` — Update-Service,
+  Gateway-Grenze, Rundlaufvergleich, Reconciliation-Grundlage und
+  `IntervalsEventAdapter`.
+- `src/trainings_cockpit/planner/save.py` — `base_notes` im Snapshot, damit
+  der Rundlauf die tatsächlich vorhandenen Remote-Notizen prüft.
+- `src/trainings_cockpit/sources/intervals.py` — `update_event`.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `tests/test_planner_update.py` — Name, Datum, Struktur, 404, Berechtigung,
+  Rücklesefehler, Abweichung, Aktivitätsreferenz, Konflikt-Hook und fremde ID.
+- `tests/test_intervals.py` — PUT-Pfad und 404 ohne Create.
+- `docs/trainingsplaner/SERIALIZER-VERTRAG.md`,
+  `docs/trainingsplaner/FAEHIGKEITSMATRIX.md` — externer Identitäts- und
+  Update-Status.
+- `docs/ENTSCHEIDUNGEN.md` — D-77.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_update.py -q` | **12 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_intervals.py -q` | **6 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **337 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check ...` | ohne Befund |
+
+Es gab keinen Netzwerkaufruf gegen intervals.icu. Der `respx`-Test belegt nur
+die HTTP-Form des vorhandenen Clients.
+
+## 4. Offene Punkte
+
+- Der Produkt-Endpunkt und die UI-Speicheraktion bleiben gesperrt, bis
+  Konfliktsicherung (P21) und dauerhafte Vorgangszuordnung (P22) stehen.
+- Die Vorabprüfung ist als Hook vorhanden; der Vergleich gegen eine neuere
+  Remoteversion folgt in P21.
+- `savedUnverified` wird in P22 über Reload und Reconciliation weitergeführt.
+
+## 5. Nächstes Paket
+
+**P20 — Neuanlage mit stabiler Identität anschließen.**

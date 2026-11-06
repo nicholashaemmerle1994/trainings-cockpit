@@ -176,6 +176,18 @@ class IntervalsClient:
     def event(self, event_id: int) -> dict[str, Any]:
         return self._request("GET", f"/athlete/{self.athlete_id}/events/{event_id}")
 
+    def update_event(self, event_id: int, event: dict[str, Any]) -> dict[str, Any]:
+        """Aktualisiert genau ein bestehendes Event über seine Event-ID.
+
+        Ein 404 wird als :class:`IntervalsError` mit ``status_code=404``
+        weitergereicht; der Aufrufer legt daraus kein neues Event an.
+        """
+        return self._request(
+            "PUT",
+            f"/athlete/{self.athlete_id}/events/{event_id}",
+            json=event,
+        )
+
     def sport_settings(self) -> list[dict[str, Any]]:
         return self._request("GET", f"/athlete/{self.athlete_id}/sport-settings")
 

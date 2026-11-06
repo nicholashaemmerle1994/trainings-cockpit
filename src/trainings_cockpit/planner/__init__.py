@@ -34,6 +34,17 @@ from .drafts import (
     build_draft_projection,
     build_new_draft_projection,
 )
+from .event_write import (
+    EventGateway,
+    EventWriteService,
+    GatewayConflict,
+    GatewayError,
+    GatewayNotFound,
+    IntervalsEventAdapter,
+    RoundtripCheck,
+    plan_shape,
+    verify_roundtrip,
+)
 from .identities import (
     ActivityId,
     ActivityReference,
@@ -258,6 +269,15 @@ __all__ = [
     "rolling_dashboard_range",
     "SourceActivityRef",
     "SourceSnapshot",
+    "EventGateway",
+    "EventWriteService",
+    "GatewayConflict",
+    "GatewayError",
+    "GatewayNotFound",
+    "IntervalsEventAdapter",
+    "RoundtripCheck",
+    "plan_shape",
+    "verify_roundtrip",
     "InputLocked",
     "LOCKED_STATES",
     "SaveCoordinator",

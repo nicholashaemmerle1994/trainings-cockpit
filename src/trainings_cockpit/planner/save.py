@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -147,6 +148,7 @@ class SaveSnapshot:
     writable_reason: str | None
     intended: PlannedWorkout
     base: PlannedWorkout | None
+    base_notes: str | None
     created_at: str
 
     def __post_init__(self) -> None:
@@ -162,6 +164,8 @@ class SaveSnapshot:
             raise TypeError("intended muss ein PlannedWorkout sein.")
         if self.base is not None and not isinstance(self.base, PlannedWorkout):
             raise TypeError("base muss ein PlannedWorkout oder None sein.")
+        if self.base_notes is not None:
+            object.__setattr__(self, "base_notes", require_text(self.base_notes, "base_notes"))
         for name in ("account_id", "athlete_id"):
             object.__setattr__(self, name, require_text(getattr(self, name), name))
         if not isinstance(self.writable, bool):
@@ -497,6 +501,16 @@ class SaveCoordinator:
         if not isinstance(writable, bool):
             raise TypeError("writable muss ein Boolean sein.")
         source = draft.base_source
+        base_notes: str | None = None
+        if source is not None and isinstance(source.raw, Mapping):
+            raw_doc = source.raw.get("workout_doc")
+            doc_notes = raw_doc.get("notes") if isinstance(raw_doc, Mapping) else None
+            if isinstance(doc_notes, str) and doc_notes.strip():
+                base_notes = doc_notes
+            elif isinstance(source.raw.get("notes"), str) and source.raw["notes"].strip():
+                base_notes = source.raw["notes"]
+        elif draft.base is not None:
+            base_notes = draft.base.notes
         return SaveSnapshot(
             operation_id=draft.operation_id,
             draft_id=draft.draft_id,
@@ -517,6 +531,7 @@ class SaveCoordinator:
             writable_reason=writable_reason,
             intended=draft.current,
             base=draft.base,
+            base_notes=base_notes,
             created_at=datetime.now().astimezone().isoformat(timespec="seconds"),
         )
 

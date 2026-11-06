@@ -14,6 +14,7 @@ produktives Schreiben.
 | `name` | ja | nur bei Namensänderung | Event-Name, nie Workout-Syntax |
 | `start_date_local` | ja | nur bei Terminänderung | lokales Datum, vorhandene Uhrzeit bleibt erhalten |
 | `description` | ja, kanonischer Workouttext | nur bei Strukturänderung | reine Name-/Datumsänderung lässt den Text unangetastet |
+| `external_id` | ja, stabil aus lokaler Plan-ID, Account und Athlet | nein | nur Neuanlage; Update lässt die vorhandene Identität unberührt |
 
 Nicht kontrolliert und beim Update nicht überschrieben: `id`, `external_id`,
 `workout_doc`, `moving_time`, `distance`, `icu_training_load`,
@@ -25,9 +26,10 @@ lokale Projektionen bleiben draußen.
 ## 2. Modi
 
 - **`create`** — `base is None`, keine Remote-ID. Payload mit `category`,
-  `type`, `name`, `start_date_local`, `description`. Eine stabile externe
-  Identität wird hier noch nicht erfunden; sie gehört zum späteren
-  Create-Koordinator.
+  `type`, `name`, `start_date_local`, `description` und `external_id`. Die
+  externe Identität ist deterministisch aus lokaler Plan-ID, Account und
+  Athlet abgeleitet; derselbe Entwurf erzeugt bei einem Retry dieselbe ID,
+  zwei getrennte Entwürfe bleiben getrennt.
 - **`metadata`** — bestehende Remote-ID, nur `name` und/oder
   `start_date_local` geändert. `description` fehlt im Payload; der vorhandene
   Workouttext bleibt byte-for-byte erhalten.
