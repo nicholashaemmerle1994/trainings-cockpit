@@ -5,8 +5,8 @@ intervals.icu zusammen; das Cockpit bewertet die Erholung, zeigt Belastung und
 Form in verständlicher Sprache und begleitet die Saisonziele.
 
 **Stand:** v0.2.0 — Premium-Oberfläche nach [DESIGN.md](DESIGN.md) (D-59),
-Erholungskarte mit lokalem Lichtschein (D-64), zwei Bereiche: Heute und
-Verpflegung. Stabil auf Port 8100, Vorschau auf 8101.
+Erholungskarte mit lokalem Lichtschein (D-64), drei Bereiche: Heute, Planer
+und Verpflegung. Stabil auf Port 8100, Vorschau auf 8101.
 
 ![Heute](docs/img/today.png)
 
@@ -14,7 +14,8 @@ Verpflegung. Stabil auf Port 8100, Vorschau auf 8101.
 
 | Seite | Inhalt |
 |---|---|
-| **Heute** | Erholungskarte mit Ring — Score erst ab 21 Nächten, vorher „Referenz wird aufgebaut". HRV, Ruhepuls und Schlaf mit Delta zur eigenen Referenz, Countdowns, Training für heute und morgen, Letzte 7 Tage mit Umfang, Belastung, Einheiten und Belastungsverhältnis |
+| **Heute** | Erholungskarte mit Ring — Score erst ab 21 Nächten, vorher „Referenz wird aufgebaut". HRV, Ruhepuls und Schlaf mit Delta zur eigenen Referenz, Countdowns, Training für heute und morgen, Letzte 7 Tage mit Umfang, Belastung, Einheiten und Belastungsverhältnis. „Umfang“ ist eine reine Kennzahl ohne Navigation. |
+| **Planer** | Kalenderwoche Montag–Sonntag mit getrennten Plan-/Ist-Summen, Tages-Plus, Inline-Editor, wiederholbaren Aufbauten, Planungsdetail und bestehenden Aktivitätsdetails. Alte Listen-URLs leiten kompatibel in den Planer. |
 | **Verpflegung** | Kohlenhydratrechner für Locker und Wettkampf: Gramm je Stunde, Getränk, Gels oder Ahornsirup, Wasser, Salz, Zeitplan, Herrichten und Drumherum |
 
 Dazu: dunkle Oberfläche, mobiles Layout, installierbar auf dem iPhone (PWA),
@@ -201,15 +202,26 @@ Details, HTTPS über Tailscale, Backup und iPhone-Installation:
 | `tc push-test` | Test-Workout nach intervals.icu pushen und prüfen |
 | `tc report` | Phase-0-Befund als Markdown |
 
-## Tests
+## Lokal prüfen und starten
 
 ```bash
-uv run pytest
-cd web && npm run build
+uv sync
+uv run pytest -q
+cd web && npm run build && cd ..
+uv run tc serve --port 8000
 ```
 
-148 Backend-Tests: Metriken, DB-Upserts, API, intervals-Client,
-Garmin-Normalisierung, Verpflegungsrechner.
+Danach **http://127.0.0.1:8000** öffnen. Der Planer liegt unter dem eigenen
+Tab „Planer“; die Dashboard-Kennzahl „Umfang“ bleibt ohne Link und ohne
+Wochenwechsel. Für einen echten Sync müssen `.env` und die Keys gesetzt sein;
+ohne ausdrücklich vorgesehenen Testdatensatz und Freigabe keine produktiven
+Schreibzugriffe gegen intervals.icu ausführen.
+
+**Prüfstand P26/P27 + Review:** 380 Backend-Tests, `tsc --noEmit` und Vite-Build
+erfolgreich. Die Abnahme lief mit einer separaten SQLite-Kopie und einem
+lokalen Kontrolladapter; ein Live-Rundlauf gegen intervals.icu und eine
+Geräteübertragung wurden nicht behauptet. Details:
+[docs/trainingsplaner/UEBERGABE.md](docs/trainingsplaner/UEBERGABE.md).
 
 ## Struktur
 
@@ -219,21 +231,23 @@ docs/KONZEPT.md          Architektur, Metriken, Saisonplan
 docs/PHASE0-BEFUND.md    Datenlage und Befund vom 30.10.2026
 docs/DEPLOY.md           Homeserver, HTTPS, Backup, iPhone
 src/trainings_cockpit/
-  api.py                 FastAPI + Auslieferung des Frontends
+  api.py                 FastAPI, Wochen-/Planer-Endpunkte und Frontend-Auslieferung
   metrics.py             Erholung, Fitness/Müdigkeit, Wochen, Serien
   fuel.py                Verpflegung: Kohlenhydrate, Getränk, Wasser, Salz, Zeitplan
   db.py                  SQLite-Schema und Upserts
   sync.py                intervals.icu → DB
+  planner/               Fachmodell, Remote-Adapter, Serializer, Save/Sync, Konflikte
   sources/               intervals- und Garmin-Client
   spike/                 Phase-0-Werkzeuge
 DESIGN.md                Designsystem, verbindlich für jede Oberfläche
 docs/UI-REGELN.md        ersetzt, nur noch Herkunftsnachweis (unslop, CC BY 4.0)
+docs/trainingsplaner/    Plan, Fähigkeitsmatrix, Sync-/Konfliktverträge, Übergabe
 web/src/
-  pages/                 Heute, Verpflegung
-  components/            Ring, Wochenstreifen, Blätter, Tabellen, Karten
+  pages/                 Heute, Planer, Verpflegung
+  components/            Karten, Blätter, Plan-Editor, Verlauf, Aktivitätsdetails
   styles.css             Tokens, Layout, Komponenten
 web/public/fonts/        Instrument Serif fürs Datum; Plex-Dateien ungenutzt
-tests/                   pytest
+tests/                   pytest inklusive Planer-Fixtures F01–F15
 ```
 
 ## Regeln
@@ -249,6 +263,10 @@ tests/                   pytest
 
 ## Nächste Schritte
 
-1. **Etappe 3:** Morgen-Check-in, Schlafdetails, Datenqualität, Plan vs. Ist,
-   Garmin-Aktivitäten direkt in die DB.
-2. **Etappe 4:** Wirkungsanalyse der Einheiten, Bevel-Ablösung, eigene Planung.
+1. **Live-Abnahme:** einen ausdrücklich vorgesehenen intervals.icu-Testdatensatz
+   freigeben und Create/Update inklusive Rücklesen einmal live prüfen.
+2. **Beziehung:** bestätigte Plan-/Aktivitätsbeziehung dauerhaft im Bestand
+   führen; Darstellung und Summen sind dafür vorbereitet.
+3. **Skip-Gruppe:** den vorbereiteten `EditorShapeMetadata`-Weg beim Lesen
+   anbinden, damit „Letzte Erholung auslassen“ als Gruppe erhalten bleibt.
+4. **Etappe 4:** Wirkungsanalyse der Einheiten, Bevel-Ablösung.

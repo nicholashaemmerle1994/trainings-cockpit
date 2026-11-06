@@ -9,6 +9,7 @@ from statistics import mean, pstdev
 from typing import Any
 
 from . import db, plan
+from .planner.summaries import recorded_seconds
 
 TARGET_SLEEP_H = 7.5
 #: Referenzfenster für „üblich“: die letzten drei Wochen, nicht die letzten drei Monate.
@@ -526,7 +527,7 @@ def build_weeks(conn: Any, weeks: int = 8, today: date | None = None) -> list[di
         )
         sport = row.get("sport") or ""
         km = (row.get("distance_m") or 0) / 1000
-        stunden = (row.get("moving_s") or row.get("duration_s") or 0) / 3600
+        stunden = recorded_seconds(row) / 3600
         bucket["einheiten"] += 1
         bucket["dauer_h"] += stunden
         bucket["hoehenmeter_m"] += row.get("elevation_m") or 0
@@ -581,7 +582,7 @@ def week_summaries(
                 "by_sport": {},
             },
         )
-        hours = (activity.get("moving_s") or activity.get("duration_s") or 0) / 3600
+        hours = recorded_seconds(activity) / 3600
         bucket["hours"] += hours
         bucket["load"] += activity.get("load") or 0
         bucket["sessions"] += 1
@@ -603,7 +604,7 @@ SPORT_LABELS = plan.SPORT_LABELS
 
 
 def activity_payload(row: dict[str, Any]) -> dict[str, Any]:
-    moving = row.get("moving_s") or row.get("duration_s") or 0
+    moving = recorded_seconds(row)
     distance = row.get("distance_m") or 0
     pace_min_km = None
     speed_kmh = None
@@ -678,7 +679,7 @@ def unit_payload(row: dict[str, Any]) -> dict[str, Any]:
     zones = zone_seconds(raw)
     total_zones = sum(zones)
     distance = row.get("distance_m") or 0
-    moving = row.get("moving_s") or row.get("duration_s") or 0
+    moving = recorded_seconds(row)
     family = plan.sport_family(row.get("sport"))
     return {
         **base,
@@ -786,7 +787,7 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
     # Fenster, keine Kalenderwoche — sonst springt der Wert am Montag.
     week_from = (today - timedelta(days=6)).isoformat()
     week_acts = [a for a in activities if week_from <= a["date"] <= today.isoformat()]
-    week_seconds = sum((a.get("moving_s") or a.get("duration_s") or 0) for a in week_acts)
+    week_seconds = sum(recorded_seconds(a) for a in week_acts)
     week_hours = week_seconds / 3600
     week_load = sum(a.get("load") or 0 for a in week_acts)
 

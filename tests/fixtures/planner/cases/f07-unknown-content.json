@@ -1,0 +1,62 @@
+{
+  "case": "F07",
+  "title": "Erhalt unbekannter Inhalte",
+  "kind": "planned-workout",
+  "remoteFixture": "remote/unknown-content.json",
+  "profileSport": "Ride",
+  "plan": {
+    "localId": "plan:f07",
+    "remoteId": "9107",
+    "externalId": "fixture:f07",
+    "name": "Import mit unbekanntem Inhalt",
+    "sport": "Ride",
+    "date": "2026-11-08",
+    "localTime": "09:15",
+    "timeZone": "Europe/Vienna",
+    "editability": "metadataOnly",
+    "editabilityReason": "Rampen-, Trittfrequenz- und Lap-Angaben sind im vorhandenen Lesezugriff nicht typisiert.",
+    "restrictionCodes": ["unknown_content", "multiple_targets"],
+    "notes": "Importierte Zusatznotiz, absichtlich nicht strukturiert.",
+    "nodes": [
+      {
+        "kind": "step",
+        "id": "node:f07:warmup",
+        "name": "Einrollen",
+        "role": "warmup",
+        "end": {"kind": "time", "seconds": 600},
+        "target": {
+          "kind": "zone",
+          "metric": "heartRate",
+          "zoneId": "ride-hr-1",
+          "zoneSetId": "ride-hr"
+        },
+        "sourceRef": "/workout_doc/steps/0"
+      },
+      {
+        "kind": "unsupported",
+        "id": "node:f07:ramp",
+        "label": "Rampe mit Trittfrequenz",
+        "reason": "Rampen- und Trittfrequenzangaben sind nicht verlustfrei in einen Einzelziel-Schritt übersetzbar.",
+        "sourceRef": "/workout_doc/steps/1"
+      },
+      {
+        "kind": "unsupported",
+        "id": "node:f07:lap",
+        "label": "Lap-Taste",
+        "reason": "Lap-Taste ist ein Spezialschritt ohne belegten Schreibvertrag.",
+        "sourceRef": "/workout_doc/steps/2"
+      }
+    ]
+  },
+  "expected": {
+    "rootNodeKinds": ["step", "unsupported", "unsupported"],
+    "executedSteps": 1,
+    "repeatGroups": 0,
+    "unsupportedNodes": 2,
+    "editability": "metadataOnly",
+    "mayEditMetadata": true,
+    "mayEditStructure": false,
+    "openingMustNotWrite": true,
+    "sourcePreservedByteForByte": true
+  }
+}

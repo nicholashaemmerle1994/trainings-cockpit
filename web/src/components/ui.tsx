@@ -35,52 +35,32 @@ export function DashboardCard({
   );
 }
 
-/** Eine Zeile „Label links, Wert rechts" — als Text oder als ganze Schaltfläche. */
+/** Eine Zeile „Label links, Wert rechts" — reine Information, keine Aktion. */
 export function MetricRow({
   label,
   value,
-  onClick,
   compact = false,
   className,
 }: {
   label: string;
   value: ReactNode;
-  onClick?: () => void;
   compact?: boolean;
   className?: string;
 }) {
   const classes = [
     "metric-row",
     compact ? "metric-row--compact" : "",
-    onClick ? "metric-row--button" : "",
     className ?? "",
   ]
     .filter(Boolean)
     .join(" ");
 
-  const content = (
-    <>
+  return (
+    <div className={classes}>
       <span className="metric-row__label">{label}</span>
-      <span className="metric-row__value">
-        {value}
-        {onClick && (
-          <span className="metric-row__caret" aria-hidden="true">
-            ›
-          </span>
-        )}
-      </span>
-    </>
+      <span className="metric-row__value">{value}</span>
+    </div>
   );
-
-  if (onClick) {
-    return (
-      <button type="button" className={classes} onClick={onClick}>
-        {content}
-      </button>
-    );
-  }
-
-  return <div className={classes}>{content}</div>;
 }
 
 export type BadgeTone =

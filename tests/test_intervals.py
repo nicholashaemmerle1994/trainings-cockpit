@@ -83,3 +83,33 @@ def test_401_has_clear_message() -> None:
             assert "401" in str(exc)
         else:  # pragma: no cover
             raise AssertionError("Fehler erwartet")
+
+
+@respx.mock
+def test_update_event_uses_original_event_id_and_put_payload() -> None:
+    route = respx.put(f"{BASE}/athlete/0/events/9101").mock(
+        return_value=httpx.Response(200, json={"id": 9101, "name": "Neu"})
+    )
+    payload = {"name": "Neu", "start_date_local": "2026-11-03T09:15:00"}
+
+    with IntervalsClient("k") as client:
+        result = client.update_event(9101, payload)
+
+    assert result == {"id": 9101, "name": "Neu"}
+    assert route.call_count == 1
+    assert json.loads(route.calls[0].request.content) == payload
+
+
+@respx.mock
+def test_update_event_404_is_not_a_create() -> None:
+    respx.put(f"{BASE}/athlete/0/events/9101").mock(return_value=httpx.Response(404))
+    routes_before = len(respx.routes)
+    with IntervalsClient("k") as client:
+        try:
+            client.update_event(9101, {"name": "Weg"})
+        except Exception as exc:  # noqa: BLE001
+            assert getattr(exc, "status_code", None) == 404
+        else:  # pragma: no cover
+            raise AssertionError("404 muss als Fehler ankommen")
+    # Kein POST /events/bulk und kein POST /events als Fallback.
+    assert len(respx.routes) == routes_before

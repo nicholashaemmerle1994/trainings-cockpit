@@ -185,3 +185,22 @@ def test_was_intervals_nicht_mehr_fuehrt_fliegt_raus(tmp_path, monkeypatch) -> N
     assert ergebnis["orphans"] == 1
     assert ids == ["i-neu"]
     assert verlauf == 0
+
+
+def test_sync_nutzt_die_athletenzeitzone_fuer_den_lesebereich(
+    settings: Settings, monkeypatch
+) -> None:
+    """Der Sync-Zeitraum folgt TC_TIME_ZONE, nicht der Serverzeitzone."""
+    import json
+
+    monkeypatch.setattr(sync_mod, "local_today", lambda time_zone: "2026-11-04")
+
+    sync_mod.sync(settings, days=30)
+
+    conn = db.connect(settings.db_path)
+    raw = db.get_setting(conn, "synced_range")
+    conn.close()
+    assert raw is not None
+    bericht = json.loads(raw)
+    assert bericht["to"] == "2026-11-04"
+    assert bericht["activities_to"] == "2026-11-04"

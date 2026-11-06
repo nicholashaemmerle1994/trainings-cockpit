@@ -1,0 +1,49 @@
+{
+  "fixtureVersion": 1,
+  "kind": "remote-event",
+  "case": "F07",
+  "note": "Anonymisiertes Event mit bewusst unbekannten Feldern. Nichts davon darf beim Einlesen verloren gehen.",
+  "event": {
+    "id": 9107,
+    "category": "WORKOUT",
+    "start_date_local": "2026-11-08T09:15:00",
+    "type": "Ride",
+    "name": "Import mit unbekanntem Inhalt",
+    "description": "- Einrollen 10m Z1 HR\n- Rampe 10m 60-90% FTP\n- Trittfrequenz 5m 85-95 rpm\n\nNotiz: Leerlauf nach dem Hauptteil.",
+    "moving_time": 1500,
+    "distance": null,
+    "icu_training_load": 38,
+    "icu_intensity": 64,
+    "external_id": "fixture:f07",
+    "workout_doc": {
+      "steps": [
+        {
+          "text": "Einrollen",
+          "duration": 600,
+          "warmup": true,
+          "hr": {"units": "hr_zone", "value": 1}
+        },
+        {
+          "text": "Rampe",
+          "duration": 600,
+          "ramp": true,
+          "power": {"units": "%ftp", "start": 60, "end": 90},
+          "cadence": {"min": 85, "max": 95},
+          "targets": [
+            {"kind": "power", "units": "%ftp", "start": 60, "end": 90},
+            {"kind": "cadence", "min": 85, "max": 95}
+          ]
+        },
+        {
+          "text": "Leerlauf",
+          "lap_button": true,
+          "extra_instruction": "Nur wenn die Ampel grün ist."
+        }
+      ],
+      "notes": "Importierte Zusatznotiz, absichtlich nicht strukturiert.",
+      "unknown_doc_field": {"keep": ["a", "b", 3]}
+    },
+    "weather": {"temperatureC": 11, "wind": "unbekannt"},
+    "source": "FIXTURE"
+  }
+}

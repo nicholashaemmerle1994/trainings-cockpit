@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,40 @@ from fastapi.staticfiles import StaticFiles
 from . import db, fuel, metrics, plan, streams
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings
+from .planner.dates import (
+    local_today,
+    parse_week_parameter,
+    planner_week_range,
+    rolling_dashboard_range,
+    start_of_planner_week,
+)
+from .planner.details import build_plan_detail
+from .planner.drafts import (
+    DraftProjectionError,
+    build_draft,
+    build_draft_projection,
+    build_new_draft,
+    build_new_draft_projection,
+)
+from .planner.operations import (
+    SqliteOperationStore,
+    plan_to_json,
+    retention_cutoff,
+)
+from .planner.save import SaveCoordinator, SaveOutcome, SaveState
+from .planner.service import event_read_service, event_write_service
+from .planner.summaries import recorded_seconds
+from .planner.syncmerge import merge_confirmed_event
+from .planner.week import (
+    SOURCE_COMPLETE,
+    SOURCE_EMPTY,
+    SOURCE_ERROR,
+    SOURCE_PARTIAL,
+    SOURCE_UNAVAILABLE,
+    account_context,
+    build_planner_week,
+    coverage_for_period,
+)
 
 DIST = Path(os.getenv("TC_WEB_DIST") or (PROJECT_ROOT / "web" / "dist"))
 
@@ -53,14 +88,33 @@ def connection() -> Iterator[sqlite3.Connection]:
 
 @app.get("/api/overview")
 def overview(days: int = Query(90, ge=7, le=365)) -> dict[str, Any]:
+    settings = get_settings()
+    today = date.fromisoformat(local_today(settings.time_zone))
     with connection() as conn:
-        data = metrics.build_overview(conn, days=days)
-    data["goals"] = _goals(get_settings())
+        data = metrics.build_overview(conn, today=today, days=days)
+        data["account_id"], data["athlete_id"] = account_context(conn)
+        # Die Tageskarte darf „Nichts geplant“ nur sagen, wenn der
+        # Planungsanteil tatsächlich gelesen wurde. Der Zustand kommt aus
+        # derselben Abdeckungslogik wie die Wochenprojektion.
+        plan_rows = db.events_on(conn, today)
+        period = planner_week_range(today.isoformat(), settings.time_zone)
+        coverage = coverage_for_period(
+            period, _sync_range(conn), to_field="events_to"
+        )
+        state = _source_state(plan_rows, coverage=coverage, error=None)
+        data["today"]["plan_source"] = {
+            "state": state,
+            "complete": state in {SOURCE_COMPLETE, SOURCE_EMPTY},
+            "count": len(plan_rows),
+            "coverage": coverage,
+        }
+    data["goals"] = _goals(settings, today)
+    data["time_zone"] = settings.time_zone
     return data
 
 
-def _goals(settings: Settings) -> list[dict[str, Any]]:
-    today = date.today()
+def _goals(settings: Settings, today: date | None = None) -> list[dict[str, Any]]:
+    today = today or date.today()
     items: list[dict[str, Any]] = []
     for goal in settings.goals:
         try:
@@ -79,6 +133,459 @@ def _goals(settings: Settings) -> list[dict[str, Any]]:
             }
         )
     return sorted(items, key=lambda item: item["date"])
+
+
+def _sync_range(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Der zuletzt tatsächlich gelesene Bereich, sofern der Sync ihn hinterließ."""
+    raw = db.get_setting(conn, "synced_range")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _source_state(
+    rows: list[dict[str, Any]],
+    *,
+    coverage: str,
+    error: str | None,
+) -> str:
+    if error:
+        return SOURCE_ERROR
+    if rows:
+        # Liegt die Woche nur teilweise im nachweislich gelesenen Bereich,
+        # sind die vorhandenen Zeilen sichtbar, aber die Summe ist keine
+        # vollständige Wochensumme. Das muss die Oberfläche kennzeichnen.
+        return SOURCE_PARTIAL if coverage == "uncovered" else SOURCE_COMPLETE
+    # Eine Woche außerhalb des nachweislich gelesenen Bereichs ist nicht
+    # „bestätigt leer“. Ohne Sync-Marke bleibt der lokale Bestand maßgeblich.
+    if coverage == "uncovered":
+        return SOURCE_UNAVAILABLE
+    return SOURCE_EMPTY
+
+
+def _week_parameter(
+    week: str | None,
+    woche: str | None = None,
+    von: str | None = None,
+    bis: str | None = None,
+) -> str | None:
+    """Deutsche und englische Parameter auf einen Wochenanker abbilden."""
+    if week and woche and week != woche:
+        raise HTTPException(status_code=400, detail="week und woche widersprechen sich.")
+    if week or woche:
+        return week or woche
+    # Ein Bereich wird nach Abschnitt 5.7 über sein Enddatum verankert.
+    return bis or von
+
+
+def _planner_week(conn: sqlite3.Connection, parameter: str | None) -> dict[str, Any]:
+    settings = get_settings()
+    time_zone = settings.time_zone
+    today = local_today(time_zone)
+    try:
+        monday = parse_week_parameter(parameter, time_zone)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Woche als lokales Datum JJJJ-MM-TT angeben.",
+        ) from exc
+    period = planner_week_range(monday, time_zone)
+    account_id, athlete_id = account_context(conn)
+    sync_range = _sync_range(conn)
+
+    plans_error: str | None = None
+    plans_rows: list[dict[str, Any]] = []
+    try:
+        plans_rows = db.events_between(
+            conn,
+            date.fromisoformat(period.start_date),
+            date.fromisoformat(period.end_date),
+        )
+    except Exception as exc:  # noqa: BLE001 - Quellenfehler getrennt melden
+        plans_error = str(exc)[:300]
+
+    activities_error: str | None = None
+    activity_rows: list[dict[str, Any]] = []
+    try:
+        activity_rows = db.training_between(
+            conn,
+            date.fromisoformat(period.start_date),
+            date.fromisoformat(period.end_date),
+        )
+    except Exception as exc:  # noqa: BLE001 - die andere Quelle bleibt nutzbar
+        activities_error = str(exc)[:300]
+
+    plans_coverage = coverage_for_period(period, sync_range, to_field="events_to")
+    activities_coverage = coverage_for_period(
+        period, sync_range, to_field="activities_to", today=today
+    )
+    plans_state = _source_state(
+        plans_rows, coverage=plans_coverage, error=plans_error
+    )
+    activities_state = _source_state(
+        activity_rows, coverage=activities_coverage, error=activities_error
+    )
+
+    speeds = plan.speeds(conn, today=date.fromisoformat(today))
+    payload = build_planner_week(
+        period,
+        plans_rows,
+        activity_rows,
+        today=today,
+        time_zone=time_zone,
+        account_id=account_id,
+        athlete_id=athlete_id,
+        plans_state=plans_state,
+        activities_state=activities_state,
+        plans_error=plans_error,
+        activities_error=activities_error,
+        plans_coverage=plans_coverage,
+        activities_coverage=activities_coverage,
+        speeds_kmh=speeds,
+    )
+    payload["account_id"] = account_id
+    payload["athlete_id"] = athlete_id
+    payload["generated_at"] = datetime.now().astimezone().isoformat(
+        timespec="seconds"
+    )
+    return payload
+
+
+@app.get("/api/planner")
+def planner(
+    week: str | None = Query(None, description="Montag oder Tag der Woche, JJJJ-MM-TT"),
+    woche: str | None = Query(None, description="Deutscher Alias für week"),
+    von: str | None = Query(None, description="Bereichsbeginn, JJJJ-MM-TT"),
+    bis: str | None = Query(None, description="Bereichsende, JJJJ-MM-TT"),
+) -> dict[str, Any]:
+    """Eine Kalenderwoche mit getrennten Quellenzuständen."""
+    with connection() as conn:
+        return _planner_week(conn, _week_parameter(week, woche, von, bis))
+
+
+@app.get("/api/planner/week")
+def planner_week(
+    week: str | None = Query(None, description="Montag oder Tag der Woche, JJJJ-MM-TT"),
+    woche: str | None = Query(None, description="Deutscher Alias für week"),
+    von: str | None = Query(None, description="Bereichsbeginn, JJJJ-MM-TT"),
+    bis: str | None = Query(None, description="Bereichsende, JJJJ-MM-TT"),
+) -> dict[str, Any]:
+    """Alias für Verlinkungen, die den Wochenvertrag ausdrücklich nennen."""
+    with connection() as conn:
+        return _planner_week(conn, _week_parameter(week, woche, von, bis))
+
+
+@app.post("/api/planner/draft/new")
+def plan_new_draft(body: dict[str, Any]) -> dict[str, Any]:
+    """Projiziert einen neuen lokalen Entwurf, ohne ein Event anzulegen."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            return build_new_draft_projection(
+                body,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except DraftProjectionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+
+
+def _operation_payload(stored: Any) -> dict[str, Any]:
+    snapshot = stored.snapshot
+    return {
+        "operation_id": str(snapshot.operation_id),
+        "local_id": str(snapshot.local_id),
+        "draft_id": str(snapshot.draft_id),
+        "remote_id": str(snapshot.remote_id) if snapshot.remote_id is not None else None,
+        "external_id": snapshot.external_id,
+        "mode": snapshot.mode,
+        "kind": snapshot.kind,
+        "state": "unknown"
+        if stored.state is SaveState.SAVING
+        else stored.state.value,
+        "created_at": snapshot.created_at,
+        "reconciliation_required": True,
+    }
+
+
+@app.get("/api/planner/operations")
+def planner_operations(open_only: bool = Query(True)) -> dict[str, Any]:
+    """Offene Vorgänge des aktuellen Accounts, ohne vollständige Payloads."""
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        store = SqliteOperationStore(conn)
+        store.purge_completed(now=retention_cutoff(now))
+        records = store.records(
+            account_id=account_id,
+            athlete_id=athlete_id,
+            open_only=open_only,
+        )
+        return {
+            "account_id": account_id,
+            "athlete_id": athlete_id,
+            "items": [_operation_payload(item) for item in records],
+        }
+
+
+@app.post("/api/planner/operations/{operation_id}/reconcile")
+def planner_reconcile(operation_id: str) -> dict[str, Any]:
+    """Setzt einen offenen Vorgang lesend fort; wiederholt keinen Write."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        store = SqliteOperationStore(conn)
+        stored = store.record(operation_id)
+        if stored is None or (
+            stored.snapshot.account_id != account_id
+            or stored.snapshot.athlete_id != athlete_id
+        ):
+            raise HTTPException(status_code=404, detail="Offener Vorgang nicht gefunden")
+        try:
+            with event_write_service(settings) as service:
+                coordinator = SaveCoordinator(service, recorder=store, shared=True)
+                coordinator.restore_open(
+                    account_id=account_id, athlete_id=athlete_id
+                )
+                outcome = coordinator.reconcile(operation_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Vorgang ist nicht offen") from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        # Ein lesend abgeglichener, bestätigter Datensatz gehört wie beim
+        # direkten Save in den vorhandenen lokalen Bestand. Sonst würde die
+        # Planerwoche den gerade bestätigten Create nicht zeigen.
+        _persist_confirmed(conn, outcome)
+        confirmed = (
+            plan_to_json(outcome.confirmed)
+            if outcome.confirmed is not None
+            else None
+        )
+        date_value = (
+            outcome.confirmed.date
+            if outcome.confirmed is not None
+            else (
+                outcome.snapshot.intended.date
+                if outcome.snapshot is not None
+                else None
+            )
+        )
+        return {
+            "status": outcome.status.as_dict(),
+            "confirmed": confirmed,
+            "week": (
+                start_of_planner_week(date_value, settings.time_zone)
+                if date_value is not None
+                else None
+            ),
+            "time_zone": settings.time_zone,
+        }
+
+
+def _save_response(
+    outcome: SaveOutcome,
+    *,
+    time_zone: str,
+    old_week: str | None,
+) -> dict[str, Any]:
+    snapshot = outcome.snapshot
+    confirmed = outcome.confirmed
+    date_value = (
+        confirmed.date
+        if confirmed is not None
+        else (snapshot.intended.date if snapshot is not None else None)
+    )
+    week = (
+        start_of_planner_week(date_value, time_zone) if date_value is not None else None
+    )
+    return {
+        "status": outcome.status.as_dict(),
+        "confirmed": plan_to_json(confirmed) if confirmed is not None else None,
+        "event_id": outcome.status.remote_id,
+        "week": week,
+        "old_week": old_week,
+        "time_zone": time_zone,
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+
+
+def _persist_confirmed(conn: Any, outcome: SaveOutcome) -> None:
+    """Nur bestätigte Reads in den vorhandenen Bestand übernehmen."""
+    if outcome.status.state is not SaveState.SAVED or outcome.remote_raw is None:
+        return
+    merge_confirmed_event(conn, outcome.remote_raw)
+
+
+@app.post("/api/planner/plan/{event_id}/save")
+def plan_save(event_id: int, body: dict[str, Any]) -> dict[str, Any]:
+    """Speichert einen bestehenden Entwurf über den bestätigten Update-Pfad."""
+    settings = get_settings()
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        account_id, athlete_id = account_context(conn)
+        try:
+            draft = build_draft(
+                row,
+                body,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except DraftProjectionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        old_week = (
+            start_of_planner_week(draft.base.date, settings.time_zone)
+            if draft.base
+            else None
+        )
+        store = SqliteOperationStore(conn)
+        try:
+            with event_write_service(settings) as service:
+                coordinator = SaveCoordinator(service, recorder=store, shared=True)
+                outcome = coordinator.activate(
+                    draft,
+                    account_id=account_id,
+                    athlete_id=athlete_id,
+                    writable=draft.current.is_metadata_editable,
+                    writable_reason=draft.current.editability_reason,
+                )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        _persist_confirmed(conn, outcome)
+        return _save_response(outcome, time_zone=settings.time_zone, old_week=old_week)
+
+
+@app.post("/api/planner/draft/save")
+def new_plan_save(body: dict[str, Any]) -> dict[str, Any]:
+    """Legt genau eine neue Einheit über den bestätigten Create-Pfad an."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            draft = build_new_draft(
+                body,
+                time_zone=settings.time_zone,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except DraftProjectionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        store = SqliteOperationStore(conn)
+        try:
+            with event_write_service(settings) as service:
+                coordinator = SaveCoordinator(service, recorder=store, shared=True)
+                outcome = coordinator.activate(
+                    draft,
+                    account_id=account_id,
+                    athlete_id=athlete_id,
+                    writable=True,
+                )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        _persist_confirmed(conn, outcome)
+        return _save_response(outcome, time_zone=settings.time_zone, old_week=None)
+
+
+@app.get("/api/planner/plan/{event_id}/remote")
+def plan_remote(event_id: int) -> dict[str, Any]:
+    """Liest die aktuelle Remoteversion und übernimmt sie als Lese-Datenstand.
+
+    Die Aktion ist rein lesend gegenüber intervals.icu. Der bestätigte
+    Remote-Datensatz wird lokal über dieselbe Event-ID eingesortiert; es gibt
+    keinen Event-Write.
+    """
+    settings = get_settings()
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        try:
+            with event_read_service(settings) as client:
+                raw = client.event(event_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        if not isinstance(raw, dict) or str(raw.get("id")) != str(event_id):
+            raise HTTPException(
+                status_code=409,
+                detail="Die Remote-Antwort gehört nicht zu dieser Event-ID.",
+            )
+        merge_confirmed_event(conn, raw)
+        updated = db.event_by_id(conn, event_id)
+        account_id, athlete_id = account_context(conn)
+        try:
+            return build_plan_detail(
+                updated or row,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+
+
+@app.get("/api/planner/plan/{event_id}")
+@app.get("/api/plan/{event_id}")
+def plan_detail(event_id: int) -> dict[str, Any]:
+    """Planungsdetails über die vorhandene Event-Identität, rein lesend."""
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        settings = get_settings()
+        account_id, athlete_id = account_context(conn)
+        try:
+            return build_plan_detail(
+                row,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+
+
+@app.post("/api/planner/plan/{event_id}/draft")
+def plan_draft(
+    event_id: int,
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    """Projiziert einen lokalen Entwurf, ohne Remote zu lesen oder zu schreiben."""
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        settings = get_settings()
+        account_id, athlete_id = account_context(conn)
+        try:
+            return build_draft_projection(
+                row,
+                body,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except DraftProjectionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
 
 
 @app.get("/api/session/{event_id}")
@@ -103,16 +610,52 @@ def _add_series(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
 
 
 @app.get("/api/week")
-def week() -> dict[str, Any]:
-    """Die Einheiten der letzten sieben Tage — dieselbe Summe wie auf der Karte."""
+def week(
+    week: str | None = Query(None, description="Wochenanker, JJJJ-MM-TT"),
+    from_date: str | None = Query(None, alias="from", description="Beginn, JJJJ-MM-TT"),
+    to_date: str | None = Query(None, alias="to", description="Ende, JJJJ-MM-TT"),
+) -> dict[str, Any]:
+    """Zeitraum der Aufzeichnungen.
+
+    Ohne Parameter bleibt die bisherige rollierende Sieben-Tage-Antwort
+    unverändert. Mit ``week`` oder expliziten Grenzen liefert dieselbe route
+    einen gezielten Zeitraum; der Planer selbst nutzt ``/api/planner``.
+    """
+    settings = get_settings()
+    today = date.fromisoformat(local_today(settings.time_zone))
+    try:
+        if week:
+            monday = parse_week_parameter(week, settings.time_zone)
+            period = planner_week_range(monday, settings.time_zone)
+            start = date.fromisoformat(period.start_date)
+            end = date.fromisoformat(period.end_date)
+        elif from_date or to_date:
+            if from_date and to_date:
+                start = date.fromisoformat(from_date)
+                end = date.fromisoformat(to_date)
+            elif from_date:
+                start = date.fromisoformat(from_date)
+                end = start + timedelta(days=6)
+            else:
+                end = date.fromisoformat(str(to_date))
+                start = end - timedelta(days=6)
+        else:
+            period = rolling_dashboard_range(today.isoformat(), 7, settings.time_zone)
+            start = date.fromisoformat(period.start_date)
+            end = date.fromisoformat(period.end_date)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Zeitraum als lokales Datum JJJJ-MM-TT angeben.",
+        ) from exc
+    if end < start:
+        raise HTTPException(status_code=400, detail="Das Ende liegt vor dem Beginn.")
     with connection() as conn:
-        today = date.today()
-        start = today - timedelta(days=6)
-        rows = db.training_between(conn, start, today)
-    seconds = sum((row.get("moving_s") or row.get("duration_s") or 0) for row in rows)
+        rows = db.training_between(conn, start, end)
+    seconds = sum(recorded_seconds(row) for row in rows)
     return {
         "from": start.isoformat(),
-        "to": today.isoformat(),
+        "to": end.isoformat(),
         "seconds": int(seconds),
         "load": round(sum(row.get("load") or 0 for row in rows)),
         "units": [metrics.activity_payload(row) for row in rows],

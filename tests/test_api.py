@@ -313,3 +313,56 @@ def test_ohne_sensorwechsel_kein_bevel_feld(client: TestClient) -> None:
     payload = client.get("/api/overview").json()
 
     assert payload["today"]["recovery"]["vendor_prompt"] is False
+
+
+def test_overview_marks_today_plan_source_only_when_known(client: TestClient) -> None:
+    payload = client.get("/api/overview").json()
+    # Ohne Event und ohne Abdeckungsmarke bleibt der lokale Bestand maßgeblich:
+    # Die Planung ist bekannt leer, nicht „nicht verfügbar“.
+    assert payload["today"]["plan_source"] == {
+        "state": "empty",
+        "complete": True,
+        "count": 0,
+        "coverage": "unknown",
+    }
+
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.set_setting(
+        conn,
+        "synced_range",
+        '{"from":"2025-01-01","to":"2025-02-01",'
+        '"activities_to":"2025-02-01","events_to":"2025-02-01"}',
+    )
+    conn.close()
+
+    payload = client.get("/api/overview").json()
+    assert payload["today"]["plan_source"]["state"] == "unavailable"
+    assert payload["today"]["plan_source"]["complete"] is False
+    assert payload["today"]["plan_source"]["coverage"] == "uncovered"
+
+
+def test_overview_counts_today_plan_as_complete(client: TestClient) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_events(
+        conn,
+        [
+            {
+                "id": 4242,
+                "start_date_local": f"{date.today().isoformat()}T18:00:00",
+                "type": "Run",
+                "name": "Abendlauf",
+                "category": "WORKOUT",
+            }
+        ],
+    )
+    conn.close()
+
+    payload = client.get("/api/overview").json()
+    source = payload["today"]["plan_source"]
+    assert source["state"] == "complete"
+    assert source["complete"] is True
+    assert source["count"] == 1

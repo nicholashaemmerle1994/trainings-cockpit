@@ -1,0 +1,95 @@
+{
+  "case": "F03",
+  "title": "HF und Watt in einer Radeinheit",
+  "kind": "planned-workout",
+  "remoteFixture": null,
+  "profileSport": "Ride",
+  "plan": {
+    "localId": "plan:f03",
+    "remoteId": "9103",
+    "externalId": "fixture:f03",
+    "name": "Radeinheit mit HF und Watt",
+    "sport": "Ride",
+    "date": "2026-11-04",
+    "timeZone": "Europe/Vienna",
+    "editability": "full",
+    "nodes": [
+      {
+        "kind": "step",
+        "id": "node:f03:warmup",
+        "name": "Einrollen",
+        "role": "warmup",
+        "end": {"kind": "time", "seconds": 600},
+        "target": {
+          "kind": "zone",
+          "metric": "heartRate",
+          "zoneId": "ride-hr-1",
+          "zoneSetId": "ride-hr"
+        }
+      },
+      {
+        "kind": "repeat",
+        "id": "node:f03:main",
+        "name": "Dreimal Arbeit und Erholung",
+        "repetitions": 3,
+        "skipFinalRecovery": false,
+        "children": [
+          {
+            "kind": "step",
+            "id": "node:f03:work",
+            "name": "Arbeit",
+            "role": "work",
+            "end": {"kind": "time", "seconds": 600},
+            "target": {
+              "kind": "power",
+              "unit": "watts",
+              "values": {"kind": "range", "min": 160, "max": 170}
+            }
+          },
+          {
+            "kind": "step",
+            "id": "node:f03:recovery",
+            "name": "Erholung",
+            "role": "recovery",
+            "end": {"kind": "time", "seconds": 300},
+            "target": {
+              "kind": "power",
+              "unit": "watts",
+              "values": {"kind": "range", "min": 90, "max": 110}
+            }
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "id": "node:f03:cooldown",
+        "name": "Ausrollen",
+        "role": "cooldown",
+        "end": {"kind": "time", "seconds": 600},
+        "target": {
+          "kind": "zone",
+          "metric": "heartRate",
+          "zoneId": "ride-hr-1",
+          "zoneSetId": "ride-hr"
+        }
+      }
+    ]
+  },
+  "variants": [
+    {
+      "name": "explizite 0 W bleiben eine gültige Vorgabe",
+      "change": {"nodeId": "node:f03:recovery", "field": "target", "value": {"kind": "power", "unit": "watts", "values": {"kind": "value", "value": 0}}},
+      "expected": {"durationSeconds": 3900, "targetKinds": ["zone", "power", "power", "zone"]}
+    }
+  ],
+  "expected": {
+    "rootNodeKinds": ["step", "repeat", "step"],
+    "executedSteps": 8,
+    "durationSeconds": 3900,
+    "distanceMetres": 0,
+    "repeatGroups": 1,
+    "targetKinds": ["zone", "power", "power", "zone"],
+    "zoneIds": ["ride-hr-1", "ride-hr-1"],
+    "unsupportedNodes": 0
+  }
+}

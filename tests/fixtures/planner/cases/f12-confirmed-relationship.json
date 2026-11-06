@@ -1,0 +1,82 @@
+{
+  "case": "F12",
+  "title": "Bestätigte Beziehung, ähnliche Namen und Identitätskollision",
+  "kind": "history-relationships",
+  "timeZone": "Europe/Vienna",
+  "week": {"from": "2026-11-02", "to": "2026-11-08"},
+  "plans": [
+    {"localId": "plan:P1", "remoteId": "123", "date": "2026-11-08", "sport": "Run", "name": "Lockerer Lauf", "durationSeconds": 2700},
+    {"localId": "plan:P2", "remoteId": "124", "date": "2026-11-08", "sport": "Run", "name": "Lockerer Lauf", "durationSeconds": 1800}
+  ],
+  "activities": [
+    {
+      "rowId": 1,
+      "activityId": "123",
+      "date": "2026-11-08",
+      "sport": "Run",
+      "name": "Lockerer Lauf",
+      "movingSeconds": 2520,
+      "load": 40,
+      "sourceRefs": [
+        {"source": "garmin", "sourceId": "garmin-a1"},
+        {"source": "intervals", "sourceId": "intervals-a1"}
+      ]
+    },
+    {
+      "rowId": 2,
+      "activityId": "a-2",
+      "date": "2026-11-08",
+      "sport": "Run",
+      "name": "Zweite Aufzeichnung",
+      "movingSeconds": 1800,
+      "load": 25,
+      "sourceRefs": [{"source": "intervals", "sourceId": "intervals-a2"}]
+    }
+  ],
+  "relationships": [
+    {
+      "relationshipId": "rel:1",
+      "planLocalId": "plan:P1",
+      "activityIds": ["123"],
+      "status": "confirmed",
+      "completionConfirmed": true
+    }
+  ],
+  "variants": [
+    {
+      "name": "mehrere Aufzeichnungen pro Plan",
+      "relationship": {
+        "relationshipId": "rel:multi",
+        "planLocalId": "plan:P1",
+        "activityIds": ["123", "a-2"],
+        "status": "confirmed",
+        "completionConfirmed": true
+      },
+      "expected": {"linkedActivities": 2, "eachReachable": true, "activityCounting": "once-per-canonical-id"}
+    },
+    {
+      "name": "Beziehung ohne bestätigten Abschluss",
+      "relationship": {
+        "relationshipId": "rel:partial",
+        "planLocalId": "plan:P1",
+        "activityIds": ["123"],
+        "status": "partial",
+        "completionConfirmed": false
+      },
+      "expected": {"planRemainsOpen": true, "noDoneBadge": true, "noCalculatedRemainingDuration": true}
+    }
+  ],
+  "expected": {
+    "linkedEntries": 1,
+    "primaryRecordedEntries": 1,
+    "openPlanEntries": 1,
+    "activityMinutes": 42,
+    "activityLoad": 40,
+    "activityCount": 1,
+    "canonicalActivityCountedOnce": true,
+    "openPlanMinutes": 30,
+    "sameNumericIdDistinct": true,
+    "planId": "123",
+    "activityId": "123"
+  }
+}

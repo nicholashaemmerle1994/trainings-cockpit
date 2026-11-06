@@ -1,0 +1,42 @@
+{
+  "case": "F11",
+  "title": "Dashboard-Volumen und Umbau der Trainingsliste",
+  "kind": "history-dashboard",
+  "timeZone": "Europe/Vienna",
+  "today": "2026-11-06",
+  "activities": [
+    {"rowId": 1, "activityId": "a-1031", "date": "2026-10-31", "sport": "Run", "name": "Lauf 31.", "movingSeconds": 1800, "distanceMetres": 5000, "load": 30},
+    {"rowId": 2, "activityId": "a-1101", "date": "2026-11-01", "sport": "Ride", "name": "Rad 1.", "movingSeconds": 2400, "distanceMetres": 16000, "load": 40},
+    {"rowId": 3, "activityId": "a-1102", "date": "2026-11-02", "sport": "Run", "name": "Lauf 2.", "movingSeconds": 3000, "distanceMetres": 8000, "load": 50},
+    {"rowId": 4, "activityId": "a-1106", "date": "2026-11-06", "sport": "Swim", "name": "Schwimmen 6.", "movingSeconds": 3600, "distanceMetres": 2000, "load": 60}
+  ],
+  "plans": [
+    {"remoteId": "1101", "date": "2026-11-08", "sport": "Run", "name": "Sonntagsplanung", "durationSeconds": 2700}
+  ],
+  "expected": {
+    "dashboard": {
+      "from": "2026-10-31",
+      "to": "2026-11-06",
+      "seconds": 10800,
+      "human": "3 h",
+      "volumeHasNoNavigation": true,
+      "volumeHasNoChevron": true,
+      "volumeHasNoKeyboardAction": true,
+      "doesNotChangePlannerWeek": true
+    },
+    "planner": {
+      "from": "2026-11-02",
+      "to": "2026-11-08",
+      "days": 7,
+      "ascending": true,
+      "recordedSeconds": 6600,
+      "human": "1 h 50 min",
+      "openPlanSeconds": 2700,
+      "openPlanSeparate": true
+    },
+    "entry": "planner-tab",
+    "oldUrlCompatibility": "compatible-redirect",
+    "backFromActivityDetail": "selected-week",
+    "dashboardUnaffectedByWeekChange": true
+  }
+}

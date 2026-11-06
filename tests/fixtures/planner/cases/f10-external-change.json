@@ -1,0 +1,35 @@
+{
+  "case": "F10",
+  "title": "Externe Änderung",
+  "kind": "conflict",
+  "base": {
+    "remoteId": "9301",
+    "remoteUpdatedAt": "2026-11-09T08:00:00Z",
+    "contentHash": "sha256:fixture-base",
+    "name": "Geplante Einheit",
+    "nodeSignature": ["warmup:600", "work:1200"]
+  },
+  "localDraft": {
+    "draftId": "draft:f10",
+    "operationId": "op:f10",
+    "name": "Geplante Einheit lokal",
+    "nodeSignature": ["warmup:600", "work:1800"]
+  },
+  "remoteAfterEdit": {
+    "remoteId": "9301",
+    "remoteUpdatedAt": "2026-11-09T08:05:00Z",
+    "contentHash": "sha256:fixture-external",
+    "name": "Geplante Einheit extern",
+    "nodeSignature": ["warmup:600", "work:1500"]
+  },
+  "deletedVariant": {
+    "remoteId": "9301",
+    "deleted": true
+  },
+  "expected": {
+    "conflictRecognized": true,
+    "localDraftKept": true,
+    "automaticOverwrite": false,
+    "deletedRemoteIsNotRecreated": true
+  }
+}
