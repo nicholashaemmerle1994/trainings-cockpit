@@ -62,6 +62,30 @@ from .projections import RecordedListEntry
 #: `workout_doc` bleibt im Snapshot und begrenzt die Strukturbearbeitung.
 _KNOWN_DOC_FIELDS = {"steps", "notes", "name", "description", "type"}
 
+#: Felder, die intervals.icu selbst bei jedem `workout_doc` **berechnet** und
+#: zurückliefert — der Nutzer hat sie nicht verfasst. Es sind Zusammenfassungen
+#: über das ganze Workout (Summen aus Dauer/Distanz, Zonenzeiten, Belastungs-
+#: und Leistungskennzahlen sowie leere Hüllfelder wie `locales`/`options`), keine
+#: Abschnitte und keine Schreibabsicht. Sie stehen nicht im Schreibvertrag: der
+#: Serializer sendet nur `name`, `start_date_local`, `description`, `type`,
+#: `category` und `external_id` (siehe SERIALIZER-VERTRAG.md, Abschnitt 1).
+#: Deshalb dürfen sie die Strukturbearbeitung nicht begrenzen; sie bleiben
+#: unverändert im Roh-Snapshot erhalten.
+_DERIVED_DOC_FIELDS = frozenset(
+    {
+        "locales",
+        "options",
+        "distance",
+        "duration",
+        "zoneTimes",
+        "strain_score",
+        "average_watts",
+        "normalized_power",
+        "variability_index",
+        "polarization_index",
+    }
+)
+
 _SPECIAL_FIELDS = {
     "ramp": "Rampe",
     "lap_button": "Lap-Taste",
@@ -208,7 +232,10 @@ def read_remote_event(
                 for index, step in enumerate(steps)
             ]
             nodes = tuple(parsed)
-        unknown_doc = sorted(set(doc) - _KNOWN_DOC_FIELDS)
+        # Nur ein Feld, das weder fachlich gelesen noch von intervals berechnet
+        # ist, ist wirklich unbekannt; berechnete Werte begrenzen die
+        # Editierbarkeit nicht, sie bleiben nur im Snapshot.
+        unknown_doc = sorted(set(doc) - _KNOWN_DOC_FIELDS - _DERIVED_DOC_FIELDS)
         if unknown_doc:
             state.restrict(
                 RestrictionCode.UNKNOWN_CONTENT,

@@ -135,6 +135,72 @@ def test_f07_erhaelt_unbekanntes_und_begrenzt_die_editierbarkeit() -> None:
     assert result.source.raw == event
 
 
+def test_zeit_workout_mit_berechneten_dokumentfeldern_bleibt_voll_editierbar() -> None:
+    # intervals.icu hängt an jedes `workout_doc` berechnete Zusammenfassungen an
+    # (Totals, Zonenzeiten, Leistungskennzahlen). Sie sind nicht Teil des
+    # Schreibvertrags und dürfen die Strukturbearbeitung nicht begrenzen.
+    event = {
+        "id": 9120,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-02T00:00:00",
+        "type": "Run",
+        "name": "Ruhiger Dauerlauf",
+        "description": "- Dauerlauf 45m Z2 HR",
+        "external_id": "fixture:derived-fields",
+        "workout_doc": {
+            "steps": [
+                {
+                    "text": "Dauerlauf",
+                    "duration": 2700,
+                    "hr": {"units": "hr_zone", "value": 2},
+                }
+            ],
+            "locales": [],
+            "options": {},
+            "distance": 0,
+            "duration": 2700,
+            "zoneTimes": [
+                {"id": "Z1", "secs": 0},
+                {"id": "Z2", "secs": 2700},
+                {"id": "Z3", "secs": 0},
+                {"id": "Z4", "secs": 0},
+                {"id": "Z5", "secs": 0},
+            ],
+            "strain_score": None,
+            "average_watts": 0,
+            "normalized_power": 0,
+            "variability_index": None,
+            "polarization_index": 0,
+        },
+    }
+
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        zone_sets={"Run": "run-hr"},
+    )
+    plan = result.plan
+
+    assert plan.editability is Editability.FULL
+    assert plan.is_structure_editable is True
+    assert plan.editability_reason is None
+    assert plan.restriction_codes == ()
+    assert RestrictionCode.UNKNOWN_CONTENT not in plan.restriction_codes
+
+    assert len(plan.nodes) == 1
+    node = plan.nodes[0]
+    assert isinstance(node, StepNode)
+    assert node.end == TimeEnd(2700)
+    assert node.target.zone_id == "run-hr-2"
+    assert node.target.zone_set_id == "run-hr"
+
+    # Die berechneten Felder bleiben unverändert im Roh-Snapshot erhalten.
+    assert result.source.raw == event
+    assert result.source.raw["workout_doc"]["zoneTimes"][1] == {"id": "Z2", "secs": 2700}
+    assert result.source.raw["workout_doc"]["duration"] == 2700
+
+
 def test_unbekannte_sportart_bleibt_neutral_und_lesbar() -> None:
     event = {
         "id": 9901,
