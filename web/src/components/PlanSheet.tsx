@@ -1,15 +1,54 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { fmtDateLong } from "../format";
+import {
+  draftRequest,
+  fieldKey,
+  semanticallyDirty,
+  type DraftFieldBuffers,
+} from "../plannerDraft";
 import type {
   PlanDetail,
+  PlanDraftProjection,
   PlanGraph,
   PlanGraphSegment,
   PlanGraphTrack,
   PlanNode,
 } from "../types";
+import {
+  DraftStatus,
+  PlanEditor,
+  useHeadScroll,
+} from "./PlanEditor";
 import { Sheet } from "./Sheet";
 import { StatusBadge } from "./ui";
+
+function firstEditableNode(nodes: PlanNode[]): PlanNode | null {
+  let fallback: PlanNode | null = null;
+  for (const node of nodes) {
+    if (node.kind === "step") return node;
+    if (node.kind === "repeat") {
+      fallback ??= node;
+      const child = firstEditableNode(node.children ?? []);
+      if (child) return child;
+    }
+  }
+  return fallback ?? nodes.find((node) => node.kind !== "unsupported") ?? null;
+}
+
+function patchNodeTree(
+  nodes: PlanNode[],
+  nodeId: string,
+  patch: Partial<PlanNode>,
+): PlanNode[] {
+  return nodes.map((node) => {
+    if (node.node_id === nodeId) return { ...node, ...patch };
+    if (node.kind === "repeat" && node.children) {
+      return { ...node, children: patchNodeTree(node.children, nodeId, patch) };
+    }
+    return node;
+  });
+}
 
 export function PlanSheet({
   eventId,
@@ -19,18 +58,42 @@ export function PlanSheet({
   onClose: () => void;
 }) {
   const [data, setData] = useState<PlanDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [projection, setProjection] = useState<PlanDraftProjection | null>(null);
+  const [nodes, setNodes] = useState<PlanNode[]>([]);
+  const [buffers, setBuffers] = useState<DraftFieldBuffers>({});
+  const [endKinds, setEndKinds] = useState<Record<string, "time" | "distance">>({});
+  const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const draftActive = useRef(false);
+  const requestSeq = useRef(0);
+  const headScroll = useHeadScroll();
 
   useEffect(() => {
     let alive = true;
+    draftActive.current = false;
+    requestSeq.current += 1;
     setData(null);
-    setError(null);
+    setProjection(null);
+    setNodes([]);
+    setBuffers({});
+    setEndKinds({});
+    setEditing(false);
+    setExpanded(null);
     setSelected(null);
+    setError(null);
+    setDraftError(null);
     api
       .planDetail(eventId)
       .then((next) => {
-        if (alive) setData(next);
+        // Ein begonnener Entwurf wird von einem späteren Hintergrund-Read
+        // nicht überschrieben.
+        if (alive && !draftActive.current) {
+          setData(next);
+          setNodes(next.nodes);
+        }
       })
       .catch((cause: unknown) => {
         if (alive) setError(cause instanceof Error ? cause.message : "Planung nicht geladen.");
@@ -40,21 +103,145 @@ export function PlanSheet({
     };
   }, [eventId]);
 
+  useEffect(() => {
+    if (!editing || !data) return;
+    const seq = ++requestSeq.current;
+    const timer = window.setTimeout(() => {
+      api
+        .planDraft(data.id, draftRequest(data.name, nodes, buffers))
+        .then((next) => {
+          if (seq !== requestSeq.current) return;
+          setProjection(next);
+          setDraftError(null);
+          setNodes((current) =>
+            JSON.stringify(current) === JSON.stringify(next.nodes)
+              ? current
+              : next.nodes,
+          );
+        })
+        .catch((cause: unknown) => {
+          if (seq !== requestSeq.current) return;
+          setDraftError(
+            cause instanceof Error ? cause.message : "Entwurf konnte nicht geprüft werden.",
+          );
+        });
+    }, 260);
+    return () => {
+      window.clearTimeout(timer);
+      if (requestSeq.current === seq) requestSeq.current += 1;
+    };
+  }, [editing, data, nodes, buffers]);
+
+  const current = projection ?? data;
+  const dirty =
+    current != null &&
+    semanticallyDirty(data ?? current, data?.name ?? current.name, nodes);
+
+  const startEdit = () => {
+    if (!data || !data.rights.can_edit_structure) return;
+    draftActive.current = true;
+    setEditing(true);
+    setProjection(null);
+    setDraftError(null);
+    setNodes(data.nodes);
+    setBuffers({});
+    setEndKinds({});
+    const first = firstEditableNode(data.nodes);
+    setSelected(first?.node_id ?? null);
+    setExpanded(first?.node_id ?? null);
+  };
+
+  const discard = () => {
+    draftActive.current = false;
+    setEditing(false);
+    setProjection(null);
+    setDraftError(null);
+    setNodes(data?.nodes ?? []);
+    setBuffers({});
+    setEndKinds({});
+    setSelected(null);
+    setExpanded(null);
+  };
+
+  const onSelect = (nodeId: string) => {
+    if (!editing) {
+      setSelected((currentId) => (currentId === nodeId ? null : nodeId));
+      return;
+    }
+    // Graphauswahl öffnet den zugehörigen Abschnitt; erneutes Wählen
+    // derselben Auswahl lässt ihn offen.
+    setSelected(nodeId);
+    setExpanded(nodeId);
+    window.requestAnimationFrame(() => headScroll.reveal(nodeId));
+  };
+
+  const onToggle = (nodeId: string) => {
+    setSelected(nodeId);
+    setExpanded((currentId) => (currentId === nodeId ? null : nodeId));
+  };
+
+  const onBuffer = (
+    nodeId: string,
+    fieldPath: string,
+    kind: "text" | "duration" | "distance",
+    raw: string,
+  ) => {
+    const key = fieldKey(nodeId, fieldPath);
+    setBuffers((currentBuffers) => ({
+      ...currentBuffers,
+      [key]: { nodeId, fieldPath, kind, raw },
+    }));
+  };
+
+  const onClearBuffer = (nodeId: string, fieldPath: string) => {
+    const key = fieldKey(nodeId, fieldPath);
+    setBuffers((currentBuffers) => {
+      if (!(key in currentBuffers)) return currentBuffers;
+      const next = { ...currentBuffers };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const onPatchNode = (nodeId: string, patch: Partial<PlanNode>) => {
+    setNodes((currentNodes) => patchNodeTree(currentNodes, nodeId, patch));
+  };
+
+  const onEndKindChange = (nodeId: string, kind: "time" | "distance") => {
+    setEndKinds((currentKinds) => ({ ...currentKinds, [nodeId]: kind }));
+    onClearBuffer(nodeId, "end.value");
+    onPatchNode(nodeId, { end: { kind: "open", text: "Ende offen" } });
+  };
+
   return (
     <Sheet
-      crumb="Geplante Einheit"
-      label={data ? data.name || data.sport_label : "Geplante Einheit"}
+      crumb={editing ? "Einheit bearbeiten" : "Geplante Einheit"}
+      label={current ? current.name || current.sport_label : "Geplante Einheit"}
       onClose={onClose}
     >
       {error && <p className="sheet-error">{error}</p>}
       {!data && !error && <div className="sheet-loading" />}
-      {data && (
+      {data && current && (
         <PlanBody
-          data={data}
+          data={current}
+          editing={editing}
+          nodes={nodes}
+          buffers={buffers}
+          endKinds={endKinds}
+          projection={projection}
           selected={selected}
-          onSelect={(nodeId) =>
-            setSelected((current) => (current === nodeId ? null : nodeId))
-          }
+          expanded={expanded}
+          draftError={draftError}
+          onEdit={startEdit}
+          onDiscard={discard}
+          onSelect={onSelect}
+          onToggle={onToggle}
+          onBuffer={onBuffer}
+          onClearBuffer={onClearBuffer}
+          onPatchNode={onPatchNode}
+          onEndKindChange={onEndKindChange}
+          registerHead={headScroll.register}
+          dirty={dirty}
         />
       )}
     </Sheet>
@@ -63,12 +250,49 @@ export function PlanSheet({
 
 function PlanBody({
   data,
+  editing,
+  nodes,
+  buffers,
+  endKinds,
+  projection,
   selected,
+  expanded,
+  draftError,
+  onEdit,
+  onDiscard,
   onSelect,
+  onToggle,
+  onBuffer,
+  onClearBuffer,
+  onPatchNode,
+  onEndKindChange,
+  registerHead,
+  dirty,
 }: {
   data: PlanDetail;
+  editing: boolean;
+  nodes: PlanNode[];
+  buffers: DraftFieldBuffers;
+  endKinds: Record<string, "time" | "distance">;
+  projection: PlanDraftProjection | null;
   selected: string | null;
+  expanded: string | null;
+  draftError: string | null;
+  onEdit: () => void;
+  onDiscard: () => void;
   onSelect: (nodeId: string) => void;
+  onToggle: (nodeId: string) => void;
+  onBuffer: (
+    nodeId: string,
+    fieldPath: string,
+    kind: "text" | "duration" | "distance",
+    raw: string,
+  ) => void;
+  onClearBuffer: (nodeId: string, fieldPath: string) => void;
+  onPatchNode: (nodeId: string, patch: Partial<PlanNode>) => void;
+  onEndKindChange: (nodeId: string, kind: "time" | "distance") => void;
+  registerHead: (nodeId: string, element: HTMLButtonElement | null) => void;
+  dirty: boolean;
 }) {
   const date = fmtDateLong(data.date);
   const repetitions = data.graph.repetition_groups.reduce(
@@ -76,6 +300,9 @@ function PlanBody({
     0,
   );
   const targetCount = data.graph.tracks.filter((track) => track.kind !== "none").length;
+  const incompleteCount = projection
+    ? projection.draft.issues.filter((issue) => issue.code === "open_end").length
+    : 0;
 
   return (
     <>
@@ -92,13 +319,27 @@ function PlanBody({
         >
           {data.rights.label}
         </span>
+        {editing && <span className="plan-draft-badge">Entwurf lokal</span>}
       </div>
+
+      {!editing && data.rights.can_edit_structure && (
+        <div className="plan-editbar">
+          <button type="button" className="btn btn--primary" onClick={onEdit}>
+            Bearbeiten
+          </button>
+          <span className="plan-note plan-note--muted">
+            Öffnet den lokalen Entwurf. Es wird nichts gespeichert.
+          </span>
+        </div>
+      )}
 
       <div className="plan-hero">
         <div>
           <strong>{data.known.text}</strong>
           {data.known.has_unknown && (
-            <span className="plan-hero__hint">Offene Abschnitte sind nicht enthalten.</span>
+            <span className="plan-hero__hint">
+              Offene Abschnitte sind nicht in der Summe enthalten.
+            </span>
           )}
         </div>
         <span className="plan-hero__side">
@@ -109,14 +350,47 @@ function PlanBody({
         </span>
       </div>
 
+      {draftError && (
+        <p className="plan-draft-error" role="alert">
+          {draftError}
+        </p>
+      )}
+
+      {incompleteCount > 0 && (
+        <p className="plan-incomplete-note" role="status">
+          {incompleteCount === 1
+            ? "Ein Abschnitt hat noch kein gültiges Ende."
+            : `${incompleteCount} Abschnitte haben noch kein gültiges Ende.`}{" "}
+          Die Summe zeigt nur den bekannten Teil.
+        </p>
+      )}
+
       <WorkoutProfile graph={data.graph} selected={selected} onSelect={onSelect} />
 
       <section className="sheet-sec plan-structure" aria-label="Aufbau der Planung">
         <h2>Aufbau</h2>
-        {data.nodes.length === 0 && (
+        {nodes.length === 0 && (
           <p className="plan-note">Für diese Planung liegt kein Aufbau vor.</p>
         )}
-        <PlanNodeList nodes={data.nodes} selected={selected} onSelect={onSelect} />
+        {editing ? (
+          <PlanEditor
+            detail={data}
+            projection={projection}
+            nodes={nodes}
+            buffers={buffers}
+            endKinds={endKinds}
+            selectedNodeId={selected}
+            expandedNodeId={expanded}
+            onToggle={onToggle}
+            onBuffer={onBuffer}
+            onClearBuffer={onClearBuffer}
+            onPatchNode={onPatchNode}
+            onEndKindChange={onEndKindChange}
+            registerHead={registerHead}
+          />
+        ) : (
+          <PlanNodeList nodes={nodes} selected={selected} onSelect={onSelect} />
+        )}
       </section>
 
       <section className="sheet-sec">
@@ -131,7 +405,10 @@ function PlanBody({
       <section className="sheet-sec">
         <h2>Berechtigungen</h2>
         <p className="plan-note">
-          Leseansicht. {data.rights.reason ?? "Die Quelle meldet keine Einschränkung."}
+          {editing
+            ? "Lokaler Entwurf."
+            : "Leseansicht."}{" "}
+          {data.rights.reason ?? "Die Quelle meldet keine Einschränkung."}
         </p>
         {data.rights.restriction_codes.length > 0 && (
           <p className="plan-note plan-note--muted">
@@ -144,9 +421,19 @@ function PlanBody({
         </p>
       </section>
 
+      {editing && (
+        <DraftStatus
+          projection={projection}
+          buffers={buffers}
+          dirty={dirty}
+          onDiscard={onDiscard}
+        />
+      )}
+
       <p className="sheet-src">
         Plan aus {data.source.name}
-        {data.source.remote_id ? ` · Event ${data.source.remote_id}` : ""} · nur lesend
+        {data.source.remote_id ? ` · Event ${data.source.remote_id}` : ""} ·{" "}
+        {editing ? "lokaler Entwurf, nicht gespeichert" : "nur lesend"}
       </p>
     </>
   );
