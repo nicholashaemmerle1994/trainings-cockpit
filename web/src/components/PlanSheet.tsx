@@ -9,6 +9,7 @@ import {
   dissolveRepeat,
   draftRequest,
   fieldKey,
+  newDraftRequest,
   insertChild,
   moveNodeInLevel,
   nodeById,
@@ -38,6 +39,7 @@ import {
   PlanEditor,
   useHeadScroll,
 } from "./PlanEditor";
+import type { NewPlanConfig } from "./AddWorkoutSheet";
 import { Sheet } from "./Sheet";
 import { StatusBadge } from "./ui";
 
@@ -112,9 +114,11 @@ function subtreeNodeIds(nodes: PlanNode[], nodeId: string): Set<string> {
 
 export function PlanSheet({
   eventId,
+  newPlan,
   onClose,
 }: {
-  eventId: number;
+  eventId?: number;
+  newPlan?: NewPlanConfig | null;
   onClose: () => void;
 }) {
   const [data, setData] = useState<PlanDetail | null>(null);
@@ -126,6 +130,8 @@ export function PlanSheet({
   const [undo, setUndo] = useState<UndoSnapshot | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [planName, setPlanName] = useState("");
+  const [planDate, setPlanDate] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +139,20 @@ export function PlanSheet({
   const draftActive = useRef(false);
   const requestSeq = useRef(0);
   const headScroll = useHeadScroll();
+  const isNew = newPlan != null;
+
+  const applyNewProjection = (next: PlanDraftProjection) => {
+    setData(next);
+    setProjection(next);
+    setPlanName(next.name);
+    setPlanDate(next.date);
+    setNodes(next.nodes);
+    setTargetEditors(targetEditorsFromNodes(next.nodes));
+    setEditing(true);
+    const first = firstEditableNode(next.nodes);
+    setSelected(first?.node_id ?? null);
+    setExpanded(first?.node_id ?? null);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -147,10 +167,49 @@ export function PlanSheet({
     setUndo(null);
     setAddOpen(false);
     setEditing(false);
+    setPlanName("");
+    setPlanDate("");
     setExpanded(null);
     setSelected(null);
     setError(null);
     setDraftError(null);
+
+    if (newPlan) {
+      // „Weiter“ legt nur einen lokalen Entwurf an. Dieser Request ist kein
+      // Event-Create und liest auch keinen Remote-Plan.
+      api
+        .newPlanDraft(
+          newDraftRequest({
+            draftId: newPlan.draftId,
+            sport: newPlan.sport,
+            date: newPlan.date,
+            name: newPlan.name,
+            template: newPlan.template,
+          }),
+        )
+        .then((next) => {
+          if (alive) applyNewProjection(next);
+        })
+        .catch((cause: unknown) => {
+          if (alive) {
+            setError(
+              cause instanceof Error
+                ? cause.message
+                : "Der lokale Entwurf konnte nicht angelegt werden.",
+            );
+          }
+        });
+      return () => {
+        alive = false;
+      };
+    }
+
+    if (eventId == null) {
+      setError("Planung nicht gefunden.");
+      return () => {
+        alive = false;
+      };
+    }
     api
       .planDetail(eventId)
       .then((next) => {
@@ -158,6 +217,8 @@ export function PlanSheet({
         // nicht überschrieben.
         if (alive && !draftActive.current) {
           setData(next);
+          setPlanName(next.name);
+          setPlanDate(next.date);
           setNodes(next.nodes);
         }
       })
@@ -167,14 +228,31 @@ export function PlanSheet({
     return () => {
       alive = false;
     };
-  }, [eventId]);
+  }, [eventId, newPlan]);
 
   useEffect(() => {
     if (!editing || !data) return;
     const seq = ++requestSeq.current;
     const timer = window.setTimeout(() => {
-      api
-        .planDraft(data.id, draftRequest(data.name, nodes, buffers))
+      const request = newPlan
+        ? api.newPlanDraft(
+            newDraftRequest({
+              draftId: newPlan.draftId,
+              sport: newPlan.sport,
+              date: planDate,
+              name: planName,
+              template: newPlan.template,
+              nodes,
+              buffers,
+            }),
+          )
+        : data.id != null
+          ? api.planDraft(
+              data.id,
+              draftRequest(planName, nodes, buffers, planDate),
+            )
+          : Promise.reject(new Error("Planung nicht gefunden."));
+      request
         .then((next) => {
           if (seq !== requestSeq.current) return;
           setProjection(next);
@@ -196,12 +274,13 @@ export function PlanSheet({
       window.clearTimeout(timer);
       if (requestSeq.current === seq) requestSeq.current += 1;
     };
-  }, [editing, data, nodes, buffers]);
+  }, [editing, data, newPlan, planName, planDate, nodes, buffers]);
 
   const current = projection ?? data;
-  const dirty =
-    current != null &&
-    semanticallyDirty(data ?? current, data?.name ?? current.name, nodes);
+  const dirty = isNew
+    ? current != null
+    : current != null &&
+      semanticallyDirty(data ?? current, planName, nodes, planDate);
 
   const startEdit = () => {
     if (!data || !data.rights.can_edit_structure) return;
@@ -209,6 +288,8 @@ export function PlanSheet({
     setEditing(true);
     setProjection(null);
     setDraftError(null);
+    setPlanName(data.name);
+    setPlanDate(data.date);
     setNodes(data.nodes);
     setBuffers({});
     setEndKinds({});
@@ -221,10 +302,17 @@ export function PlanSheet({
   };
 
   const discard = () => {
+    if (isNew) {
+      // Abbrechen vor dem ersten Speichern hinterlässt kein Remote-Event.
+      onClose();
+      return;
+    }
     draftActive.current = false;
     setEditing(false);
     setProjection(null);
     setDraftError(null);
+    setPlanName(data?.name ?? "");
+    setPlanDate(data?.date ?? "");
     setNodes(data?.nodes ?? []);
     setBuffers({});
     setEndKinds({});
@@ -637,8 +725,14 @@ export function PlanSheet({
 
   return (
     <Sheet
-      crumb={editing ? "Einheit bearbeiten" : "Geplante Einheit"}
-      label={current ? current.name || current.sport_label : "Geplante Einheit"}
+      crumb={
+        isNew
+          ? "Neue Einheit"
+          : editing
+            ? "Einheit bearbeiten"
+            : "Geplante Einheit"
+      }
+      label={current ? planName || current.sport_label : "Geplante Einheit"}
       onClose={onClose}
     >
       {error && <p className="sheet-error">{error}</p>}
@@ -647,6 +741,17 @@ export function PlanSheet({
         <PlanBody
           data={current}
           editing={editing}
+          isNew={isNew}
+          planName={planName}
+          planDate={planDate}
+          onPlanName={(value) => {
+            setUndo(null);
+            setPlanName(value);
+          }}
+          onPlanDate={(value) => {
+            setUndo(null);
+            setPlanDate(value);
+          }}
           nodes={nodes}
           buffers={buffers}
           endKinds={endKinds}
@@ -685,6 +790,11 @@ export function PlanSheet({
 function PlanBody({
   data,
   editing,
+  isNew,
+  planName,
+  planDate,
+  onPlanName,
+  onPlanDate,
   nodes,
   buffers,
   endKinds,
@@ -717,6 +827,11 @@ function PlanBody({
 }: {
   data: PlanDetail;
   editing: boolean;
+  isNew: boolean;
+  planName: string;
+  planDate: string;
+  onPlanName: (value: string) => void;
+  onPlanDate: (value: string) => void;
   nodes: PlanNode[];
   buffers: DraftFieldBuffers;
   endKinds: Record<string, "time" | "distance">;
@@ -757,7 +872,7 @@ function PlanBody({
   registerHead: (nodeId: string, element: HTMLButtonElement | null) => void;
   dirty: boolean;
 }) {
-  const date = fmtDateLong(data.date);
+  const date = fmtDateLong(planDate || data.date);
   const repetitions = data.graph.repetition_groups.reduce(
     (sum, group) => sum + group.repetitions,
     0,
@@ -769,7 +884,7 @@ function PlanBody({
 
   return (
     <>
-      <h1 className="sheet-title">{data.name || data.sport_label}</h1>
+      <h1 className="sheet-title">{planName || data.sport_label}</h1>
       <p className="sheet-kind">
         {data.sport_label} · {date}
         {data.time ? ` · ${data.time}` : ""}
@@ -914,6 +1029,51 @@ function PlanBody({
           </div>
         )}
       </section>
+
+      <details className="plan-meta" open={editing || isNew || undefined}>
+        <summary>Name &amp; Termin</summary>
+        <div className="plan-meta__body">
+          {editing ? (
+            <>
+              <div className="plan-field-row">
+                <div className="plan-field">
+                  <label htmlFor="plan-meta-name">Name</label>
+                  <input
+                    id="plan-meta-name"
+                    className="plan-input"
+                    type="text"
+                    value={planName}
+                    placeholder="Name der Einheit"
+                    onChange={(event) => onPlanName(event.target.value)}
+                  />
+                </div>
+                <div className="plan-field">
+                  <label htmlFor="plan-meta-date">Termin</label>
+                  <input
+                    id="plan-meta-date"
+                    className="plan-input"
+                    type="date"
+                    value={planDate}
+                    onChange={(event) => {
+                      if (event.target.value) onPlanDate(event.target.value);
+                    }}
+                  />
+                </div>
+              </div>
+              <p className="plan-meta__readonly">
+                Sportart: {data.sport_label}. Ein Sportartwechsel bestehender
+                Einheiten bleibt bewusst gesperrt.
+              </p>
+            </>
+          ) : (
+            <p className="plan-meta__static">
+              <span>{planName || data.sport_label}</span>
+              <span>{fmtDateLong(data.date)}</span>
+              <span>{data.sport_label}</span>
+            </p>
+          )}
+        </div>
+      </details>
 
       <section className="sheet-sec">
         <h2>Planungsnotiz</h2>

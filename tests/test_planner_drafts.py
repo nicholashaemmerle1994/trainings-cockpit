@@ -769,3 +769,152 @@ def test_p15_ungueltige_und_zu_grosse_wiederholungszahl_blockieren(
         ]
         assert state["validity"] == "invalid", raw
         assert expected in state["message"], raw
+
+
+def _new_body(**overrides) -> dict:
+    body = {
+        "draft_id": "draft:test-new-1",
+        "sport": "Run",
+        "date": "2026-11-11",
+        "name": "",
+        "template": "simple",
+    }
+    body.update(overrides)
+    return body
+
+
+def _event_count(client: TestClient) -> int:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    count = conn.execute("SELECT COUNT(*) FROM event").fetchone()[0]
+    conn.close()
+    return count
+
+
+def test_neuer_entwurf_ist_lokal_und_hat_keine_remote_id(client: TestClient) -> None:
+    _store(client, _event())
+    before = _event_count(client)
+
+    response = client.post("/api/planner/draft/new", json=_new_body())
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert draft["kind"] == "planned"
+    assert draft["id"] is None
+    assert draft["remote_id"] is None
+    assert draft["local_id"] == "plan:draft:test-new-1"
+    assert draft["source_snapshot"] is None
+    assert draft["source"]["name"] == "Lokaler Entwurf"
+    assert draft["source"]["read_only"] is False
+    assert draft["name"] == "Dauerlauf"
+    assert draft["date"] == "2026-11-11"
+    assert draft["draft"]["is_new"] is True
+    assert draft["draft"]["base_local_id"] is None
+    assert draft["draft"]["remote_id"] is None
+    assert draft["draft"]["valid"] is True
+    assert draft["draft"]["write"]["available"] is False
+    assert len(draft["nodes"]) == 1
+    assert draft["nodes"][0]["end"] == {"kind": "time", "seconds": 2700, "text": "45 min"}
+    assert draft["nodes"][0]["target"]["zone_id"] == "run-hr-2"
+    assert _event_count(client) == before
+
+
+def test_neuer_entwurf_ohne_profil_erfindet_keine_zone(client: TestClient) -> None:
+    _store(client, _event(), profile=None)
+
+    response = client.post("/api/planner/draft/new", json=_new_body())
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert draft["nodes"][0]["target"]["kind"] == "none"
+    assert draft["zone_options"]["available"] is False
+
+
+def test_neuer_wiederholungsentwurf_hat_vier_mal_zwei_minuten(client: TestClient) -> None:
+    _store(client, _event())
+
+    response = client.post(
+        "/api/planner/draft/new",
+        json=_new_body(
+            draft_id="draft:test-new-repeat",
+            name="Intervalle am Abend",
+            template="repeat",
+        ),
+    )
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert draft["name"] == "Intervalle am Abend"
+    assert draft["nodes"][0]["kind"] == "repeat"
+    assert draft["nodes"][0]["repetitions"] == 4
+    assert [child["role"] for child in draft["nodes"][0]["children"]] == [
+        "work",
+        "recovery",
+    ]
+    assert draft["known"]["seconds"] == 16 * 60
+    assert draft["known"]["executions"] == 8
+
+
+def test_leer_beginnen_liefert_leeren_lokalen_editor(client: TestClient) -> None:
+    _store(client, _event())
+
+    response = client.post(
+        "/api/planner/draft/new",
+        json=_new_body(draft_id="draft:test-new-empty", template="empty"),
+    )
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert draft["nodes"] == []
+    assert draft["name"] == "Neue Einheit"
+    assert draft["draft"]["valid"] is False
+    assert "empty_workout" in {issue["code"] for issue in draft["draft"]["issues"]}
+
+
+def test_neuer_entwurf_lehnt_remote_id_und_ungueltige_sportart_ab(
+    client: TestClient,
+) -> None:
+    _store(client, _event())
+    before = _event_count(client)
+
+    remote = client.post(
+        "/api/planner/draft/new",
+        json=_new_body(remote_id="9101"),
+    )
+    sport = client.post(
+        "/api/planner/draft/new",
+        json=_new_body(draft_id="draft:test-new-sport", sport="Golf"),
+    )
+    date = client.post(
+        "/api/planner/draft/new",
+        json=_new_body(draft_id="draft:test-new-date", date="11.11.2026"),
+    )
+
+    assert remote.status_code == 422
+    assert sport.status_code == 422
+    assert date.status_code == 422
+    assert _event_count(client) == before
+
+
+def test_name_und_termin_aendern_die_lokale_basis_nicht(client: TestClient) -> None:
+    event = _event()
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    node = detail["nodes"][0]
+    body = {
+        "name": "Verschobener Dauerlauf",
+        "date": "2026-11-05",
+        "nodes": [node],
+        "field_buffers": {},
+    }
+
+    response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert draft["name"] == "Verschobener Dauerlauf"
+    assert draft["date"] == "2026-11-05"
+    assert draft["time"] is None
+    assert draft["remote_id"] == str(event["id"])
+    assert draft["source_snapshot"]["raw_workout_text"] == event["description"]
+    assert _detail(client, event["id"])["name"] == event["name"]

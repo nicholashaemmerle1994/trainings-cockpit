@@ -20,7 +20,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
-from .details import build_plan_payload
+from .details import build_local_plan_payload, build_plan_payload
 from .model import (
     DistanceEnd,
     Editability,
@@ -32,6 +32,7 @@ from .model import (
     OpenEnd,
     PaceTarget,
     PaceUnit,
+    PlanId,
     PlannedWorkout,
     PowerTarget,
     PowerUnit,
@@ -48,6 +49,8 @@ from .model import (
     ZoneTarget,
     field_buffer_key,
 )
+from .primitives import require_local_date
+from .profile import heart_rate_zone_options
 from .remote import read_remote_event
 from .validation import (
     FieldKind,
@@ -58,6 +61,23 @@ from .validation import (
 
 class DraftProjectionError(ValueError):
     """Der übergebene Entwurf passt nicht zur gespeicherten Basis."""
+
+
+SUPPORTED_NEW_SPORTS = ("Run", "Ride", "Swim")
+START_TEMPLATES = ("simple", "repeat", "empty")
+_DEFAULT_NAMES = {
+    ("Run", "simple"): "Dauerlauf",
+    ("Ride", "simple"): "Radeinheit",
+    ("Swim", "simple"): "Schwimmeinheit",
+    ("Run", "repeat"): "Intervalle",
+    ("Ride", "repeat"): "Intervalle",
+    ("Swim", "repeat"): "Intervalle",
+}
+_SIMPLE_STEP_NAMES = {
+    "Run": "Dauerlauf",
+    "Ride": "Radeinheit",
+    "Swim": "Schwimmeinheit",
+}
 
 
 def _body_mapping(body: object) -> Mapping[str, Any]:
@@ -203,13 +223,18 @@ def _current_plan(
     base_nodes = _base_nodes_by_id(base.nodes)
     nodes = tuple(_node(node, base_nodes) for node in raw_nodes)
     name = body.get("name")
+    raw_date = body.get("date")
+    try:
+        date = base.date if raw_date is None else require_local_date(raw_date)
+    except ValueError as exc:
+        raise DraftProjectionError(f"Das Datum ist ungültig: {exc}") from exc
     return PlannedWorkout(
         local_id=base.local_id,
         remote_id=base.remote_id,
         external_id=base.external_id,
         name=base.name if name is None else str(name),
         sport=base.sport,
-        date=base.date,
+        date=date,
         local_time=base.local_time,
         time_zone=base.time_zone,
         nodes=nodes,
@@ -501,6 +526,213 @@ def _apply_buffers(
     )
 
 
+def _parse_buffers(
+    payload: Mapping[str, Any],
+    current: PlannedWorkout,
+) -> tuple[dict[str, FieldBuffer], Mapping[str, Any]]:
+    specs = payload.get("field_buffers") or {}
+    if not isinstance(specs, Mapping):
+        raise DraftProjectionError("field_buffers muss ein Objekt sein.")
+    buffers: dict[str, FieldBuffer] = {}
+    for key, spec in specs.items():
+        if not isinstance(key, str) or not isinstance(spec, Mapping):
+            raise DraftProjectionError("Ein Feldpuffer braucht Schlüssel und Objekt.")
+        node_id = str(spec.get("node_id") or "")
+        field_path = str(spec.get("field_path") or "")
+        if not node_id or not field_path:
+            raise DraftProjectionError("Ein Feldpuffer braucht Knoten-ID und Feldpfad.")
+        expected = field_buffer_key(node_id, field_path)
+        if key != expected:
+            raise DraftProjectionError("Der Feldpuffer-Schlüssel passt nicht zu Knoten und Pfad.")
+        if current.find_node(node_id) is None:
+            raise DraftProjectionError(f"Knoten {node_id!r} gehört nicht zum Entwurf.")
+        buffers[key] = _parse_buffer(spec)
+    _validate_target_ranges(buffers, specs)
+    return buffers, specs
+
+
+def _draft_meta(
+    draft: WorkoutDraft,
+    validation: Any,
+    *,
+    is_new: bool,
+    base_source_hash: str | None,
+) -> dict[str, Any]:
+    base = draft.base
+    return {
+        "base_local_id": str(base.local_id) if base is not None else None,
+        "base_source_hash": base_source_hash,
+        "remote_id": str(draft.current.remote_id) if draft.current.remote_id is not None else None,
+        "is_new": is_new,
+        "dirty": (draft.current != base) if base is not None else True,
+        "has_field_input": bool(draft.field_buffers),
+        "valid": validation.valid,
+        "field_states": {
+            key: {
+                "validity": buffer.validity.value,
+                "message": buffer.message,
+                "parsed": buffer.parsed,
+            }
+            for key, buffer in sorted(draft.field_buffers.items())
+        },
+        "issues": [
+            {
+                "code": issue.code.value,
+                "message": issue.message,
+                "node_id": str(issue.node_id) if issue.node_id is not None else None,
+                "field": issue.field,
+            }
+            for issue in validation.issues
+        ],
+        "write": {
+            "available": False,
+            "reason": "Die Remote-Speicherung wird in P18 angeschlossen.",
+        },
+    }
+
+
+def _start_zone(
+    sport: str,
+    zone_profiles: Mapping[str, Any] | None,
+) -> ZoneTarget | NoTarget:
+    options = heart_rate_zone_options(sport, zone_profiles)
+    zone = next(
+        (entry for entry in options["zones"] if entry.get("level") == 2),
+        None,
+    )
+    if zone is None or not options.get("zone_set_id"):
+        return NoTarget()
+    return ZoneTarget(
+        metric=ZoneMetric.HEART_RATE,
+        zone_id=str(zone["id"]),
+        zone_set_id=str(options["zone_set_id"]),
+    )
+
+
+def _starter_nodes(
+    sport: str,
+    template: str,
+    zone_profiles: Mapping[str, Any] | None,
+) -> tuple[WorkoutNode, ...]:
+    if template == "empty":
+        return ()
+    if template == "simple":
+        return (
+            StepNode(
+                id=NodeId.new(),
+                name=_SIMPLE_STEP_NAMES[sport],
+                role=StepRole.STEADY,
+                end=TimeEnd(45 * 60),
+                target=_start_zone(sport, zone_profiles),
+            ),
+        )
+    return (
+        RepeatNode(
+            id=NodeId.new(),
+            name="Hauptteil 4x",
+            repetitions=4,
+            children=(
+                StepNode(
+                    id=NodeId.new(),
+                    name="Belastung",
+                    role=StepRole.WORK,
+                    end=TimeEnd(2 * 60),
+                    target=NoTarget(),
+                ),
+                StepNode(
+                    id=NodeId.new(),
+                    name="Erholung",
+                    role=StepRole.RECOVERY,
+                    end=TimeEnd(2 * 60),
+                    target=NoTarget(),
+                ),
+            ),
+        ),
+    )
+
+
+def build_new_draft_projection(
+    body: object,
+    *,
+    time_zone: str,
+    account_id: str = "default",
+    athlete_id: str = "default",
+    zone_profiles: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Baut einen rein lokalen neuen Entwurf ohne Remote-Event.
+
+    Der Endpunkt ist kein Create: Er liest und schreibt kein Event. Die lokale
+    Identität stammt ausschließlich aus ``draft_id``; eine Remote-ID existiert
+    erst nach einem späteren bestätigten Speichern.
+    """
+    payload = _body_mapping(body)
+    if payload.get("remote_id") is not None:
+        raise DraftProjectionError(
+            "Ein neuer lokaler Entwurf darf keine bestehende Remote-ID tragen."
+        )
+    draft_id = str(payload.get("draft_id") or "").strip()
+    if not draft_id:
+        raise DraftProjectionError("Ein neuer Entwurf braucht eine stabile draft_id.")
+    sport = str(payload.get("sport") or "")
+    if sport not in SUPPORTED_NEW_SPORTS:
+        raise DraftProjectionError(
+            "Sportart muss Run, Ride oder Swim sein."
+        )
+    try:
+        date = require_local_date(payload.get("date"))
+    except ValueError as exc:
+        raise DraftProjectionError(f"Das Datum ist ungültig: {exc}") from exc
+    template = str(payload.get("template") or "simple")
+    if template not in START_TEMPLATES:
+        raise DraftProjectionError("Startaufbau muss simple, repeat oder empty sein.")
+    raw_name = payload.get("name")
+    name = "" if raw_name is None else str(raw_name).strip()
+    if not name and payload.get("nodes") is None:
+        name = _DEFAULT_NAMES.get((sport, template), "Neue Einheit")
+
+    raw_nodes = payload.get("nodes")
+    if raw_nodes is None:
+        nodes = _starter_nodes(sport, template, zone_profiles)
+    elif isinstance(raw_nodes, list):
+        nodes = tuple(_node(node, {}) for node in raw_nodes)
+    else:
+        raise DraftProjectionError("nodes muss eine Liste sein.")
+
+    plan = PlannedWorkout(
+        local_id=PlanId(f"plan:{draft_id}"),
+        remote_id=None,
+        external_id=None,
+        name=name,
+        sport=sport,
+        date=date,
+        local_time=None,
+        time_zone=time_zone,
+        nodes=nodes,
+        notes=None,
+        editability=Editability.FULL,
+    )
+    buffers, specs = _parse_buffers(payload, plan)
+    current = _apply_buffers(plan, buffers, specs)
+    draft = WorkoutDraft.new(current, draft_id=draft_id)
+    draft.field_buffers = buffers
+    validation = validate_draft(draft)
+
+    projection = build_local_plan_payload(
+        current,
+        fetched_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+        zone_profiles=zone_profiles,
+        account_id=account_id,
+        athlete_id=athlete_id,
+    )
+    projection["draft"] = _draft_meta(
+        draft,
+        validation,
+        is_new=True,
+        base_source_hash=None,
+    )
+    return projection
+
+
 def build_draft_projection(
     row: Mapping[str, Any],
     body: object,
@@ -527,25 +759,7 @@ def build_draft_projection(
         raise DraftProjectionError("Diese Planung ist schreibgeschützt.")
     current = _current_plan(base, payload)
 
-    specs = payload.get("field_buffers") or {}
-    if not isinstance(specs, Mapping):
-        raise DraftProjectionError("field_buffers muss ein Objekt sein.")
-    buffers: dict[str, FieldBuffer] = {}
-    for key, spec in specs.items():
-        if not isinstance(key, str) or not isinstance(spec, Mapping):
-            raise DraftProjectionError("Ein Feldpuffer braucht Schlüssel und Objekt.")
-        node_id = str(spec.get("node_id") or "")
-        field_path = str(spec.get("field_path") or "")
-        if not node_id or not field_path:
-            raise DraftProjectionError("Ein Feldpuffer braucht Knoten-ID und Feldpfad.")
-        expected = field_buffer_key(node_id, field_path)
-        if key != expected:
-            raise DraftProjectionError("Der Feldpuffer-Schlüssel passt nicht zu Knoten und Pfad.")
-        if current.find_node(node_id) is None:
-            raise DraftProjectionError(f"Knoten {node_id!r} gehört nicht zum Entwurf.")
-        buffers[key] = _parse_buffer(spec)
-
-    _validate_target_ranges(buffers, specs)
+    buffers, specs = _parse_buffers(payload, current)
     current = _apply_buffers(current, buffers, specs)
     draft = WorkoutDraft.start(base, remote.source)
     draft.current = current
@@ -561,35 +775,19 @@ def build_draft_projection(
         account_id=account_id,
         athlete_id=athlete_id,
     )
-    projection["draft"] = {
-        "base_local_id": str(base.local_id),
-        "base_source_hash": remote.source.relevant_content_hash,
-        "dirty": current != base,
-        "has_field_input": bool(buffers),
-        "valid": validation.valid,
-        "field_states": {
-            key: {
-                "validity": buffer.validity.value,
-                "message": buffer.message,
-                "parsed": buffer.parsed,
-            }
-            for key, buffer in sorted(buffers.items())
-        },
-        "issues": [
-            {
-                "code": issue.code.value,
-                "message": issue.message,
-                "node_id": str(issue.node_id) if issue.node_id is not None else None,
-                "field": issue.field,
-            }
-            for issue in validation.issues
-        ],
-        "write": {
-            "available": False,
-            "reason": "Der Remote-Schreibpfad wird in P17 aktiviert.",
-        },
-    }
+    projection["draft"] = _draft_meta(
+        draft,
+        validation,
+        is_new=False,
+        base_source_hash=remote.source.relevant_content_hash,
+    )
     return projection
 
 
-__all__ = ["DraftProjectionError", "build_draft_projection"]
+__all__ = [
+    "DraftProjectionError",
+    "START_TEMPLATES",
+    "SUPPORTED_NEW_SPORTS",
+    "build_draft_projection",
+    "build_new_draft_projection",
+]

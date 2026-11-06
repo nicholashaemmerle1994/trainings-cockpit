@@ -47,6 +47,12 @@ export const api = {
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+  newPlanDraft: (body: unknown) =>
+    request<PlanDraftProjection>("/api/planner/draft/new", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
   unit: (rowId: number) => request<UnitDetail>(`/api/unit/${rowId}`),
   fuel: (params: {
     minutes: number;

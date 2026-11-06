@@ -540,8 +540,10 @@ export interface DraftIssue {
 }
 
 export interface PlanDraftMeta {
-  base_local_id: string;
-  base_source_hash: string;
+  base_local_id: string | null;
+  base_source_hash: string | null;
+  remote_id: string | null;
+  is_new: boolean;
   dirty: boolean;
   has_field_input: boolean;
   valid: boolean;
@@ -552,7 +554,7 @@ export interface PlanDraftMeta {
 
 export interface PlanDetail {
   kind: "planned";
-  id: number;
+  id: number | null;
   remote_id: string | null;
   local_id: string;
   reference: string;
@@ -578,7 +580,7 @@ export interface PlanDetail {
   graph: PlanGraph;
   zone_options: PlanZoneOptions;
   capabilities: PlanCapabilities;
-  source_snapshot: PlanSourceSnapshot;
+  source_snapshot: PlanSourceSnapshot | null;
   source: { name: string; remote_id: string | null; read_only: boolean };
   fetched_at: string;
 }

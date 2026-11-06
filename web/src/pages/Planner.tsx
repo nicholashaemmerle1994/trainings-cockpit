@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
+import { AddWorkoutSheet, type NewPlanConfig } from "../components/AddWorkoutSheet";
 import { IconBack, IconForward, IconPlus } from "../components/icons";
 import { PlanSheet } from "../components/PlanSheet";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { Sheet } from "../components/Sheet";
 import { StatusBadge } from "../components/ui";
 import { UnitSheet } from "../components/UnitSheet";
 import { WorkoutPreview } from "../components/WorkoutPreview";
@@ -121,6 +121,7 @@ export function Planner({
 }) {
   const { data, loading, stale, error, retrying, reload } = usePlannerWeek(week);
   const [addDay, setAddDay] = useState<string | null>(null);
+  const [newPlan, setNewPlan] = useState<NewPlanConfig | null>(null);
 
   const currentWeek = useMemo(
     () => currentPlannerWeek(new Date(), timeZone),
@@ -229,7 +230,22 @@ export function Planner({
       {openPlan != null && (
         <PlanSheet eventId={openPlan} onClose={onClosePlan} />
       )}
-      {addDay != null && <AddNotice day={addDay} onClose={() => setAddDay(null)} />}
+      {newPlan != null && (
+        <PlanSheet
+          newPlan={newPlan}
+          onClose={() => setNewPlan(null)}
+        />
+      )}
+      {addDay != null && (
+        <AddWorkoutSheet
+          day={addDay}
+          onClose={() => setAddDay(null)}
+          onContinue={(config) => {
+            setAddDay(null);
+            setNewPlan(config);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -491,18 +507,5 @@ function PlannerSkeleton() {
         </div>
       ))}
     </div>
-  );
-}
-
-function AddNotice({ day, onClose }: { day: string; onClose: () => void }) {
-  return (
-    <Sheet crumb="Neue Einheit" label="Neue Einheit" onClose={onClose}>
-      <h1 className="sheet-title">Neue Einheit</h1>
-      <p className="sheet-kind">{fmtDateLong(day)}</p>
-      <p className="planner-note">
-        Der Anlege-Editor folgt im nächsten Paket. In dieser Leseansicht wird
-        nichts gespeichert und keine Quelle verändert.
-      </p>
-    </Sheet>
   );
 }

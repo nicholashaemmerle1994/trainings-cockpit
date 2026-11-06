@@ -1620,3 +1620,84 @@ Sichtprüfung bei 390 × 844 und 1440 × 1000; die Referenzen `08-approved-inlin
 - Leistungszonen und absolute bpm bleiben laut Fähigkeitsmatrix gesperrt.
 - P16 verbindet den Tages-Plus-Knopf mit dem Anlegeablauf und dem vorhandenen
   Editor.
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P16
+
+**Stand:** 06.11.2026  
+**Paket:** P16 — Anlegeablauf vom Tages-Plus zum Entwurf  
+**Basis:** Branch `feature/trainingsplaner`, HEAD nach P15
+
+## 1. Ergebnis
+
+- Jede Plus-Aktion übergibt das lokale Datum ihres Tages an den
+  Anlegebildschirm. Der Bildschirm zeigt „Was steht an?“ mit genau diesem
+  Datum.
+- Die Sportart ist ausschließlich ein natives Text-Dropdown mit **Laufen**,
+  **Radfahren** und **Schwimmen**. Es gibt in diesem Ablauf keine
+  Sport-Iconkacheln und keine drei Sportbuttons.
+- Der Name ist optional. Darunter stehen die drei vertikalen Radio-Karten
+  „Einfacher Abschnitt“, „Mit Wiederholungen“ und „Leer beginnen“.
+- „Weiter“ ruft ausschließlich `POST /api/planner/draft/new` auf. Dieser
+  Endpunkt liest und schreibt kein Event und liefert eine lokale Projektion
+  mit `remote_id: null`, `id: null`, `source_snapshot: null` und einer stabilen
+  lokalen ID `plan:draft:<draft_id>`. Vor dem späteren Speichern entsteht kein
+  Create-Request.
+- Der Entwurf öffnet im selben `PlanSheet`/`PlanEditor` wie eine bestehende
+  Einheit. Startwerte: ein Abschnitt mit 45 Minuten und HF-Zone 2 nur bei
+  tatsächlich vorhandenem Sportprofil (sonst „Ohne Ziel“), vier Wiederholungen
+  mit je zwei Minuten Belastung/Erholung oder ein leerer Aufbau.
+- „Name & Termin“ ist auch für neue Entwürfe da: Name, lokales Datum und
+  Sportart. Bei bestehenden Einheiten bleibt die Sportart gesperrt. Eine
+  Datumsänderung ändert den lokalen Termin und behält eine vorhandene Uhrzeit.
+- „Verwerfen“ und Schließen eines neuen Entwurfs lösen keinen Remote-Aufruf
+  aus. Der Speichern-Knopf bleibt bewusst deaktiviert; P17 liefert nur den
+  Serializer, produktives Schreiben folgt später.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/drafts.py` — Startformen, lokale Identität,
+  Name/Datum im Entwurf, gemeinsame Pufferauswertung.
+- `src/trainings_cockpit/planner/details.py` — lokale Projektion ohne
+  `SourceSnapshot`; Remote-Felder bleiben `null`.
+- `src/trainings_cockpit/api.py` — `POST /api/planner/draft/new`.
+- `web/src/components/AddWorkoutSheet.tsx` — Anlegeformular mit Dropdown,
+  optionalem Namen und drei Radio-Karten.
+- `web/src/components/PlanSheet.tsx` — Neuer-Entwurf-Modus, Name & Termin,
+  lokales Verwerfen, gemeinsamer Editor.
+- `web/src/pages/Planner.tsx`, `web/src/api.ts`, `web/src/plannerDraft.ts`,
+  `web/src/types.ts` — Verdrahtung und Vertrag.
+- `web/src/styles.css` — Anlegeformular, Radio-Karten, Name & Termin,
+  Primäraktion auf Mobilbreite.
+- `tests/test_planner_drafts.py` — lokale Neuanlage, Startformen, fehlendes
+  Profil, Datum/Name, keine Event-Zeile.
+- `docs/ENTSCHEIDUNGEN.md` — D-74.
+
+## 3. Prüfung
+
+| Befehl / Prüfung | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **282 passed**, 1 bestehende Starlette-Warnung |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+| Anlegeformular 390 × 844 | kein horizontaler Überlauf, 3 Dropdown-Optionen, 3 Radios, keine Icons |
+| Anlegeformular 1440 × 900 | dieselbe Hierarchie, ein Dropdown, vertikale Radio-Karten |
+| „Weiter“ 390/1440 | Titel „Abendlauf“, Crumb „Neue Einheit“, Datum 02.11., Speichern deaktiviert |
+| „Name & Termin“ | Name und Datum editierbar, Sportart nur lesend, Bereich geöffnet |
+| API | `remote_id=null`, `source_snapshot=null`, `id=null`, Event-Zahl unverändert |
+
+**Sichtprüfung:** Referenzen P4 (`09-approved-add-workout.png`), P5
+(`10-approved-sport-dropdown.png`) und P7 (`12-approved-add-workout-desktop.png`)
+geöffnet. Screenshots unter `data/screens/`: `p16-add-390-viewport.png`,
+`p16-editor-390-viewport.png`, `p16-editor-390-meta.png`,
+`p16-add-1440.png`.
+
+## 4. Offene Punkte
+
+- Der Serializer und die Vertragstests folgen in P17; danach der
+  Speicherkoordinator in P18. Die Oberfläche schreibt weiterhin nichts.
+- Ein Sportartwechsel bestehender Einheiten bleibt gesperrt.
+
+## 5. Nächstes Paket
+
+**P17 — Serializer und Payload-Änderungen isoliert.**

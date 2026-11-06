@@ -26,7 +26,14 @@ from .dates import (
     week_days,
     week_label,
 )
-from .details import build_plan_detail
+from .details import build_local_plan_payload, build_plan_detail
+from .drafts import (
+    START_TEMPLATES,
+    SUPPORTED_NEW_SPORTS,
+    DraftProjectionError,
+    build_draft_projection,
+    build_new_draft_projection,
+)
 from .identities import (
     ActivityId,
     ActivityReference,
@@ -156,6 +163,9 @@ from .write import (
 
 __all__ = [
     "ActivityId",
+    "DraftProjectionError",
+    "START_TEMPLATES",
+    "SUPPORTED_NEW_SPORTS",
     "ActivityReference",
     "CompletionReferenceListEntry",
     "NotAPlannedWorkout",
@@ -255,6 +265,9 @@ __all__ = [
     "WeekProjection",
     "WeekSummary",
     "WorkoutValidation",
+    "build_draft_projection",
+    "build_local_plan_payload",
+    "build_new_draft_projection",
     "build_plan_detail",
     "build_week_projection",
     "build_week_summary",

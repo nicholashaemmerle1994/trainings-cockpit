@@ -214,7 +214,9 @@ def _notes(plan: PlannedWorkout, event: Mapping[str, Any]) -> str | None:
     return None
 
 
-def _source_data(source: Any) -> dict[str, Any]:
+def _source_data(source: Any | None) -> dict[str, Any] | None:
+    if source is None:
+        return None
     return {
         "remote_id": str(source.remote_id),
         "fetched_at": source.fetched_at,
@@ -291,13 +293,14 @@ def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
 
 def _plan_payload(
     plan: PlannedWorkout,
-    source: Any,
+    source: Any | None,
     event: Mapping[str, Any],
-    row: Mapping[str, Any],
+    row: Mapping[str, Any] | None,
     *,
     zone_profiles: Mapping[str, Any] | None,
     account_id: str = "default",
     athlete_id: str = "default",
+    fetched_at: str | None = None,
 ) -> dict[str, Any]:
     graph = build_workout_profile_data(
         plan,
@@ -309,10 +312,11 @@ def _plan_payload(
         account_id,
         athlete_id,
     )
+    remote_id = str(plan.remote_id) if plan.remote_id is not None else None
     return {
         "kind": "planned",
-        "id": int(row["id"]),
-        "remote_id": str(plan.remote_id) if plan.remote_id is not None else None,
+        "id": int(row["id"]) if row is not None else None,
+        "remote_id": remote_id,
         "local_id": str(plan.local_id),
         "reference": reference.key,
         "name": plan.name,
@@ -330,11 +334,11 @@ def _plan_payload(
         "capabilities": _capabilities(plan),
         "source_snapshot": _source_data(source),
         "source": {
-            "name": "intervals.icu",
-            "remote_id": str(plan.remote_id) if plan.remote_id is not None else None,
-            "read_only": True,
+            "name": "intervals.icu" if source is not None else "Lokaler Entwurf",
+            "remote_id": remote_id,
+            "read_only": source is not None,
         },
-        "fetched_at": source.fetched_at,
+        "fetched_at": fetched_at or (source.fetched_at if source is not None else None),
     }
 
 
@@ -357,6 +361,33 @@ def build_plan_payload(
         zone_profiles=zone_profiles,
         account_id=account_id,
         athlete_id=athlete_id,
+    )
+
+
+def build_local_plan_payload(
+    plan: PlannedWorkout,
+    *,
+    fetched_at: str,
+    time_zone: str | None = None,
+    zone_profiles: Mapping[str, Any] | None = None,
+    account_id: str = "default",
+    athlete_id: str = "default",
+) -> dict[str, Any]:
+    """Darstellung eines noch nicht gespeicherten lokalen Entwurfs.
+
+    Es gibt bewusst keinen ``SourceSnapshot`` und keine Remote-ID. Der
+    Aufrufer sieht damit klar, dass dieses Objekt nur lokal existiert.
+    """
+    del time_zone  # Die Zeitzone ist bereits kanonisch am Plan hinterlegt.
+    return _plan_payload(
+        plan,
+        None,
+        {},
+        None,
+        zone_profiles=zone_profiles,
+        account_id=account_id,
+        athlete_id=athlete_id,
+        fetched_at=fetched_at,
     )
 
 
@@ -396,4 +427,4 @@ def _sport_label(sport: str | None) -> str:
     return SPORT_LABELS.get(sport or "", sport or "Andere Sportart")
 
 
-__all__ = ["build_plan_detail", "build_plan_payload"]
+__all__ = ["build_local_plan_payload", "build_plan_detail", "build_plan_payload"]

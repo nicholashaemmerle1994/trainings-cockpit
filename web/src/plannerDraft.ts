@@ -542,11 +542,38 @@ export function draftRequest(
   name: string,
   nodes: PlanNode[],
   buffers: DraftFieldBuffers,
+  date?: string,
 ): Record<string, unknown> {
   return {
     name,
+    ...(date ? { date } : {}),
     nodes: nodes.map(serializeNode),
     field_buffers: serializeBuffers(buffers),
+  };
+}
+
+export interface NewPlanRequest {
+  draftId: string;
+  sport: string;
+  date: string;
+  name: string;
+  template: "simple" | "repeat" | "empty";
+  nodes?: PlanNode[];
+  buffers?: DraftFieldBuffers;
+}
+
+/** Der neue Entwurf wird nur lokal projiziert; kein Event-Create. */
+export function newDraftRequest(input: NewPlanRequest): Record<string, unknown> {
+  return {
+    draft_id: input.draftId,
+    sport: input.sport,
+    date: input.date,
+    name: input.name,
+    template: input.template,
+    ...(input.nodes ? { nodes: input.nodes.map(serializeNode) } : {}),
+    ...(input.buffers
+      ? { field_buffers: serializeBuffers(input.buffers) }
+      : {}),
   };
 }
 
@@ -622,8 +649,10 @@ export function semanticallyDirty(
   detail: PlanDetail,
   name: string,
   nodes: PlanNode[],
+  date?: string,
 ): boolean {
   if (name !== detail.name) return true;
+  if (date != null && date !== detail.date) return true;
   return (
     JSON.stringify(nodes.map(serializeNode)) !==
     JSON.stringify(detail.nodes.map(serializeNode))

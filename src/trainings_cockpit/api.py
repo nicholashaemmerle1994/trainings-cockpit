@@ -27,7 +27,11 @@ from .planner.dates import (
     rolling_dashboard_range,
 )
 from .planner.details import build_plan_detail
-from .planner.drafts import DraftProjectionError, build_draft_projection
+from .planner.drafts import (
+    DraftProjectionError,
+    build_draft_projection,
+    build_new_draft_projection,
+)
 from .planner.summaries import recorded_seconds
 from .planner.week import (
     SOURCE_COMPLETE,
@@ -240,6 +244,26 @@ def planner_week(
     """Alias für Verlinkungen, die den Wochenvertrag ausdrücklich nennen."""
     with connection() as conn:
         return _planner_week(conn, _week_parameter(week, woche, von, bis))
+
+
+@app.post("/api/planner/draft/new")
+def plan_new_draft(body: dict[str, Any]) -> dict[str, Any]:
+    """Projiziert einen neuen lokalen Entwurf, ohne ein Event anzulegen."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            return build_new_draft_projection(
+                body,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except DraftProjectionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
 
 
 @app.get("/api/planner/plan/{event_id}")
