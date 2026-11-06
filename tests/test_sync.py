@@ -204,3 +204,73 @@ def test_sync_nutzt_die_athletenzeitzone_fuer_den_lesebereich(
     bericht = json.loads(raw)
     assert bericht["to"] == "2026-11-04"
     assert bericht["activities_to"] == "2026-11-04"
+
+
+class FakeIntervalsMitPlan(FakeIntervals):
+    """intervals führt genau eine Planung; eine zweite wurde dort gelöscht."""
+
+    def events(self, oldest: date, newest: date) -> list[dict]:
+        return [
+            {
+                "id": 9101,
+                "start_date_local": "2026-11-03T00:00:00",
+                "type": "Run",
+                "category": "WORKOUT",
+                "name": "Bleibt",
+                "workout_doc": {"steps": [{"text": "Locker", "duration": 2700}]},
+            }
+        ]
+
+
+def test_was_intervals_nicht_mehr_fuehrt_verschwindet_aus_dem_planer(
+    tmp_path, monkeypatch
+) -> None:
+    """Eine in intervals gelöschte Planung bleibt nicht als tote Zeile stehen."""
+    settings = Settings(
+        intervals_key="test",
+        intervals_athlete="0",
+        garmin_key=None,
+        data_dir=tmp_path,
+        base_url="https://example.invalid/api/v1",
+    )
+    monkeypatch.setattr(sync_mod, "IntervalsClient", FakeIntervalsMitPlan)
+    monkeypatch.setattr(sync_mod, "fetch_garmin", lambda *a, **k: GarminDump())
+
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_events(
+        conn,
+        [
+            {
+                "id": 9101,
+                "start_date_local": "2026-11-03T00:00:00",
+                "type": "Run",
+                "category": "WORKOUT",
+                "name": "Bleibt",
+            },
+            {
+                "id": 9102,
+                "start_date_local": "2026-11-03T00:00:00",
+                "type": "Ride",
+                "category": "WORKOUT",
+                "name": "Extern gelöscht",
+            },
+            {
+                "id": 9103,
+                "start_date_local": "2020-01-01T00:00:00",
+                "type": "Run",
+                "category": "WORKOUT",
+                "name": "Außerhalb des Lesebereichs",
+            },
+        ],
+    )
+    conn.close()
+
+    ergebnis = sync_mod.sync(settings, days=30, today=date(2026, 11, 3))
+
+    conn = db.connect(settings.db_path)
+    ids = [row["id"] for row in conn.execute("SELECT id FROM event ORDER BY id")]
+    conn.close()
+
+    assert ergebnis["events_removed"] == 1
+    assert ids == [9101, 9103]

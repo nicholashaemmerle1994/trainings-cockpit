@@ -1,4 +1,4 @@
-"""Adapterbrücke für bestätigte Event-Writes — Update und Rückleseprüfung.
+"""Adapterbrücke für bestätigte Event-Writes — Update, Löschen und Rückleseprüfung.
 
 Der Dienst führt keinen eigenen HTTP-Aufruf aus. Er arbeitet gegen ein
 schmales Gateway. Im Produkt ist das der vorhandene ``IntervalsClient`` über
@@ -589,6 +589,8 @@ class IntervalsEventAdapter:
             raise TypeError("client muss update_event() anbieten.")
         if not callable(getattr(client, "upsert_events", None)):
             raise TypeError("client muss upsert_events() anbieten.")
+        if not callable(getattr(client, "delete_events", None)):
+            raise TypeError("client muss delete_events() anbieten.")
         self._client = client
 
     def read_event(self, remote_id: str) -> Mapping[str, Any]:
@@ -609,6 +611,9 @@ class IntervalsEventAdapter:
         if not isinstance(row, Mapping):
             raise GatewayError("Der Upsert-Pfad lieferte kein Event-Objekt.")
         return row
+
+    def delete_event(self, remote_id: str) -> object:
+        return self._client.delete_events([{"id": int(remote_id)}])
 
     def find_by_external_id(
         self, external_id: str, day: str

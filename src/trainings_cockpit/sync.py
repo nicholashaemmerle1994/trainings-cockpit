@@ -84,6 +84,12 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         n_wellness = db.upsert_wellness(
             conn, _seit_epoche(garmin.wellness, db.wellness_epoch(conn))
         )
+        # Eine in intervals.icu gelöschte Planung verschwindet auch aus dem
+        # Trainingsplaner. Sonst stünde eine Einheit im Kalender, die die
+        # Quelle nicht mehr kennt und die sich nicht mehr bearbeiten lässt.
+        n_events_verwaist = db.delete_unlisted_events(
+            conn, oldest, events_until, {str(event.get("id")) for event in events}
+        )
         n_events = db.upsert_events(conn, events)
 
         # Verläufe sind Zugabe: ein fehlender Verlauf kostet ein Bild, nicht den
@@ -125,6 +131,11 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             f" streams={n_streams}"
             + (f" dubletten={n_doppelt}" if n_doppelt else "")
             + (f" verwaist={n_verwaist}" if n_verwaist else "")
+            + (
+                f" events_verwaist={n_events_verwaist}"
+                if n_events_verwaist
+                else ""
+            )
             + garmin.note
             + verlauf_note,
         )
@@ -133,6 +144,7 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             "activities": n_activities + n_direkt,
             "wellness": n_wellness,
             "events": n_events,
+            "events_removed": n_events_verwaist,
             "streams": n_streams,
             "orphans": n_verwaist,
             "athlete": _pretty_name(athlete.get("name")),

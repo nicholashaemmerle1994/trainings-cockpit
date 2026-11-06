@@ -761,6 +761,14 @@ export interface PlannerSaveResponse {
   generated_at: string;
 }
 
+export interface PlannerDeleteResponse {
+  deleted: true;
+  event_id: number;
+  week: string;
+  remote: "deleted" | "missing";
+  message: string;
+}
+
 export interface PlannerOperation {
   operation_id: string;
   local_id: string;
@@ -784,6 +792,7 @@ export interface SyncResult {
   activities: number;
   wellness: number;
   events: number;
+  events_removed?: number;
   athlete: string;
   range: [string, string];
 }

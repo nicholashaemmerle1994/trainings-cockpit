@@ -18,6 +18,7 @@ import { usePlannerWeek, type PlannerSourceName } from "../plannerQuery";
 import { addDays, currentPlannerWeek } from "../routing";
 import type {
   PlannerDay,
+  PlannerDeleteResponse,
   PlannerEntry,
   PlannerSource,
   PlannerOperation,
@@ -194,6 +195,13 @@ export function Planner({
     // Nach bestätigtem Speichern die komplette Detailkette verlassen. Der
     // abgeschlossene Entwurf bleibt nicht als Browser-Zurück-Ziel stehen.
     onCloseDetails(result.week ?? week);
+  };
+
+  const handleDeleted = (result: PlannerDeleteResponse) => {
+    invalidate([week, result.week]);
+    onDataChanged?.();
+    // Die Woche bleibt stehen; nur das Blatt der gelöschten Einheit schließt.
+    onCloseDetails(result.week);
   };
 
   useEffect(() => {
@@ -417,6 +425,7 @@ export function Planner({
           online={online}
           onClose={onClosePlan}
           onSaved={handleSaved}
+          onDeleted={handleDeleted}
           onPending={onDataChanged}
           revision={revision}
         />

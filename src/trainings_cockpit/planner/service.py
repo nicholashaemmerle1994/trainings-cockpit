@@ -13,6 +13,7 @@ from contextlib import contextmanager
 
 from ..config import Settings
 from ..sources.intervals import IntervalsClient
+from .delete import EventDeleteService
 from .event_write import EventWriteService, IntervalsEventAdapter
 
 
@@ -42,4 +43,17 @@ def event_write_service(settings: Settings) -> Iterator[EventWriteService]:
         yield EventWriteService(IntervalsEventAdapter(client))
 
 
-__all__ = ["event_read_service", "event_write_service"]
+@contextmanager
+def event_delete_service(settings: Settings) -> Iterator[EventDeleteService]:
+    """Öffnet den vorhandenen Client für genau einen Löschversuch."""
+    if not settings.intervals_key:
+        raise RuntimeError("Kein intervals.icu-Key konfiguriert.")
+    with IntervalsClient(
+        settings.intervals_key,
+        settings.intervals_athlete,
+        settings.base_url,
+    ) as client:
+        yield EventDeleteService(IntervalsEventAdapter(client))
+
+
+__all__ = ["event_delete_service", "event_read_service", "event_write_service"]

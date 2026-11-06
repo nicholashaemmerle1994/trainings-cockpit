@@ -41,7 +41,11 @@ from .planner.operations import (
     retention_cutoff,
 )
 from .planner.save import SaveCoordinator, SaveOutcome, SaveState
-from .planner.service import event_read_service, event_write_service
+from .planner.service import (
+    event_delete_service,
+    event_read_service,
+    event_write_service,
+)
 from .planner.summaries import recorded_seconds
 from .planner.syncmerge import merge_confirmed_event
 from .planner.week import (
@@ -499,6 +503,40 @@ def new_plan_save(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
         _persist_confirmed(conn, outcome)
         return _save_response(outcome, time_zone=settings.time_zone, old_week=None)
+
+
+@app.delete("/api/planner/plan/{event_id}")
+def plan_delete(event_id: int) -> dict[str, Any]:
+    """Löscht eine geplante Einheit in intervals.icu und im lokalen Bestand.
+
+    Eine bereits extern gelöschte Einheit blockiert das Löschen nicht: der
+    404 der Quelle wird als „nicht mehr vorhanden“ gelesen und die lokale
+    Zeile trotzdem entfernt. Andere Quellenfehler lassen den Bestand stehen,
+    damit kein Löschvorgang unbemerkt nur halb ausgeführt wird.
+    """
+    settings = get_settings()
+    if not settings.intervals_key:
+        raise HTTPException(status_code=400, detail="Kein intervals.icu-Key konfiguriert.")
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        week = start_of_planner_week(str(row["date"])[:10], settings.time_zone)
+        try:
+            with event_delete_service(settings) as service:
+                outcome = service.delete(str(event_id))
+        except Exception as exc:  # noqa: BLE001 - Quellenfehler an die UI durchreichen
+            raise HTTPException(
+                status_code=502,
+                detail=f"Löschen in intervals.icu fehlgeschlagen: {str(exc)[:300]}",
+            ) from exc
+        db.delete_event(conn, event_id)
+        return {
+            "deleted": True,
+            "event_id": event_id,
+            "week": week,
+            **outcome.as_dict(),
+        }
 
 
 @app.get("/api/planner/plan/{event_id}/remote")
