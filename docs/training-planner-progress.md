@@ -2379,3 +2379,99 @@ keinen Produktiv-Write.
 ## 5. Nächstes Paket
 
 **P25 — Responsive Darstellung und Accessibility abnehmen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P25
+
+**Stand:** 06.11.2026  
+**Paket:** P25 — Responsive Darstellung und Accessibility  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `e6e1603`
+
+## 1. Ergebnis
+
+- **Breiten.** Heute, Planer und Verpflegung wurden bei 320, 390, 768 und
+  1440 px geöffnet. Zusätzlich wurden Planungsdetail, Inline-Editor,
+  Kindereditor, Pacebereich, Aktivitätsdetail, Wiederherstellung, Fehlerpanel
+  und Dirty-Dialog bei 320/390 px geprüft. Der Dokumenten-`scrollWidth` blieb
+  auf jeder Strecke exakt bei der Viewportbreite.
+- **Lange Inhalte.** Ein langer Trainingsname, ein langer ungebrochener Name,
+  mehrzeilige Tages- und Quellenhinweise sowie das Fehlerpanel wurden bei
+  320 px geprüft. Blöcke, Fehlermeldungen und Metadaten umbrechen innerhalb der
+  Karte; es entsteht kein horizontaler Überlauf. Mit vergrößerten
+  Text-Tokens (`--text-body` 20 px, Überschriften bis 42 px) blieb die Seite
+  bei 320 px ebenfalls ohne Überlauf.
+- **Kindereditoren und Pacefelder.** Der Kindereditor liegt eingerückt unter
+  seinem Block. Bei 320 px bleiben die Felder 243 px breit, werden einspaltig
+  gestapelt und bleiben vollständig bedienbar. Die Einrückung wird unter 360 px
+  reduziert, ohne den Block aus dem Raster zu schieben.
+- **Keyboard und Semantik.** Der gemeinsame `Sheet`-Rahmen setzt den Fokus in
+  das Blatt, hält Tab darin und gibt ihn beim Schließen zurück. Die
+  Aufbauliste verwendet `h3`/`h4`-Kopfzeilen mit `aria-expanded` und
+  `aria-controls`; jeder Editor ist eine benannte Region. Beim Tippen bleiben
+  Feld, Cursor und Auswahl stabil (geprüft mit fortlaufender Eingabe über eine
+  Projektionsantwort hinweg).
+- **Touch und Safe Areas.** Mobile Bedienknöpfe sind mindestens 44 px hoch;
+  die vorhandenen Safe-Area-Regeln an Tab-Leiste, Blatt und Hauptinhalt
+  bleiben erhalten. Ein Browser-Audit bei 320 px fand keine sichtbaren
+  Schaltfläche unter 44 × 44 px und kein unbeschriftetes Eingabefeld.
+- **Kontrast.** Die vorhandenen Tokens wurden auf `--bg-app`,
+  `--bg-surface`, `--bg-surface-raised` und `--bg-surface-interactive`
+  nachgemessen. Der niedrigste geprüfte Wert ist `--text-muted` auf
+  `--bg-surface-interactive` mit **5,20:1**; `--text-secondary` liegt bei
+  8,31–9,88:1, Akzent und Statusfarben zwischen 6,19:1 und 13,28:1. Es wurden
+  keine lokalen Farbwerte ergänzt.
+- **Bewegung und Live-Regionen.** Die globale
+  `prefers-reduced-motion`-Regel bleibt wirksam. Speichererfolg/-fehler werden
+  nur bei vorhandener Meldung als ruhige `status`-Region ausgegeben, nicht bei
+  jedem Tastendruck.
+- **Referenzvergleich.** Die echten Screenshots wurden mit P1–P8 verglichen.
+  Wochenansicht, Planungsdetail, Inline-Editor, Anlegeformular und
+  Sport-Dropdown behalten die freigegebene Wirkung: kein Editor oberhalb des
+  Aufbaus, höchstens ein offener Block, neutrale Kartenflächen und nur
+  sparsame Akzente. Die bestehende Aktivitätsdetailansicht behält Messkurve,
+  Kennzahlen, Zonenquelle und Quellenangabe unverändert.
+
+## 2. Geänderte Dateien
+
+- `web/src/components/PlanEditor.tsx` — `h3`/`h4`-Kopfzeilen für die
+  Akkordeonblöcke; keine Änderung an Feldlogik oder Projektion.
+- `web/src/styles.css` — 44-px-Bedienknöpfe mobil, 44-px-Ziele für Entfernen
+  und „Plan ansehen“, Umbruchschutz für lange Inhalte, reduzierte
+  Kindereinrückung unter 360 px.
+
+## 3. Prüfung
+
+| Befehl / Prüfung | Ergebnis |
+|---|---|
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+| `UV_CACHE_DIR=.uv-cache uv run pytest -q` | **374 passed**, 1 bestehende Starlette-Warnung |
+| Sichtprüfung 320 × 844, 390 × 844, 768 × 844, 1440 × 1000 | kein horizontaler Überlauf, keine abgeschnittenen Aktionen |
+| Planer/Detail/Editor bei 320 × 568 | Dialog und Speicherleiste vollständig erreichbar |
+| Touch-Audit 320 px | keine sichtbare Schaltfläche unter 44 px, keine unbeschrifteten Felder |
+| Font-Audit | alle Eingaben und Selects 16 px; kein iOS-Eingabezoom durch kleinere Felder |
+| Tastatur | Fokus im Blatt, Tab-Falle ohne versteckten Schließen-Knopf, Fokusrückgabe |
+| Kontrast | 5,20:1 bis 18,76:1 auf den geprüften Flächen |
+| Screenshot-Vergleich P1–P8 | freigegebene Hierarchie und Flächenwirkung erhalten |
+| Aktivitätsdetails | Messreihe, Zonen, Kennzahlen und Quelle unverändert |
+
+Screenshots liegen lokal unter `data/screens/` (nicht committet), unter anderem
+`p25-planner-320.png`, `p25-planner-390.png`, `p25-editor-390.png`,
+`p25-child-320.png`, `p25-guard-390.png`, `p25-errors-320.png`,
+`p25-recovery-390.png`, `p25-uncovered-390.png` sowie die 768-/1440-Pendants.
+
+## 4. Offene Punkte
+
+- Die Prüfung lief in Chromium, nicht auf einem echten iOS-Gerät oder in
+  Safari. Notch, dynamische Tastaturhöhe und Safari-eigene Zoomregeln sind
+  deshalb über CSS-Regeln und Viewporttests abgedeckt, nicht gerätephysikalisch
+  bestätigt.
+- Die Vorschau-Datenbank enthält keine bestätigte Plan-/Aktivitätsbeziehung.
+  Die Detailkette „Aktivität → Plan ansehen → Aktivität“ ist im Routing
+  umgesetzt, wurde mit den vorhandenen Daten aber ohne echte Beziehung
+  durchlaufen.
+- Screenshots sind Prüfmittel, keine Abgabeartefakte. Sie bleiben ungetrackt.
+
+## 5. Nächstes Paket
+
+**P26 — Fachliche und integrierte Endabnahme.**

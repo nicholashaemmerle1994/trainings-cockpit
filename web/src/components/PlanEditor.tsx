@@ -316,6 +316,8 @@ function PlanNodeBranch({
     projection?.draft.issues.some(
       (issue) => issue.node_id === node.node_id && issue.code === "open_end",
     );
+  const Heading = parentId ? "h4" : "h3";
+
   return (
     <li
       className={[
@@ -325,7 +327,8 @@ function PlanNodeBranch({
         .filter(Boolean)
         .join(" ")}
     >
-      <button
+      <Heading className="plan-node-heading">
+        <button
           type="button"
           id={headingId(node.node_id)}
           ref={(element) => registerHead(node.node_id, element)}
@@ -350,7 +353,8 @@ function PlanNodeBranch({
           <span className="plan-node__caret" aria-hidden="true">
             {open ? "⌃" : "›"}
           </span>
-      </button>
+        </button>
+      </Heading>
 
       {open &&
         (node.kind === "repeat" ? (
