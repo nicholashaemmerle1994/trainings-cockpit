@@ -29,6 +29,8 @@ from trainings_cockpit.planner import (
     UnsupportedNode,
     Value,
     ValueRange,
+    ZoneMetric,
+    ZoneTarget,
     activity_date,
     activity_reference_from_record,
     iter_nodes,
@@ -107,6 +109,126 @@ def test_f04_distanz_plus_geschaetzte_dauer_bleibt_distanz() -> None:
     assert work.target == PaceTarget(PaceUnit.SECONDS_PER_KM, Value(330))
 
 
+def test_distanz_mit_berechneter_dauer_ohne_quelle_bleibt_distanz() -> None:
+    # Die echte intervals.icu-Antwort auf eine vom Nutzer vorgegebene Distanz
+    # trägt beide Werte, aber keine Quelle: `distance` ist die Vorgabe,
+    # `duration` die von intervals berechnete Schätzung. Nur eine Quelle würde
+    # belegen, dass die Dauer die Ende-Bedingung ist.
+    event = {
+        "id": 9121,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-06T00:00:00",
+        "type": "Run",
+        "name": "10 km Zone 2",
+        "description": "- Obere Zone zwei 10000mtr Z2 HR",
+        "external_id": "fixture:distanz-berechnete-dauer",
+        "workout_doc": {
+            "steps": [
+                {
+                    "text": "Obere Zone zwei",
+                    "distance": 10000,
+                    "duration": 3000,
+                    "hr": {"units": "hr_zone", "value": 2},
+                }
+            ],
+            "distance": 10000,
+            "duration": 3000,
+        },
+    }
+
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        zone_sets={"Run": "run-hr"},
+    )
+    plan = result.plan
+
+    assert plan.editability is Editability.FULL
+    assert plan.is_structure_editable is True
+    assert RestrictionCode.UNKNOWN_CONTENT not in plan.restriction_codes
+    assert not any(isinstance(node, UnsupportedNode) for node in plan.nodes)
+
+    assert len(plan.nodes) == 1
+    node = plan.nodes[0]
+    assert isinstance(node, StepNode)
+    assert node.end == DistanceEnd(10000)
+    assert node.target == ZoneTarget(ZoneMetric.HEART_RATE, "run-hr-2", "run-hr")
+    assert result.source.raw == event
+
+
+def test_zeitvorgabe_mit_geschaetzter_distanz_bleibt_zeit() -> None:
+    # Gegenrichtung der expliziten Regel: intervals kennzeichnet die Distanz
+    # als Schätzung zur vorgegebenen Dauer. Dann bleibt die Dauer das Ende.
+    event = {
+        "id": 9122,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-06T00:00:00",
+        "type": "Run",
+        "name": "30 Minuten locker",
+        "description": "- 30m Z2 HR",
+        "workout_doc": {
+            "steps": [
+                {
+                    "text": "Dauerlauf",
+                    "duration": 1800,
+                    "distance": 5000,
+                    "distance_source": "estimated",
+                    "hr": {"units": "hr_zone", "value": 2},
+                }
+            ]
+        },
+    }
+
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        zone_sets={"Run": "run-hr"},
+    )
+    node = result.plan.nodes[0]
+
+    assert isinstance(node, StepNode)
+    assert node.end == TimeEnd(1800)
+    assert result.plan.editability is Editability.FULL
+
+
+def test_berechnete_felder_verdecken_echtes_unbekanntes_feld_nicht() -> None:
+    # Die Positivliste der berechneten Felder darf nur diese Felder ausnehmen.
+    # Ein zusätzliches, echtes unbekanntes Feld muss weiterhin begrenzen und
+    # in der Begründung stehen — sonst würde die Subtraktion zu breit wirken.
+    event = {
+        "id": 9123,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-06T00:00:00",
+        "type": "Run",
+        "name": "Gemischte Felder",
+        "workout_doc": {
+            "steps": [{"text": "Dauerlauf", "duration": 2700}],
+            "locales": [],
+            "distance": 0,
+            "duration": 2700,
+            "average_watts": 0,
+            "unknown_doc_field": {"keep": True},
+        },
+    }
+
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        zone_sets={"Run": "run-hr"},
+    )
+    plan = result.plan
+
+    assert plan.editability is Editability.METADATA_ONLY
+    assert RestrictionCode.UNKNOWN_CONTENT in plan.restriction_codes
+    assert plan.editability_reason is not None
+    assert "unknown_doc_field" in plan.editability_reason
+    assert "average_watts" not in plan.editability_reason
+    assert "Unbekannte Dokumentfelder: unknown_doc_field" in plan.editability_reason
+
+
 def test_f07_erhaelt_unbekanntes_und_begrenzt_die_editierbarkeit() -> None:
     event = load_remote("unknown-content.json")["event"]
     result = read_event("unknown-content.json")
@@ -133,6 +255,72 @@ def test_f07_erhaelt_unbekanntes_und_begrenzt_die_editierbarkeit() -> None:
     renamed = replace(plan, name="Sicher umbenannt")
     assert renamed.nodes == plan.nodes
     assert result.source.raw == event
+
+
+def test_zeit_workout_mit_berechneten_dokumentfeldern_bleibt_voll_editierbar() -> None:
+    # intervals.icu hängt an jedes `workout_doc` berechnete Zusammenfassungen an
+    # (Totals, Zonenzeiten, Leistungskennzahlen). Sie sind nicht Teil des
+    # Schreibvertrags und dürfen die Strukturbearbeitung nicht begrenzen.
+    event = {
+        "id": 9120,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-02T00:00:00",
+        "type": "Run",
+        "name": "Ruhiger Dauerlauf",
+        "description": "- Dauerlauf 45m Z2 HR",
+        "external_id": "fixture:derived-fields",
+        "workout_doc": {
+            "steps": [
+                {
+                    "text": "Dauerlauf",
+                    "duration": 2700,
+                    "hr": {"units": "hr_zone", "value": 2},
+                }
+            ],
+            "locales": [],
+            "options": {},
+            "distance": 0,
+            "duration": 2700,
+            "zoneTimes": [
+                {"id": "Z1", "secs": 0},
+                {"id": "Z2", "secs": 2700},
+                {"id": "Z3", "secs": 0},
+                {"id": "Z4", "secs": 0},
+                {"id": "Z5", "secs": 0},
+            ],
+            "strain_score": None,
+            "average_watts": 0,
+            "normalized_power": 0,
+            "variability_index": None,
+            "polarization_index": 0,
+        },
+    }
+
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        zone_sets={"Run": "run-hr"},
+    )
+    plan = result.plan
+
+    assert plan.editability is Editability.FULL
+    assert plan.is_structure_editable is True
+    assert plan.editability_reason is None
+    assert plan.restriction_codes == ()
+    assert RestrictionCode.UNKNOWN_CONTENT not in plan.restriction_codes
+
+    assert len(plan.nodes) == 1
+    node = plan.nodes[0]
+    assert isinstance(node, StepNode)
+    assert node.end == TimeEnd(2700)
+    assert node.target.zone_id == "run-hr-2"
+    assert node.target.zone_set_id == "run-hr"
+
+    # Die berechneten Felder bleiben unverändert im Roh-Snapshot erhalten.
+    assert result.source.raw == event
+    assert result.source.raw["workout_doc"]["zoneTimes"][1] == {"id": "Z2", "secs": 2700}
+    assert result.source.raw["workout_doc"]["duration"] == 2700
 
 
 def test_unbekannte_sportart_bleibt_neutral_und_lesbar() -> None:

@@ -256,7 +256,6 @@ export function Planner({
         label={resolved?.label ?? "Woche wird geladen"}
         calendarWeek={resolved?.calendar_week ?? null}
         currentWeek={currentWeek}
-        onChange={onWeekChange}
         onPrevious={() => onWeekChange(previous)}
         onNext={() => onWeekChange(next)}
       />
@@ -453,7 +452,6 @@ function WeekNavigator({
   label,
   calendarWeek,
   currentWeek,
-  onChange,
   onPrevious,
   onNext,
 }: {
@@ -461,7 +459,6 @@ function WeekNavigator({
   label: string;
   calendarWeek: number | null;
   currentWeek: string;
-  onChange: (week: string) => void;
   onPrevious: () => void;
   onNext: () => void;
 }) {
@@ -491,14 +488,12 @@ function WeekNavigator({
           <IconForward size={18} />
         </button>
       </div>
-      <button
-        type="button"
-        className="planner-week-current"
-        onClick={() => onChange(currentWeek)}
-        disabled={week === currentWeek}
-      >
-        Diese Woche
-      </button>
+      {/* Ruhiger Zustandstext: bestätigt nur, dass die aktuelle Woche angezeigt
+          wird. Kein Klickziel, kein Fokus-Ziel. In jeder anderen Woche bleibt
+          das Feld leer: kein Text, kein Knopf, keine Lücke. */}
+      {week === currentWeek && (
+        <span className="planner-week-current">Diese Woche</span>
+      )}
     </div>
   );
 }

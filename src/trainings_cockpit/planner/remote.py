@@ -59,8 +59,33 @@ from .primitives import LocalDate, require_local_date, require_text, require_tim
 from .projections import RecordedListEntry
 
 #: Bekannte Dokumentfelder, die der Adapter fachlich liest. Alles andere im
-#: `workout_doc` bleibt im Snapshot und begrenzt die Strukturbearbeitung.
+#: `workout_doc` bleibt im Snapshot; nur ein Feld außerhalb dieser Menge und
+#: außerhalb der berechneten `_DERIVED_DOC_FIELDS` begrenzt die Strukturbearbeitung.
 _KNOWN_DOC_FIELDS = {"steps", "notes", "name", "description", "type"}
+
+#: Felder, die intervals.icu selbst bei jedem `workout_doc` **berechnet** und
+#: zurückliefert — der Nutzer hat sie nicht verfasst. Es sind Zusammenfassungen
+#: über das ganze Workout (Summen aus Dauer/Distanz, Zonenzeiten, Belastungs-
+#: und Leistungskennzahlen sowie leere Hüllfelder wie `locales`/`options`), keine
+#: Abschnitte und keine Schreibabsicht. Sie stehen nicht im Schreibvertrag: der
+#: Serializer sendet nur `name`, `start_date_local`, `description`, `type`,
+#: `category` und `external_id` (siehe SERIALIZER-VERTRAG.md, Abschnitt 1).
+#: Deshalb dürfen sie die Strukturbearbeitung nicht begrenzen; sie bleiben
+#: unverändert im Roh-Snapshot erhalten.
+_DERIVED_DOC_FIELDS = frozenset(
+    {
+        "locales",
+        "options",
+        "distance",
+        "duration",
+        "zoneTimes",
+        "strain_score",
+        "average_watts",
+        "normalized_power",
+        "variability_index",
+        "polarization_index",
+    }
+)
 
 _SPECIAL_FIELDS = {
     "ramp": "Rampe",
@@ -208,7 +233,10 @@ def read_remote_event(
                 for index, step in enumerate(steps)
             ]
             nodes = tuple(parsed)
-        unknown_doc = sorted(set(doc) - _KNOWN_DOC_FIELDS)
+        # Nur ein Feld, das weder fachlich gelesen noch von intervals berechnet
+        # ist, ist wirklich unbekannt; berechnete Werte begrenzen die
+        # Editierbarkeit nicht, sie bleiben nur im Snapshot.
+        unknown_doc = sorted(set(doc) - _KNOWN_DOC_FIELDS - _DERIVED_DOC_FIELDS)
         if unknown_doc:
             state.restrict(
                 RestrictionCode.UNKNOWN_CONTENT,
@@ -443,13 +471,28 @@ def _parse_end(
 
     if distance is not None and distance > 0:
         if duration is not None and duration > 0:
-            # Beide Werte vorhanden: Nur eine nachgewiesene Quellenangabe sagt,
+            # Beide Werte vorhanden: Eine ausdrückliche Quellenangabe sagt,
             # welche Größe die Ende-Bedingung ist. `duration_source=estimated`
-            # ist der belegte F04-Fall: die Distanz bleibt das Ende.
+            # ist der belegte F04-Fall: die vorgegebene Distanz bleibt das
+            # Ende, die Dauer ist die berechnete Schätzung.
+            # `distance_source=estimated` ist der umgekehrte Fall einer
+            # Zeitvorgabe, deren Strecke intervals geschätzt hat.
             if duration_source in {"estimated", "distance"}:
                 return DistanceEnd(distance)
             if distance_source == "estimated":
                 return TimeEnd(duration)
+            if not duration_source and not distance_source:
+                # Die echte intervals-API nennt bei einer vom Nutzer
+                # vorgegebenen Distanz gar keine Quelle: der Distanzschritt
+                # kommt als `{"distance": 8000, "duration": 3235}` zurück.
+                # Bei einer Zeitvorgabe liefert sie dagegen nur die Dauer,
+                # etwa `{"duration": 600}` für einen Zeitabschnitt oder
+                # `{"duration": 2700}` für 45 Minuten Rad. Treffen beide
+                # Werte ohne Quelle zusammen, ist deshalb die Distanz die
+                # vorgegebene Ende-Bedingung und die Dauer die von intervals
+                # berechnete Schätzung; eine Schätzung darf das Ende nie
+                # bestimmen.
+                return DistanceEnd(distance)
             state.restrict(
                 RestrictionCode.UNKNOWN_CONTENT,
                 f"{path}: Distanz und Dauer ohne eindeutige Ende-Bedingung.",

@@ -22,6 +22,7 @@ from trainings_cockpit.planner import (
     GatewayConflict,
     GatewayNotFound,
     PaceTarget,
+    PaceUnit,
     PowerTarget,
     RepeatNode,
     SaveCoordinator,
@@ -210,6 +211,28 @@ def test_datumsaenderung_behaelt_uhrzeit_und_event_id() -> None:
     assert outcome.confirmed.date == "2026-11-12"
     assert outcome.confirmed.local_time == "09:15"
     assert plan_shape(outcome.confirmed)["nodes"] == plan_shape(plan)["nodes"]
+
+
+def test_update_distanz_ohne_quelle_bestaetigt_den_rundlauf() -> None:
+    # intervals liefert bei einer vorgegebenen Distanz Distanz plus berechnete
+    # Dauer ohne Quellenangabe. Auch ein Metadaten-Update muss diesen Rundlauf
+    # bestätigen; der Parser darf daraus keinen unbekannten Abschnitt machen.
+    plan, source, remote = _fixture("F04")
+    step = remote["workout_doc"]["steps"][1]["steps"][0]
+    step.pop("duration_source", None)
+    gateway = ControlledGateway({int(remote["id"]): remote})
+    service = EventWriteService(gateway)
+    draft = WorkoutDraft.start(plan, source)
+    draft.current = replace(plan, name="Bahnintervalle neu")
+
+    outcome = _activate(draft, service)
+
+    assert outcome.status.state is SaveState.SAVED
+    assert outcome.confirmed is not None
+    work = outcome.confirmed.nodes[1].children[0]
+    assert isinstance(work, StepNode)
+    assert work.end == DistanceEnd(1000)
+    assert work.target == PaceTarget(PaceUnit.SECONDS_PER_KM, Value(330))
 
 
 def test_strukturaenderung_gemischter_ziele_rundlauf() -> None:

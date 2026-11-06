@@ -138,7 +138,7 @@ Die HTML-Datei ist die **eigene Renderquelle** für die Screenshots. Sie dient d
 ![Eigene UI-Referenz – Wochenübersicht](references/06-approved-training-planner-week.png)
 
 **Datei:** `references/06-approved-training-planner-week.png`  
-**Verbindlich:** Wochenkopf mit Navigation zurück/vor/„Diese Woche“, Zusammenfassung, chronologische Tagesblöcke Montag bis Sonntag, mehrere Einheiten pro Tag, Ruhetag, Status und Plus am jeweiligen Tag. Der Haupttab öffnet diesen Planer. Keine zusätzliche eigenständige „Letzte 7 Tage“-Listenansicht.
+**Verbindlich:** Wochenkopf mit Navigation zurück/vor; „Diese Woche“ nur als ruhiger Zustandstext in der aktuellen Woche, in anderen Wochen bleibt die Zeile leer (D-82). Zusammenfassung, chronologische Tagesblöcke Montag bis Sonntag, mehrere Einheiten pro Tag, Ruhetag, Status und Plus am jeweiligen Tag. Der Haupttab öffnet diesen Planer. Keine zusätzliche eigenständige „Letzte 7 Tage“-Listenansicht.
 
 #### P2 — Detailansicht einer geplanten Einheit
 
@@ -208,7 +208,7 @@ Die HTML-Datei ist die **eigene Renderquelle** für die Screenshots. Sie dient d
 | Bereich | Verbindliches Verhalten |
 |---|---|
 | Wochenansicht | Montag bis Sonntag, alle sieben Tage, auch ohne Einheiten |
-| Navigation | Vorherige Woche, nächste Woche, „Diese Woche“ |
+| Navigation | Vorherige Woche, nächste Woche; „Diese Woche“ nur als Zustandstext in der aktuellen Woche, sonst bleibt die Zeile leer (D-82) |
 | Tagesinhalt | Beliebig mehrere Einheiten als Liste, keine künstliche Beschränkung auf eine Einheit |
 | Historienintegration | Vorhandene absolvierte Aktivitäten in der jeweiligen Woche zeigen; vorhandene Historienbausteine wiederverwenden |
 | Dashboard-Volumen | Karte „Letzte 7 Tage“ behält rollierenden Zeitraum und bestehende Kennzahlendefinitionen einschließlich Umfang |
@@ -284,7 +284,7 @@ Die spätere Nutzerfreigabe einer zurückhaltenderen, neutraleren Oberfläche is
 
 1. Bestehende App-Navigation mit aktivem Bereich „Trainingsplaner“.
 2. Titel und Wochenzeitraum.
-3. Kleine Buttons für vorherige und nächste Woche; „Diese Woche“ als sekundäre Aktion.
+3. Kleine Buttons für vorherige und nächste Woche; „Diese Woche“ als ruhiger Zustandstext, nur in der aktuellen Woche sichtbar, nicht als Aktion (D-82).
 4. Klar als „Absolviert“ bezeichnete Ist-Zusammenfassung; offene Planung in einer getrennten, zurückhaltenden Zeile ausweisen. Dafür die vorhandene Zusammenfassungskomponente soweit geeignet weiterverwenden.
 5. Sieben Tagesbereiche in chronologischer Reihenfolge.
 6. Pro Tageskopf Datum, Wochentag und Plus-Aktion.
