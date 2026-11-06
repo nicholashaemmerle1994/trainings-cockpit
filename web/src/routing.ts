@@ -3,6 +3,10 @@ import type { Tab } from "./tabs";
 export interface RouteState {
   tab: Tab;
   week?: string;
+  /** Event-ID einer Planung; getrennt von einer Aktivitätszeile. */
+  plan?: number;
+  /** Lokale Zeilen-ID der bestehenden kanonischen Aktivitätsansicht. */
+  unit?: number;
   /** Die URL war eine gespeicherte Altliste und wurde bereits ersetzt. */
   legacy: boolean;
 }
@@ -79,6 +83,24 @@ function firstParam(
   return null;
 }
 
+function positiveId(value: string | null | undefined): number | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function detailFromParams(params: URLSearchParams): { plan?: number; unit?: number } {
+  return {
+    plan: positiveId(params.get("plan") ?? params.get("planung")),
+    unit: positiveId(
+      params.get("einheit") ??
+        params.get("unit") ??
+        params.get("activity") ??
+        params.get("aktivitaet"),
+    ),
+  };
+}
+
 function plannerWeekFromParams(params: URLSearchParams): string | undefined {
   // Ein gespeicherter Bereich wird nach Abschnitt 5.7 über sein Enddatum
   // verankert. Ein einzelnes Datum landet in dessen Woche.
@@ -113,6 +135,7 @@ export function readRoute(location: Location = window.location): RouteState {
     return {
       tab: "planner",
       week: plannerWeekFromParams(params),
+      ...detailFromParams(params),
       legacy: path === "/woche" || path === "/week" || plannerTab,
     };
   }
@@ -122,9 +145,18 @@ export function readRoute(location: Location = window.location): RouteState {
   return { tab: "today", legacy: false };
 }
 
-export function routePath(tab: Tab, week?: string): string {
+export function routePath(
+  tab: Tab,
+  week?: string,
+  detail?: { plan?: number; unit?: number },
+): string {
   if (tab === "planner") {
-    return week ? `/planer?woche=${encodeURIComponent(week)}` : "/planer";
+    const params = new URLSearchParams();
+    if (week) params.set("woche", week);
+    if (detail?.plan != null) params.set("plan", String(detail.plan));
+    if (detail?.unit != null) params.set("einheit", String(detail.unit));
+    const query = params.toString();
+    return query ? `/planer?${query}` : "/planer";
   }
   if (tab === "fuel") return "/verpflegung";
   return "/";

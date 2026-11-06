@@ -2,6 +2,7 @@ import type {
   ActivitiesResponse,
   FuelPlan,
   Overview,
+  PlanDetail,
   PlannerWeekResponse,
   SessionDetail,
   SyncResult,
@@ -37,6 +38,8 @@ export const api = {
     request<PlannerWeekResponse>(
       `/api/planner${week ? `?week=${encodeURIComponent(week)}` : ""}`,
     ),
+  planDetail: (eventId: number) =>
+    request<PlanDetail>(`/api/planner/plan/${eventId}`),
   unit: (rowId: number) => request<UnitDetail>(`/api/unit/${rowId}`),
   fuel: (params: {
     minutes: number;

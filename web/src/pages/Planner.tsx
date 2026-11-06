@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { IconBack, IconForward, IconPlus } from "../components/icons";
+import { PlanSheet } from "../components/PlanSheet";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { SessionSheet } from "../components/SessionSheet";
 import { Sheet } from "../components/Sheet";
 import { StatusBadge } from "../components/ui";
 import { UnitSheet } from "../components/UnitSheet";
@@ -102,14 +102,24 @@ export function Planner({
   week,
   timeZone,
   onWeekChange,
+  openPlan,
+  openUnit,
+  onOpenPlan,
+  onOpenUnit,
+  onClosePlan,
+  onCloseUnit,
 }: {
   week: string;
   timeZone: string;
   onWeekChange: (week: string) => void;
+  openPlan: number | null;
+  openUnit: number | null;
+  onOpenPlan: (planId: number) => void;
+  onOpenUnit: (rowId: number) => void;
+  onClosePlan: () => void;
+  onCloseUnit: () => void;
 }) {
   const { data, loading, stale, error, retrying, reload } = usePlannerWeek(week);
-  const [openSession, setOpenSession] = useState<number | null>(null);
-  const [openUnit, setOpenUnit] = useState<number | null>(null);
   const [addDay, setAddDay] = useState<string | null>(null);
 
   const currentWeek = useMemo(
@@ -118,23 +128,22 @@ export function Planner({
   );
   const resolved = data?.week === week ? data : null;
 
-  const openEntry = (entry: PlannerEntry) => {
-    if (entry.kind === "recorded") {
-      const rowId = entry.activity?.row_id ?? entry.activity_row_id;
-      if (rowId != null) setOpenUnit(rowId);
-      return;
+  const unitPlan = useMemo(() => {
+    if (openUnit == null || !resolved) return null;
+    for (const entry of resolved.entries) {
+      if (entry.kind !== "linked") continue;
+      const carries =
+        entry.activity_row_id === openUnit ||
+        entry.activity?.row_id === openUnit ||
+        (entry.activities ?? []).some(
+          (activity) => activity.activity_row_id === openUnit,
+        );
+      if (carries && entry.plan_id != null) {
+        return { id: entry.plan_id, name: entry.plan?.name ?? entry.name };
+      }
     }
-    if (entry.kind === "linked") {
-      const rowId =
-        entry.activities?.[0]?.activity?.row_id ??
-        entry.activities?.[0]?.activity_row_id ??
-        entry.activity?.row_id ??
-        entry.activity_row_id;
-      if (rowId != null) setOpenUnit(rowId);
-      return;
-    }
-    if (entry.plan_id != null) setOpenSession(entry.plan_id);
-  };
+    return null;
+  }, [openUnit, resolved]);
 
   const previous = addDays(week, -7);
   const next = addDays(week, 7);
@@ -196,10 +205,10 @@ export function Planner({
                 key={day.date}
                 day={day}
                 data={resolved}
-                onOpen={openEntry}
+                onOpenPlan={onOpenPlan}
+                onOpenUnit={onOpenUnit}
                 onAdd={setAddDay}
-              />
-            ))}
+              />))}
           </div>
 
           <p className="sheet-src planner-src">
@@ -208,11 +217,17 @@ export function Planner({
         </>
       )}
 
-      {openSession != null && (
-        <SessionSheet id={openSession} onClose={() => setOpenSession(null)} />
-      )}
       {openUnit != null && (
-        <UnitSheet rowId={openUnit} onClose={() => setOpenUnit(null)} />
+        <UnitSheet
+          rowId={openUnit}
+          onClose={onCloseUnit}
+          plan={unitPlan}
+          onOpenPlan={onOpenPlan}
+          top={openPlan == null}
+        />
+      )}
+      {openPlan != null && (
+        <PlanSheet eventId={openPlan} onClose={onClosePlan} />
       )}
       {addDay != null && <AddNotice day={addDay} onClose={() => setAddDay(null)} />}
     </div>
@@ -307,12 +322,14 @@ function PlannerSummary({ data }: { data: PlannerWeekResponse }) {
 function PlannerDaySection({
   day,
   data,
-  onOpen,
+  onOpenPlan,
+  onOpenUnit,
   onAdd,
 }: {
   day: PlannerDay;
   data: PlannerWeekResponse;
-  onOpen: (entry: PlannerEntry) => void;
+  onOpenPlan: (planId: number) => void;
+  onOpenUnit: (rowId: number) => void;
   onAdd: (day: string) => void;
 }) {
   const headingId = `planner-day-${day.date}`;
@@ -338,7 +355,12 @@ function PlannerDaySection({
       )}
 
       {day.entries.map((entry) => (
-        <EntryRows key={entry.key} entry={entry} onOpen={onOpen} />
+        <EntryRows
+          key={entry.key}
+          entry={entry}
+          onOpenPlan={onOpenPlan}
+          onOpenUnit={onOpenUnit}
+        />
       ))}
     </section>
   );
@@ -346,10 +368,12 @@ function PlannerDaySection({
 
 function EntryRows({
   entry,
-  onOpen,
+  onOpenPlan,
+  onOpenUnit,
 }: {
   entry: PlannerEntry;
-  onOpen: (entry: PlannerEntry) => void;
+  onOpenPlan: (planId: number) => void;
+  onOpenUnit: (rowId: number) => void;
 }) {
   if (entry.kind === "completionReference") {
     return (
@@ -357,7 +381,9 @@ function EntryRows({
         sport={entrySport(entry)}
         name={entryName(entry)}
         meta={`${entry.compact_text ?? "Erledigt"} · Planung bleibt erhalten`}
-        onClick={() => onOpen(entry)}
+        onClick={() => {
+          if (entry.plan_id != null) onOpenPlan(entry.plan_id);
+        }}
         trailing={<StatusBadge tone="positive">Erledigt</StatusBadge>}
       />
     );
@@ -368,7 +394,7 @@ function EntryRows({
       entry.activities && entry.activities.length > 0
         ? entry.activities
         : entry.activity
-          ? [entry as PlannerEntry]
+          ? [entry]
           : [];
     return (
       <>
@@ -378,7 +404,10 @@ function EntryRows({
             sport={entrySport(view)}
             name={view.name || entryName(view)}
             meta={linkedMeta(view)}
-            onClick={() => onOpen(view)}
+            onClick={() => {
+              const rowId = view.activity?.row_id ?? view.activity_row_id;
+              if (rowId != null) onOpenUnit(rowId);
+            }}
             trailing={<StatusBadge tone="positive">Erledigt</StatusBadge>}
           />
         ))}
@@ -392,7 +421,9 @@ function EntryRows({
         sport={entrySport(entry)}
         name={entryName(entry)}
         meta={plannedMeta(entry)}
-        onClick={() => onOpen(entry)}
+        onClick={() => {
+          if (entry.plan_id != null) onOpenPlan(entry.plan_id);
+        }}
         trailing={<StatusBadge>Geplant</StatusBadge>}
       />
     );
@@ -403,7 +434,10 @@ function EntryRows({
       sport={entrySport(entry)}
       name={entryName(entry)}
       meta={actualMeta(entry)}
-      onClick={() => onOpen(entry)}
+      onClick={() => {
+        const rowId = entry.activity?.row_id ?? entry.activity_row_id;
+        if (rowId != null) onOpenUnit(rowId);
+      }}
       trailing={<StatusBadge tone="positive">Erledigt</StatusBadge>}
     />
   );

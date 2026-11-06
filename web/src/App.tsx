@@ -31,7 +31,9 @@ function canonicalRoute(route: RouteState, timeZone?: string): string | null {
     const week =
       route.week ?? readStoredPlannerWeek() ?? currentPlannerWeek(new Date(), timeZone);
     const monday = mondayOf(week);
-    if (route.legacy || route.week !== monday) return routePath("planner", monday);
+    if (route.legacy || route.week !== monday) {
+      return routePath("planner", monday, { plan: route.plan, unit: route.unit });
+    }
     return null;
   }
   if (route.legacy) return routePath(route.tab);
@@ -91,6 +93,52 @@ export default function App() {
     window.history.replaceState(null, "", routePath("planner", week));
     setRoute(readRoute());
   }, []);
+
+  const plannerWeek = useCallback((): string => {
+    const week =
+      route.week ??
+      readStoredPlannerWeek() ??
+      currentPlannerWeek(new Date(), data?.time_zone);
+    return mondayOf(week);
+  }, [route.week, data?.time_zone]);
+
+  const openPlan = useCallback(
+    (planId: number) => {
+      window.history.pushState(
+        null,
+        "",
+        routePath("planner", plannerWeek(), { plan: planId, unit: route.unit }),
+      );
+      setRoute(readRoute());
+    },
+    [plannerWeek, route.unit],
+  );
+
+  const openUnit = useCallback(
+    (rowId: number) => {
+      window.history.pushState(
+        null,
+        "",
+        routePath("planner", plannerWeek(), { unit: rowId }),
+      );
+      setRoute(readRoute());
+    },
+    [plannerWeek],
+  );
+
+  const closePlan = useCallback(() => {
+    window.history.replaceState(
+      null,
+      "",
+      routePath("planner", plannerWeek(), { unit: route.unit }),
+    );
+    setRoute(readRoute());
+  }, [plannerWeek, route.unit]);
+
+  const closeUnit = useCallback(() => {
+    window.history.replaceState(null, "", routePath("planner", plannerWeek()));
+    setRoute(readRoute());
+  }, [plannerWeek]);
 
   const load = useCallback(async (): Promise<Overview | null> => {
     try {
@@ -180,7 +228,7 @@ export default function App() {
   }
 
   const pulling = pull > 0 && !syncing;
-  const plannerWeek =
+  const selectedWeek =
     route.week ??
     readStoredPlannerWeek() ??
     currentPlannerWeek(new Date(), data.time_zone);
@@ -209,9 +257,15 @@ export default function App() {
         {route.tab === "today" && <Today data={data} />}
         {route.tab === "planner" && (
           <Planner
-            week={plannerWeek}
+            week={selectedWeek}
             timeZone={data.time_zone}
             onWeekChange={changeWeek}
+            openPlan={route.plan ?? null}
+            openUnit={route.unit ?? null}
+            onOpenPlan={openPlan}
+            onOpenUnit={openUnit}
+            onClosePlan={closePlan}
+            onCloseUnit={closeUnit}
           />
         )}
         {route.tab === "fuel" && <Fuel />}

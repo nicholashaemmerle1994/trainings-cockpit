@@ -336,6 +336,79 @@ export interface PlannerWeekResponse {
   generated_at: string;
 }
 
+export interface PlanNodeEnd {
+  kind: "time" | "distance";
+  seconds?: number;
+  metres?: number;
+  text: string;
+}
+
+export interface PlanNodeTarget {
+  kind: string;
+  text: string;
+  metric?: string;
+  unit?: string;
+  zone_id?: string;
+  zone_set_id?: string | null;
+  values?: { kind: string; value?: number; min?: number; max?: number } | null;
+}
+
+export interface PlanNode {
+  kind: "step" | "repeat" | "unsupported";
+  node_id: string;
+  name?: string;
+  label?: string;
+  role?: string;
+  end?: PlanNodeEnd;
+  target?: PlanNodeTarget;
+  notes?: string | null;
+  source_ref?: string | null;
+  repetitions?: number;
+  skip_final_recovery?: boolean;
+  children?: PlanNode[];
+  reason?: string;
+}
+
+export interface PlanRights {
+  editability: "full" | "metadataOnly" | "readOnly";
+  label: string;
+  reason: string | null;
+  restriction_codes: string[];
+  can_edit_structure: boolean;
+  can_edit_metadata: boolean;
+  can_write: boolean;
+  writes_on_open: false;
+}
+
+export interface PlanDetail {
+  kind: "planned";
+  id: number;
+  remote_id: string | null;
+  local_id: string;
+  reference: string;
+  name: string;
+  sport: string;
+  sport_label: string;
+  date: string;
+  time: string | null;
+  time_zone: string;
+  notes: string | null;
+  rights: PlanRights;
+  known: {
+    seconds: number;
+    metres: number;
+    executions: number;
+    has_unknown: boolean;
+    first_end: string | null;
+    duration_text: string | null;
+    distance_text: string | null;
+    text: string;
+  };
+  nodes: PlanNode[];
+  source: { name: string; remote_id: string | null; read_only: boolean };
+  fetched_at: string;
+}
+
 export interface ZoneShare {
   zone: number;
   seconds: number;

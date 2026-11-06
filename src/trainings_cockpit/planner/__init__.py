@@ -26,6 +26,7 @@ from .dates import (
     week_days,
     week_label,
 )
+from .details import build_plan_detail
 from .identities import (
     ActivityId,
     ActivityReference,
@@ -250,6 +251,7 @@ __all__ = [
     "WeekProjection",
     "WeekSummary",
     "WorkoutValidation",
+    "build_plan_detail",
     "build_week_projection",
     "build_week_summary",
     "calculate_known_totals",

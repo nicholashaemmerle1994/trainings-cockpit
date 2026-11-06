@@ -1066,3 +1066,119 @@ Produktivdaten.
 ## 5. Nächstes Paket
 
 **P08 — Planungsdetails und bestehende Aktivitätsdetails verbinden.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P08
+
+**Stand:** 06.11.2026
+**Paket:** P08 — Planungsdetails und bestehende Aktivitätsdetails verbinden
+**Basis:** Branch `feature/trainingsplaner`, HEAD `0176c6a`
+**Umfang:** Typabhängiges Öffnen von Planungen und Aufzeichnungen, lesende
+Planungsdetails mit Notizen und Berechtigungen, „Plan ansehen“ für bestätigte
+Beziehungen, Rückwege über Woche und Planbezug. Kein Schreibpfad.
+
+## 1. Ergebnis
+
+- Eine Planung öffnet über ihre vorhandene Event-ID, eine Aufzeichnung über
+  die vorhandene lokale Aktivitätszeile (`row_id`). Die Wege bleiben getrennt;
+  eine Aktivitäts-ID wird nie als Event-ID verwendet.
+- `GET /api/planner/plan/{event_id}` (Alias `GET /api/plan/{event_id}`)
+  liefert die Leseansicht: Name, Sport, Datum, Uhrzeit, vorhandene Notiz,
+  sichere bekannte Umfänge, Berechtigungen und Aufbau. Der
+  Endpunkt liest ausschließlich; Öffnen und Auswahl erzeugen keinen Write.
+- Die Planungsdetails zeigen `Quelle erlaubt Bearbeitung`, `Quelle erlaubt
+  Metadaten` oder `Nur lesbar` samt Grund und Erhaltungsgrenzen. Es gibt
+  bewusst keinen Bearbeiten-Knopf; der Editor folgt in P10–P16.
+- Aufbau und Wiederholungsgruppen werden ohne Eingabefelder gerendert.
+  Nicht unterstützte Knoten bleiben mit Quellreferenz und konkreter Erklärung
+  sichtbar. Eine Wiederholungsgruppe zeigt ihre Kinder einmal, nicht als
+  vielfach dupliziertes Formular.
+- Aufzeichnungen öffnen weiterhin das bestehende `UnitSheet` über
+  `/api/unit/{row_id}`. Messreihen, Zonen, Zahlen und Quellen bleiben
+  unverändert. `UnitSheet` bekam nur eine optionale Planreferenz und den
+  Knopf „Plan ansehen“; der bestehende Aktivitätsvertrag wurde nicht ersetzt.
+- Bei einer bestätigten Beziehung öffnet der Eintrag primär die Aufzeichnung;
+  der Plan bleibt über „Plan ansehen“ erreichbar. Mehrere Aufzeichnungen
+  einer Beziehung bleiben als getrennte Zeilen und getrennte Detailziele
+  erreichbar.
+- Die URL trägt `woche`, optional `plan` und `einheit`. Öffnen legt einen
+  History-Eintrag an, Schließen ersetzt den aktuellen Eintrag. „Plan ansehen“
+  ergänzt den Planbezug, ohne die Aktivitätsansicht zu verlieren; Schließen
+  führt zurück zur Aufzeichnung, danach zur gewählten Woche. Die gewählte
+  Woche und die Scrollposition der Woche bleiben erhalten.
+- Bestehende direkte Aktivitätslinks werden über `?einheit=<row_id>` weiter
+  unterstützt. Die frühere App hatte keine eigenen Aktivitäts-URLs; der neue
+  Parameter ist deshalb kein Ersatz für einen bestehenden Pfad, sondern die
+  stabile typisierte Detailadresse des Planers.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/details.py` — lesende Detailprojektion,
+  Rechte, Notizen und Knoten.
+- `src/trainings_cockpit/api.py` — `GET /api/planner/plan/{id}` und
+  `GET /api/plan/{id}`.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `web/src/components/PlanSheet.tsx` — Planungsdetails und Aufbau ohne
+  Eingabefelder.
+- `web/src/components/UnitSheet.tsx` — optionale Planreferenz, „Plan ansehen“,
+  sonst unveränderte Aktivitätsdetails.
+- `web/src/pages/Planner.tsx` — typabhängiges Öffnen, mehrere Aufzeichnungen,
+  Planbezug und Rückwege.
+- `web/src/routing.ts`, `web/src/App.tsx` — `plan`/`einheit` in der Route,
+  History-Konventionen und Erhalt der gewählten Woche.
+- `web/src/api.ts`, `web/src/types.ts` — Detailvertrag.
+- `src/trainings_cockpit/plan.py` — `work` bleibt auch ohne Ziel definiert;
+  ein Plan ohne Ziel darf die Tageskarte nicht mit `KeyError` abbrechen.
+- `tests/test_planner_details.py` — Detailendpunkt, Rechte, Notizen,
+  Identität, unveränderter Rohinhalt und 404.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_details.py -q` | **3 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **250 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/plan.py src/trainings_cockpit/api.py src/trainings_cockpit/planner tests/test_planner_details.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+
+**Lesende Abnahme:** Separate lokale Vorschau-Datenbank auf
+`127.0.0.1:8030`, keine echten Quellen, keine Schreibaktion. Geprüft bei
+390 × 844 und 1440 × 900:
+
+- F02 „Gemischte HF- und Pace-Intervalle“ als Planung geöffnet: Name, Sport,
+  Datum, 36 min, vier Wiederholungen, Aufbau, Planungsnotiz und Berechtigung
+  sichtbar;
+- F04 „Bahnintervalle mit Distanz“ zeigt die sichere Teilmenge
+  `28 min + 4 km` und vier Wiederholungen;
+- F07 als Import mit unbekannten Inhalten: konkrete Erklärung und
+  `metadataOnly`, kein stilles Weglassen;
+- bestehende Aufzeichnung „Lockerer Dauerlauf“: dieselbe Aktivitätsansicht mit
+  gemessener Kurve, Ist-Zahlen und Quelle;
+- Deep-Link `?woche=2026-11-02&plan=9102` öffnet die Planung, Schließen führt
+  zurück auf die Woche; `?einheit=2` öffnet die bestehende Aktivitätsansicht;
+- kein horizontaler Überlauf, keine Browser-Fehler.
+
+Screenshots liegen lokal unter `data/screens/` (`p08-plan-detail-390.png`,
+`p08-plan-detail-1440.png`, `p08-plan-notes-390.png`,
+`p08-plan-notes-1440.png`, `p08-activity-detail-1440.png`) und sind keine
+Produktivdaten. P09 ergänzt den Graph in derselben Detailansicht.
+
+## 4. Offene Punkte
+
+- Der Produktpfad liefert weiterhin keine persistierte bestätigte Beziehung;
+  die Darstellung „Plan ansehen“ ist über den vorhandenen
+  `TrainingRelationship`-Vertrag gebaut und durch die P05/P06-Projektion
+  abgesichert. Ohne Beziehung bleiben Plan und Aufzeichnung getrennt.
+- Die Planungsdetails sind rein lesend. Bearbeiten, Feldpuffer und Speichern
+  folgen in P10–P22; es gibt keinen Schein-Editor und keinen deaktivierten
+  Speichern-Knopf.
+- Der Graph ist noch nicht Teil des `SessionSheet` auf der Heute-Seite. Die
+  bestehende Aktivitätskurve bleibt dort unverändert; P09 bindet den neuen
+  Graph ausschließlich an die Planungsdetails.
+
+## 5. Nächstes Paket
+
+**P09 — Trainingsverlauf als reine Darstellung integrieren.**
+
+---

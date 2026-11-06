@@ -2854,6 +2854,255 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   outline-offset: 2px;
 }
 
+/* ---------------------------------------------------- Planungsdetails / Verlauf */
+
+
+.plan-state,
+.unit-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.plan-rights {
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--line);
+  font-size: var(--text-micro);
+  color: var(--text-3);
+}
+
+.plan-rights--full {
+  color: var(--positive);
+}
+
+.plan-rights--metadataOnly {
+  color: var(--warning);
+}
+
+.plan-rights--readOnly {
+  color: var(--text-2);
+}
+
+.plan-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.plan-hero strong {
+  display: block;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.plan-hero__hint {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 11px;
+  color: var(--warning);
+}
+
+.plan-hero__side {
+  flex: none;
+  max-width: 45%;
+  font-size: var(--text-micro);
+  line-height: 1.4;
+  color: var(--text-3);
+  text-align: right;
+}
+
+.plan-structure h2 {
+  margin-bottom: var(--space-2);
+}
+
+.plan-nodes,
+.plan-node__children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plan-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.plan-node__children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--space-2);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--line);
+}
+
+.plan-node-item {
+  min-width: 0;
+}
+
+.plan-node {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 56px;
+  padding: 10px var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-inner);
+  background: var(--card);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+}
+
+button.plan-node {
+  cursor: pointer;
+  transition: background-color 140ms var(--ease), border-color 140ms var(--ease);
+}
+
+button.plan-node:hover {
+  background: var(--raised);
+}
+
+.plan-node--selected {
+  border-color: var(--accent-line);
+  background: var(--bg-surface-interactive);
+}
+
+.plan-node__index {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.plan-node__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.plan-node__name {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.plan-node__meta {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.plan-node__caret {
+  flex: none;
+  font-size: 17px;
+  color: var(--text-3);
+}
+
+.plan-node--unsupported {
+  border-style: dashed;
+  background: transparent;
+}
+
+.plan-node__badge {
+  flex: none;
+  max-width: 42%;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--warning);
+  text-align: right;
+}
+
+.plan-note {
+  margin: var(--space-1) 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.plan-note--text {
+  white-space: pre-wrap;
+}
+
+.plan-note--muted {
+  color: var(--text-3);
+}
+
+.unit-plan-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-height: 40px;
+  padding: 5px var(--space-3);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--accent-hover);
+  font: inherit;
+  font-size: var(--text-micro);
+  font-weight: 500;
+}
+
+.unit-plan-link:hover {
+  background: var(--accent-wash);
+}
+
+.unit-plan-link__hint {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit-plan-link:focus-visible,
+button.plan-node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .plan-hero strong {
+    font-size: 27px;
+  }
+
+  .plan-hero__side {
+    max-width: 48%;
+  }
+
+
+  .plan-node {
+    gap: var(--space-2);
+    padding: 9px 10px;
+  }
+
+  .plan-node__index {
+    width: 24px;
+    height: 24px;
+  }
+}
+
 /* ------------------------------------------------------------------ Bewegung */
 
 @media (prefers-reduced-motion: reduce) {

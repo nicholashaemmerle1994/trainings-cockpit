@@ -61,7 +61,15 @@ SPORT_LABELS = {
 }
 
 #: Zonen als Prozent der Schwelle, wenn der Plan eine Zone statt eines Bandes nennt.
-HR_ZONES = {1: (50, 60), 2: (60, 70), 3: (70, 80), 4: (80, 90), 5: (90, 100), 6: (100, 110), 7: (110, 130)}
+HR_ZONES = {
+    1: (50, 60),
+    2: (60, 70),
+    3: (70, 80),
+    4: (80, 90),
+    5: (90, 100),
+    6: (100, 110),
+    7: (110, 130),
+}
 
 
 def sport_family(sport: str | None) -> str | None:
@@ -114,7 +122,11 @@ def _to_bpm(target: dict[str, Any], entry: dict[str, Any] | None) -> dict[str, A
             high = float(zones[number - 1])
             # Die untere Grenze von Zone 1 steht in keiner Liste; intervals rechnet
             # sie ab der halben Maximalfrequenz.
-            low = float(zones[number - 2]) if number >= 2 else float(round((max_hr or zones[0]) * 0.5))
+            low = (
+                float(zones[number - 2])
+                if number >= 2
+                else float(round((max_hr or zones[0]) * 0.5))
+            )
             return {**target, "lo": low, "hi": high, "unit": "bpm"}
     if max_hr:
         low = float(round(max_hr * target["lo"] / 100))
@@ -123,7 +135,11 @@ def _to_bpm(target: dict[str, Any], entry: dict[str, Any] | None) -> dict[str, A
     return target
 
 
-def _to_watts(target: dict[str, Any], entry: dict[str, Any] | None, sport: str | None) -> dict[str, Any]:
+def _to_watts(
+    target: dict[str, Any],
+    entry: dict[str, Any] | None,
+    sport: str | None,
+) -> dict[str, Any]:
     """Prozent der Schwelle in Watt übersetzen. Ohne FTP bleibt es Prozent."""
     if not entry or target["unit"] != "%" or target.get("basis") != "ftp":
         return target
@@ -227,7 +243,10 @@ def _target_text(target: dict[str, Any] | None, distance_m: float | None) -> str
         elif target["unit"] == "W":
             parts.append(f"{target['lo']:.0f}–{target['hi']:.0f} W")
         elif target["unit"] == "%":
-            parts.append(f"{target['lo']:.0f}–{target['hi']:.0f} % {UNIT_LABEL.get(target['basis'] or '', '')}".strip())
+            suffix = UNIT_LABEL.get(target["basis"] or "", "")
+            parts.append(
+                f"{target['lo']:.0f}–{target['hi']:.0f} % {suffix}".strip()
+            )
         elif target["unit"] == "min/km":
             parts.append(f"{target['lo']:.2f}–{target['hi']:.2f} min/km")
     return " · ".join(parts)
@@ -260,6 +279,13 @@ def _flatten(steps: list[dict[str, Any]], out: list[dict[str, Any]], depth: int 
                 "cooldown": bool(step.get("cooldown")),
             }
         )
+
+
+def _without_work(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Ohne Ziel gibt es keine Arbeitsspitze; ``work`` bleibt trotzdem definiert."""
+    for step in steps:
+        step.setdefault("work", False)
+    return steps
 
 
 def _nice_ticks(low: float, high: float, unit: str) -> list[int]:
@@ -314,7 +340,7 @@ def parse_workout(
 
     units = [s["target"]["unit"] for s in flat if s["target"]]
     if not units:
-        return flat, None
+        return _without_work(flat), None
     if "W" in units:
         unit = "W"
     elif "bpm" in units:
@@ -323,7 +349,7 @@ def parse_workout(
         unit = "%"
     bands = [s["target"] for s in flat if s["target"] and s["target"]["unit"] == unit]
     if not bands:
-        return flat, None
+        return _without_work(flat), None
 
     peak = max(b["hi"] for b in bands)
     for step in flat:
@@ -535,7 +561,11 @@ def done_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def session(conn: Any, event: dict[str, Any], speeds_kmh: dict[str, float] | None = None) -> dict[str, Any]:
+def session(
+    conn: Any,
+    event: dict[str, Any],
+    speeds_kmh: dict[str, float] | None = None,
+) -> dict[str, Any]:
     """Alles, was die Einheit auf dem Bildschirm braucht."""
     speeds_kmh = speeds_kmh or speeds(conn)
     numbers = planned(event, speeds_kmh, _profile_for(sport_profiles(conn), event.get("sport")))
@@ -554,7 +584,11 @@ def session(conn: Any, event: dict[str, Any], speeds_kmh: dict[str, float] | Non
     }
 
 
-def session_row(conn: Any, event: dict[str, Any], speeds_kmh: dict[str, float] | None = None) -> dict[str, Any]:
+def session_row(
+    conn: Any,
+    event: dict[str, Any],
+    speeds_kmh: dict[str, float] | None = None,
+) -> dict[str, Any]:
     """Kurzfassung für die Tageskarte."""
     speeds_kmh = speeds_kmh or speeds(conn)
     numbers = planned(event, speeds_kmh)

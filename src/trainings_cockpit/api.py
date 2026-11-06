@@ -26,6 +26,7 @@ from .planner.dates import (
     planner_week_range,
     rolling_dashboard_range,
 )
+from .planner.details import build_plan_detail
 from .planner.summaries import recorded_seconds
 from .planner.week import (
     SOURCE_COMPLETE,
@@ -238,6 +239,27 @@ def planner_week(
     """Alias für Verlinkungen, die den Wochenvertrag ausdrücklich nennen."""
     with connection() as conn:
         return _planner_week(conn, _week_parameter(week, woche, von, bis))
+
+
+@app.get("/api/planner/plan/{event_id}")
+@app.get("/api/plan/{event_id}")
+def plan_detail(event_id: int) -> dict[str, Any]:
+    """Planungsdetails über die vorhandene Event-Identität, rein lesend."""
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        settings = get_settings()
+        account_id, athlete_id = account_context(conn)
+        try:
+            return build_plan_detail(
+                row,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
 
 
 @app.get("/api/session/{event_id}")
