@@ -1119,78 +1119,6 @@ h2 {
   white-space: nowrap;
 }
 
-/* --------------------------------------------------------------------- Listen */
-
-.acts-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
-}
-
-table.list {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-table.list th {
-  padding: 0 0 var(--space-2);
-  border-bottom: 1px solid var(--line);
-  font-size: 10.5px;
-  font-weight: 400;
-  color: var(--text-3);
-  text-align: left;
-}
-
-table.list th.r,
-table.list td.r {
-  text-align: right;
-}
-
-table.list td {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 13px;
-}
-
-table.list tr:last-child td {
-  border-bottom: 0;
-}
-
-table.list .date {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--text-3);
-  white-space: nowrap;
-}
-
-table.list .sport {
-  color: var(--text-3);
-}
-
-table.list .num {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-
-table.list .load {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.col-date {
-  width: 116px;
-}
-
-.col-num {
-  width: 92px;
-}
-
 /* ----------------------------------------------------------------- Verpflegung */
 
 .setup {
@@ -1366,10 +1294,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   background: var(--raised);
   color: var(--text);
   box-shadow: inset 0 1px 0 var(--line-strong);
-}
-
-.load-more {
-  align-self: center;
 }
 
 .chip .chip-count {
@@ -2002,49 +1926,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   }
   .surround-text {
     grid-column: 1 / -1;
-  }
-
-  /* Listen werden zu Blöcken: eine Einheit, zwei Zeilen */
-  table.list thead {
-    display: none;
-  }
-  table.list,
-  table.list tbody,
-  table.list tr,
-  table.list td {
-    display: block;
-  }
-  table.list tr {
-    padding: 12px 0;
-    border-bottom: 1px solid var(--line);
-  }
-  table.list tr:last-child {
-    border-bottom: 0;
-  }
-  table.list td {
-    padding: 0;
-    border-bottom: 0;
-  }
-  table.list td.date {
-    font-size: 11px;
-  }
-  table.list td .sport {
-    display: none;
-  }
-  table.list td.r {
-    display: inline-block;
-    margin-top: var(--space-1);
-    text-align: left;
-  }
-  table.list td.r + td.r {
-    margin-left: 14px;
-  }
-  table.list td.load {
-    float: right;
-    margin-top: var(--space-1);
-  }
-  table.list td.hide-m {
-    display: none;
   }
 
   .tabbar {

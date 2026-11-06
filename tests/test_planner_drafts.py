@@ -84,6 +84,11 @@ def test_detail_liefert_zonen_profil_und_getrennte_adapterfaehigkeit(
     targets = payload["capabilities"]["targets"]
     assert targets["heartRateZone"]["local"] is True
     assert targets["heartRateZone"]["editable"] is True
+    assert targets["heartRateZone"]["synchronizable"] is True
+    assert targets["pace"]["synchronizable"] is True
+    assert targets["powerWatts"]["synchronizable"] is True
+    assert targets["powerPercentFtp"]["synchronizable"] is True
+    assert targets["powerZone"]["synchronizable"] is False
     assert targets["heartRateBpm"]["local"] is True
     assert targets["heartRateBpm"]["editable"] is False
     assert targets["heartRateBpm"]["gate"] == "absolute_hr"

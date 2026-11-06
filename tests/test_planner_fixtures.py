@@ -332,8 +332,8 @@ def test_faehigkeitsmatrix_ist_vollstaendig_und_nennt_fehlende_nachweise() -> No
     capabilities = matrix["capabilities"]
     ids = [row["id"] for row in capabilities]
 
-    assert statuses == {"belegt", "offen", "nicht unterstützt"}
-    assert len(ids) == 14
+    assert statuses == {"belegt", "offen", "nicht unterstützt", "gesperrt"}
+    assert len(ids) == 15
     assert len(ids) == len(set(ids))
     assert {row["label"] for row in capabilities} >= {
         "Zeitabschnitte",
@@ -350,16 +350,16 @@ def test_faehigkeitsmatrix_ist_vollstaendig_und_nennt_fehlende_nachweise() -> No
         "Rampen, Lap-Taste, Spezialschritte",
         "Verschachtelte Wiederholungen",
         "Globale Zielpriorität",
+        "Letzte Erholung auslassen (als Gruppe)",
     }
 
     for row in capabilities:
         for column in ("read", "display", "edit", "write"):
             assert row[column] in statuses
-        if row["write"] == "offen":
+        if row["write"] in {"offen", "gesperrt"}:
             assert row["missingProof"].strip(), row["id"]
 
-    open_writes = {row["id"] for row in capabilities if row["write"] == "offen"}
-    assert {
+    supported_writes = {
         "time",
         "distance",
         "simple-repeat",
@@ -367,15 +367,36 @@ def test_faehigkeitsmatrix_ist_vollstaendig_und_nennt_fehlende_nachweise() -> No
         "absolute-pace",
         "watts",
         "percent-ftp",
+    }
+    assert {
+        row["id"] for row in capabilities if row["write"] == "belegt"
+    } == supported_writes
+
+    blocked_writes = {
         "power-zones",
         "absolute-bpm",
         "custom-zones",
         "nested-repeats",
         "global-target-priority",
-    } <= open_writes
+        "skip-final-recovery",
+    }
+    assert {
+        row["id"] for row in capabilities if row["write"] == "gesperrt"
+    } == blocked_writes
+    assert {
+        row["id"] for row in capabilities if row["write"] == "nicht unterstützt"
+    } == {"multiple-targets", "ramps-lap-special"}
 
     findings = {row["id"] for row in matrix["adapterFindings"]}
-    assert {"read-event", "read-workout-doc", "write-no-product-path", "relationship"} <= findings
+    assert {
+        "read-event",
+        "read-workout-doc",
+        "write-product-path",
+        "live-write-proof",
+        "relationship",
+    } <= findings
+    assert "kein Live-Schreibzugriff" in matrix["writeScope"]
+    assert "nicht ausgeführt" in matrix["liveProof"]
     assert matrix["observedAt"] == "2026-11-06"
 
 

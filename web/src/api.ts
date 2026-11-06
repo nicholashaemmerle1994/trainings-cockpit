@@ -1,5 +1,4 @@
 import type {
-  ActivitiesResponse,
   FuelPlan,
   Overview,
   PlanDetail,
@@ -32,10 +31,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   overview: () => request<Overview>("/api/overview?days=90"),
-  activities: (sport?: string) =>
-    request<ActivitiesResponse>(
-      `/api/activities?limit=300${sport ? `&sport=${encodeURIComponent(sport)}` : ""}`,
-    ),
   session: (id: number) => request<SessionDetail>(`/api/session/${id}`),
   planner: (week?: string) =>
     request<PlannerWeekResponse>(

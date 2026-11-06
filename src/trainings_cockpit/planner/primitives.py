@@ -1,9 +1,8 @@
 """Lokale Datums-, Zeit- und Zeitzonenprüfungen für das Planungsmodell.
 
 Der Planer rechnet mit lokalen Kalendertagen. Ein `LocalDate` ist deshalb ein
-validiertes `YYYY-MM-DD`, kein UTC-Zeitpunkt. Die eigentliche Wochenarithmetik
-folgt in P03; hier stehen nur die Invarianten, die das Modell nicht verletzen
-darf.
+validiertes `YYYY-MM-DD`, kein UTC-Zeitpunkt. Die Wochenarithmetik liegt in
+``dates.py``; hier stehen die Invarianten, die das Modell nicht verletzen darf.
 """
 
 from __future__ import annotations

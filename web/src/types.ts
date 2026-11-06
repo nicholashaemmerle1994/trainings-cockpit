@@ -206,13 +206,7 @@ export interface SessionDetail {
   actual: SessionActual | null;
 }
 
-export interface ActivitiesResponse {
-  items: Activity[];
-  sports: { sport: string; count: number }[];
-  total: number;
-}
-
-/** Eine erledigte Einheit in der Liste der letzten sieben Tage. */
+/** Gemeinsame Basis der bestehenden Aktivitätsansicht. */
 export interface WeekUnit extends Activity {
   row_id: number;
   total_min: number | null;

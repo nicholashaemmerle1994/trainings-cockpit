@@ -230,11 +230,13 @@ def _source_data(source: Any | None) -> dict[str, Any] | None:
 def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
     """Lokale Modellfähigkeit und belegter Remote-Schreibweg getrennt.
 
-    P12/P13 dürfen HF-Zonen, Pace und Leistung lokal bearbeiten. Absolute bpm
-    und Leistungszonen bleiben hinter der Fähigkeitsmatrix gesperrt; die
-    Remote-Schreibfähigkeit ist davon getrennt.
+    HF-Zonen, Pace, Watt und ``% FTP`` sind lokal bearbeitbar und über den
+    belegten Serializer sowie den kontrollierten Adapterrundlauf schreibbar.
+    Absolute bpm und Leistungszonen bleiben hinter der Fähigkeitsmatrix
+    gesperrt; die Remote-Schreibfähigkeit ist davon getrennt.
     """
     editable = plan.is_structure_editable
+    supported = "Über den belegten Serializer und den kontrollierten Adapterrundlauf."
     return {
         "write": {
             "available": plan.is_metadata_editable,
@@ -247,8 +249,12 @@ def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
             "heartRateZone": {
                 "local": True,
                 "editable": editable,
-                "synchronizable": False,
-                "reason": "Schreibbeleg für Zonenreferenzen folgt mit dem Serializer.",
+                "synchronizable": editable,
+                "reason": (
+                    plan.editability_reason
+                    or supported
+                    + " Die Live-Gegenprobe gegen intervals.icu steht aus."
+                ),
             },
             "heartRateBpm": {
                 "local": True,
@@ -260,20 +266,32 @@ def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
             "pace": {
                 "local": True,
                 "editable": editable,
-                "synchronizable": False,
-                "reason": "Lokaler Entwurf; der Serializer-Rundlauf folgt in P17.",
+                "synchronizable": editable,
+                "reason": (
+                    plan.editability_reason
+                    or supported
+                    + " Die Live-Gegenprobe gegen intervals.icu steht aus."
+                ),
             },
             "powerWatts": {
                 "local": True,
                 "editable": editable,
-                "synchronizable": False,
-                "reason": "Lokaler Entwurf; der Serializer-Rundlauf folgt in P17.",
+                "synchronizable": editable,
+                "reason": (
+                    plan.editability_reason
+                    or supported
+                    + " Die Live-Gegenprobe gegen intervals.icu steht aus."
+                ),
             },
             "powerPercentFtp": {
                 "local": True,
                 "editable": editable,
-                "synchronizable": False,
-                "reason": "Relative Semantik bleibt lokal erhalten; Schreibbeleg folgt.",
+                "synchronizable": editable,
+                "reason": (
+                    plan.editability_reason
+                    or supported
+                    + " Die relative Semantik bleibt erhalten; die Live-Gegenprobe steht aus."
+                ),
             },
             "powerZone": {
                 "local": False,
@@ -288,7 +306,7 @@ def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
             "none": {
                 "local": True,
                 "editable": editable,
-                "synchronizable": False,
+                "synchronizable": editable,
             },
         },
     }

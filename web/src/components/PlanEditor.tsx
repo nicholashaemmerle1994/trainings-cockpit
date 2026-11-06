@@ -687,7 +687,8 @@ function GroupEditor({
 
       <p className="plan-inline__footer">
         Es wird nur eine Vorlage der Kinder bearbeitet. Der Graph darf die
-        Ausführungen mehrfach zeigen; gespeichert wird in diesem Paket noch nichts.
+        Ausführungen mehrfach zeigen; gespeichert wird der Wiederholungsblock
+        als eine Gruppe.
       </p>
       {actions}
     </section>
@@ -1158,8 +1159,8 @@ function StepEditor({
       )}
 
       <p className="plan-inline__footer">
-        Änderungen bleiben lokal. Ein Feld darf unfertig sein; gespeichert wird in
-        diesem Paket noch nichts.
+        Änderungen bleiben bis zum Speichern lokal. Ein Feld darf unfertig sein;
+        Speichern bleibt dann gesperrt.
       </p>
       {actions}
     </section>

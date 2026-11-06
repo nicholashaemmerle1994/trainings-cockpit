@@ -2578,3 +2578,122 @@ Screenshots liegen lokal unter `data/screens/` (nicht committet), unter anderem
 ## 6. Nächstes Paket
 
 **P27 — Aufräumen und Übergabe.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P27
+
+**Stand:** 06.11.2026
+**Paket:** P27 — Aufräumen und Übergabe
+**Basis:** Branch `feature/trainingsplaner`, HEAD `52fd57d`
+
+## 1. Ergebnis
+
+- **Toter Listen-Code entfernt:** `web/src/pages/Activities.tsx`,
+  `web/src/components/ActivityTable.tsx`, der zugehörige
+  `ActivitiesResponse`-Vertrag, `api.activities()`, die Tabellen-/Listen-CSS-
+  Blöcke und der nicht mehr belegte Audit-Standard „Aktivitäten“. Diese Seite
+  war über keinen Tab und keine Route erreichbar; der einzige Listenmodus ist
+  jetzt der Planer.
+- **Temporäre Diagnose entfernt:** `web/scripts/tmp-debug.mjs` gelöscht.
+  Zusätzlich wurden lokal ignorierte Demo-Datenbanken
+  (`data/planner-preview`, `data/planner-editor-preview`, `data/p08-preview`),
+  `data/review-tb3.json` und `data/screens/debug-planer.png` entfernt. Die
+  Anwendungsdatenbank `data/cockpit.db` blieb unverändert (0 Events,
+  0 Aktivitäten, 2 Wellness-Zeilen).
+- **Veraltete Pakettexte entfernt:** Der Editor behauptete nicht mehr,
+  „in diesem Paket“ werde noch nichts gespeichert. Er beschreibt jetzt
+  „bis zum Speichern lokal“, die Gruppen­speicherung und die konkrete
+  Skip-Grenze. Die Backend-Docstrings zu Produktivschreibweg und
+  Wochenarithmetik wurden auf den tatsächlichen Stand gebracht.
+- **Fähigkeitsangaben korrigiert:** HF-Zonen, Pace, Watt und `% FTP` melden
+  jetzt `synchronizable: true`, solange die Struktur editierbar ist. Absolute
+  bpm und Leistungszonen bleiben gesperrt. Die Live-Gegenprobe wird
+  ausdrücklich als ausstehend genannt.
+- **Endgültige Fähigkeitsmatrix:** `FAEHIGKEITSMATRIX.md` und
+  `tests/fixtures/planner/capability-matrix.json` wurden auf 15 Fähigkeiten
+  mit den Statuswerten `belegt`, `offen`, `nicht unterstützt`, `gesperrt`
+  aktualisiert. Neu enthalten ist „Letzte Erholung auslassen (als Gruppe)“.
+  Der Matrix-Test prüft die unterstützten, gesperrten und nicht unterstützten
+  Schreibwege getrennt.
+- **Übergabe:** `docs/trainingsplaner/UEBERGABE.md` hält Komponenten,
+  Zuständigkeiten, alte Routen, Deep-Links, Dashboard-Volumen,
+  Datenverfügbarkeit älterer Wochen, lokale Befehle und die nicht möglichen
+  externen Prüfungen fest. Die README nennt die drei Bereiche, den lokalen
+  Prüfweg und die aktuellen Befehle.
+- **Kein Release:** Es wurde kein Release-Knopf verwendet, kein Deployment
+  ausgelöst und keine Geräteübertragung behauptet.
+
+## 2. Dateien und Zuständigkeiten
+
+| Datei / Bereich | Zuständigkeit |
+|---|---|
+| `src/trainings_cockpit/planner/week.py` | getrennte Wochenprojektion aus `event` und `activity`; Quellenzustände, Summen, P06/P26 |
+| `src/trainings_cockpit/planner/details.py` | Planungsdetail, Zonenoptionen, Fähigkeitsangaben |
+| `src/trainings_cockpit/planner/drafts.py` | lokaler Entwurf, Feldpuffer, Projektion |
+| `src/trainings_cockpit/planner/serializer.py` | kanonischer Workouttext und Payload-Grenze |
+| `src/trainings_cockpit/planner/save.py` | Zustände, Snapshot, Vorgangskoordination |
+| `src/trainings_cockpit/planner/event_write.py` | Update/Create, Rückleseprüfung, Rundlauf |
+| `src/trainings_cockpit/planner/conflicts.py` | externe Änderung, Löschung, Berechtigung |
+| `src/trainings_cockpit/planner/operations.py` | SQLite-Vorgänge, Editorform, Aufbewahrung |
+| `src/trainings_cockpit/api.py` | Produkt-Endpunkte, Wochen-/Detail-/Sync-API |
+| `web/src/pages/Planner.tsx` | Planer-Tab, Tagesliste, Quellenhinweise, Vorgänge |
+| `web/src/components/PlanSheet.tsx` | Detail-/Editorblatt, Speichern, Konflikt, Recovery |
+| `web/src/components/PlanEditor.tsx` | Inline-Akkordeon, Felder, Gruppen, Undo |
+| `web/src/components/UnitSheet.tsx` | bestehende Aktivitätsdetails, unverändert weiterverwendet |
+| `web/src/pages/Today.tsx` | Dashboard, Tageskarte, „Letzte 7 Tage“ mit reiner Umfang-Kennzahl |
+| `docs/trainingsplaner/UEBERGABE.md` | finale Übergabe und Grenzen |
+| `docs/trainingsplaner/FAEHIGKEITSMATRIX.md` | verbindliche Fähigkeitsmatrix |
+
+## 3. Weiterverwendete und umgebaute Oberfläche
+
+- **Weiterverwendet:** `UnitSheet`, `SessionProfile`, `WorkoutChart`,
+  `WorkoutPreview`, `WeekStrip`, `MetricRow`, `RecoveryDial`, `Sheet`,
+  `Sidebar`/`Tabs`, Format- und Sportlabel-Helfer. Aktivitätsdetails,
+  Messreihen, Zonen, Quellen und Sportarten einschließlich Krafttraining
+  bleiben unverändert.
+- **Umgebaut:** Die frühere rollierende Sieben-Tage-Liste (`WeekSheet`) ist
+  durch den Kalenderwochen-Planer ersetzt. Die nicht erreichbare
+  Aktivitätentabelle wurde entfernt. Die Dashboard-Karte „Letzte 7 Tage“
+  behält Balken und Kennzahlen, aber „Umfang“ ist kein Link und kein
+  Fokusziel.
+- **Alte Routen:** `/woche`, `/week`, `/planner/week`, `/planer/week` und
+  Datumspfade werden per `replaceState` auf `/planer?woche=<Montag>`
+  kanonisiert. Aktivitäts-Deep-Links (`/aktivitaet/<id>`, `/activity/<id>`,
+  `/einheit/<id>`, `/unit/<id>`) behalten ihr Detailziel. Keine Schleife, kein
+  zweiter Listenmodus.
+- **Dashboard-Volumen:** `build_overview` bleibt beim rollierenden
+  Sieben-Tage-Fenster; der Planer nutzt eine eigene Kalenderwoche. Ein
+  Wochenwechsel im Planer ändert die Dashboard-Zahl nicht.
+- **Ältere Wochen:** Der Planer liest den lokalen Bestand und markiert
+  Abdeckung als `covered`/`uncovered`/`unknown`. Nicht verfügbare Daten werden
+  nicht als Null ausgegeben. Die tatsächliche Grenze (lokaler Sync, 365/730
+  Tage, keine intervals-Pagination) steht in `UEBERGABE.md` und im
+  P26-Bericht.
+
+## 4. Prüfung
+
+| Befehl / Prüfung | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest -q` | **375 passed**, 1 bestehende Starlette-Warnung |
+| `cd web && npm run build` | `tsc --noEmit` und Vite-Build erfolgreich |
+| `uv run ruff check` auf alle geänderten Python-Dateien | ohne Befund |
+| `uv run ruff check src tests` (gesamtes Repo) | **15 bestehende Befunde** in nicht geänderten Dateien (`cli.py`, `db.py`, `metrics.py`, `test_load.py`, `test_plan.py`): Zeilenlängen, ungenutzte Importe, ein `zip` ohne `strict`; nicht durch P26/P27 eingeführt |
+| Fähigkeitsmatrix-Test | 15 Fähigkeiten, Statuswerte und Nachweise vollständig |
+| Browser-Smoke nach Löschung | Heute, Planer, Verpflegung bauen; keine Console-/Page-Fehler |
+| Demo-/Temp-Reste | keine produktiven Demo-Speicherpfade, kein `tmp-debug.mjs` |
+
+## 5. Nicht möglich / nicht behauptet
+
+- Kein Live-Create/Update gegen intervals.icu und keine Geräteübertragung.
+- Keine bestätigte Plan-/Aktivitätsbeziehung im Produktbestand.
+- Skip-Gruppe bleibt ohne lesenden `EditorShapeMetadata`-Konsumenten gesperrt.
+- Keine serverseitige Pagination-Garantie für intervals.icu.
+- Keine iOS-/Safari-Geräteprüfung; P25 prüfte Chromium und Viewports.
+- Kein Release und kein Deployment.
+
+## 6. Abschluss
+
+P26 und P27 sind umgesetzt. Die verbleibenden Grenzen sind konkret benannt,
+nicht als fertig verdeckt. Der nächste sinnvolle Schritt ist eine ausdrücklich
+freigegebene Live-Abnahme mit einem intervals.icu-Testdatensatz.

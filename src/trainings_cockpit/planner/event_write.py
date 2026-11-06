@@ -1,10 +1,10 @@
 """Adapterbrücke für bestätigte Event-Writes — Update und Rückleseprüfung.
 
 Der Dienst führt keinen eigenen HTTP-Aufruf aus. Er arbeitet gegen ein
-schmales Gateway, das im Produkt später der vorhandene ``IntervalsClient``
-ist und in den P18/P19-Tests der kontrollierte Testadapter. Dadurch bleibt der
-Produktivschreibweg gesperrt, während Payload, Event-ID, Rücklesen und
-Rundlauf nach Abschnitt 8.8 nachweisbar sind.
+schmales Gateway. Im Produkt ist das der vorhandene ``IntervalsClient`` über
+``planner.service``; Tests ersetzen ihn durch einen kontrollierten Adapter.
+Payload, Event-ID, Rücklesen und Rundlauf nach Abschnitt 8.8 werden dadurch
+ohne Produktivzugriff nachweisbar.
 
 Ein Update verwendet ausschließlich die ursprüngliche Remote-Event-ID. Ein
 404 wird nie zu einem Create. Nur nach bestätigtem Rücklesen und semantisch
@@ -577,9 +577,9 @@ class EventWriteService:
 class IntervalsEventAdapter:
     """Dünne Brücke auf den vorhandenen ``IntervalsClient``.
 
-    Der Adapter wird nicht von einem Produkt-Endpunkt aufgerufen. Er belegt
-    den Update-Vertrag mit der bestehenden Clientklasse; produktives Schreiben
-    bleibt bis zur Konfliktsicherung in P21/P22 gesperrt.
+    Der Adapter wird vom Produkt-Speicherweg über ``planner.service`` genutzt.
+    Er belegt Update und Create mit der bestehenden Clientklasse; die
+    Live-Gegenprobe gegen intervals.icu ist nicht Teil des Testlaufs.
     """
 
     def __init__(self, client: Any) -> None:

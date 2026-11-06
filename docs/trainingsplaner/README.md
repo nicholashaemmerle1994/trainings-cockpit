@@ -28,3 +28,12 @@ Dieses Paket enthält den detaillierten Implementierungsplan und **acht neu gere
 ## Verwendung
 
 Das Paket **als Ganzes** in das Repository entpacken und `TRAININGSPLANER_IMPLEMENTIERUNGSPLAN.md` an den Coding-Agenten übergeben. Dieser beginnt mit P00 und öffnet die Bildreferenzen zur visuellen Abnahme. Keine zusätzlichen App-Screenshots erforderlich.
+
+## Stand der Umsetzung
+
+P00–P27 sind umgesetzt. Die finale Fähigkeitsmatrix steht in
+`FAEHIGKEITSMATRIX.md`, die Übergabe mit Komponenten, Routen,
+Dashboard-Volumen und Datenverfügbarkeit in `UEBERGABE.md`, der vollständige
+Arbeitsnachweis in `../training-planner-progress.md`. Ein Live-Rundlauf gegen
+intervals.icu, eine Geräteübertragung und ein Release wurden nicht
+durchgeführt.

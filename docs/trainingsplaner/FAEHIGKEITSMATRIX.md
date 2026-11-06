@@ -1,53 +1,94 @@
-# Fähigkeitsmatrix — vorhandener Intervals-Adapter
+# Fähigkeitsmatrix — finaler Stand P26/P27
 
-**Stand:** 06.11.2026 · **Paket:** P01 · **Grundlage:** Abschnitt 8.4 des
-Implementierungsplans und der tatsächliche Code auf `feature/trainingsplaner`.
+**Stand:** 06.11.2026 · **Pakete:** P26/P27 · **Grundlage:** Abschnitt 8.4 des
+Implementierungsplans, der tatsächliche Code und die kontrollierten
+Adaptertests.
 
 Die maschinenlesbare Fassung liegt in
-`tests/fixtures/planner/capability-matrix.json`; die Tests prüfen Statuswerte,
-Vollständigkeit und den fehlenden Nachweis bei jeder offenen Schreibfähigkeit.
-„Darstellen“ bedeutet hier **nicht** automatisch „sicher speicherbar“.
+`tests/fixtures/planner/capability-matrix.json`. Die Tests prüfen Statuswerte,
+Vollständigkeit und den fehlenden Nachweis bei offenen beziehungsweise
+gesperrten Schreibfähigkeiten.
 
-## Befund des vorhandenen Adapters
+## Statuswerte
 
-| Befund | Beleg | Status |
-|---|---|---|
-| Kalender-Events lesen | `IntervalsClient.events()` → `GET /athlete/{id}/events`; `db.upsert_events()` erhält das Roh-JSON in `event.raw` | belegt |
-| `workout_doc` lesen | `plan.parse_workout()` liest `workout_doc.steps`, klappt Wiederholungen auf, wählt aber genau ein Ziel und verliert die Ende-Bedingung als Typ | offen |
-| Produkt-Schreibweg | Update-/Create-Service, Rückleseprüfung, stabile externe Identität, Konfliktsicherung, Vorgangspersistenz und Produkt-Endpunkte `…/save` existieren; die UI speichert darüber | belegt; Testadapter statt Netzwerklauf |
-| Gezieltes Event-Update | `IntervalsClient.update_event()` nutzt `PUT /athlete/{id}/events/{eventId}`; der Vertrag ist mit `respx` belegt. Vorabvergleich, Vorgangspersistenz und Produkt-Endpunkt sind belegt | belegt |
-| Neuanlage mit stabiler App-Identität | `IntervalsClient.upsert_events()` mit `external_id`; Create-Service prüft Antwort-Identität, liest die Remote-ID nach und hält den Vorgang über Reload | belegt |
-| Plan-/Aktivitätsbeziehung | Keine explizite Beziehung; `plan.matches()` ist eine Heuristik ohne Abschlussnachweis; eine neue `external_id` ist kein Beleg | offen |
-| Kanonische Mehrquellen-Aktivität | Dedupe löscht den Verlierer; keine dauerhafte Zuordnung mehrerer Quell-IDs | offen |
+| Status | Bedeutung |
+|---|---|
+| **belegt** | Der Pfad ist im Code vorhanden und durch Fixtures/Vertragstests geprüft. Beim Schreiben heißt das: Serializer plus kontrollierter Adapterrundlauf, **nicht** ein Live-Zugriff gegen intervals.icu. |
+| **offen** | Der Pfad ist fachlich vorgesehen, aber nicht vollständig belegt. |
+| **nicht unterstützt** | Der vorhandene Vertrag bildet den Fall ausdrücklich nicht ab; unbekannte Inhalte bleiben als Rohsnapshot/`UnsupportedNode` erhalten. |
+| **gesperrt** | Die Fähigkeit ist bewusst nicht freigeschaltet, weil ein sicherer Schreib-/Rückleseweg fehlt. |
+
+**Live-Grenze:** Es gab keinen produktiven Schreibzugriff und keinen
+Live-Rundlauf gegen intervals.icu. Ohne ausdrücklich vorgesehenen Testdatensatz
+und Freigabe bleibt diese Gegenprobe offen. Die Schreibspalte „belegt“ stützt
+sich auf den lokalen Kontrolladapter, den Produkt-Endpunkt, die
+Vorgangspersistenz und die Rückleseprüfung.
 
 ## Matrix
 
-| Fähigkeit | Lesen | Darstellen | Bearbeiten | Rückschreiben | Fehlender Nachweis (Schreiben/Editieren) |
+| Fähigkeit | Lesen | Darstellen | Bearbeiten | Rückschreiben | Beleg / verbleibende Grenze |
 |---|---|---|---|---|---|
-| Zeitabschnitte | belegt | belegt | offen | offen | Gezieltes Event-Update und Serializer-Rundlauf für Dauer fehlen. |
-| Distanzabschnitte | belegt | offen | offen | offen | Meter als Distanz schreiben und zurücklesen; vorhandene Diagrammachse ist zeitbasiert. |
-| Einfache Wiederholungen | belegt | belegt | offen | offen | Rundlauf für Anzahl, Reihenfolge und Gruppensemantik fehlt. |
-| HF-Standardzonen | belegt | belegt | offen | offen | Schreibbeleg für Zonenreferenz samt Zonenmodell fehlt. |
-| Absolute Pace und Pacebereich | belegt | offen | offen | offen | Explizite Einheit `/km` bzw. `/100m` und passende Anzeige fehlen. |
-| Watt und Wattbereich | belegt | belegt | offen | offen | Schreib-/Rücklesebeleg für Wattbereich und die gültige Vorgabe `0 W` fehlt. |
-| % FTP | belegt | belegt | offen | offen | Beleg, dass relative Semantik beim Schreiben erhalten bleibt, fehlt. |
-| Leistungszonen | offen | offen | offen | offen | Parser kennt nur `start/end`; Leistungszonen-Ziel mit String-ID und Zonenmodell fehlt. |
-| Absolute bpm-Werte | offen | offen | offen | offen | Kein eindeutiger aktueller Schreibbeleg; vorhandener Parser deutet `hr` ohne Zonenkennung als Prozent. |
-| Benutzerdefinierte Zonen | offen | offen | offen | offen | Ganzzahl-Zonen im Parser; nichtnumerische String-IDs und Zonenmodell fehlen. |
-| Mehrere Ziele in einem Schritt | nicht unterstützt | nicht unterstützt | offen | nicht unterstützt | Parser wählt genau ein Ziel (Leistung → HF → Pace); Rohsnapshot erhält den Rest, Strukturbearbeitung bleibt gesperrt. |
-| Rampen, Lap-Taste, Spezialschritte | nicht unterstützt | nicht unterstützt | offen | nicht unterstützt | Werden ignoriert; P04 muss sie als unbekannte Knoten mit Quellreferenz erhalten. |
-| Verschachtelte Wiederholungen | offen | offen | offen | offen | Stille Kappung bei Tiefe 4 und 30 Wiederholungen; Schreibbeleg für verschachtelte Gruppen fehlt. |
-| Globale Zielpriorität | offen | offen | offen | offen | Konkretes Workout-weites Ziel-/Prioritätsfeld und zulässige Werte sind nicht belegt. |
+| Zeitabschnitte | belegt | belegt | belegt | **belegt** | Serializer, F01/F02, Create-/Update-Rundlauf im kontrollierten Adapter; Live-Gegenprobe offen. |
+| Distanzabschnitte | belegt | belegt | belegt | **belegt** | Distanzachse, `mtr`-Serialisierung, F04; 400 Meter werden nie zu 400 Minuten. |
+| Einfache Wiederholungen | belegt | belegt | belegt | **belegt** | F02-Gruppe, Rollen, Reihenfolge und Auflösen; Update-Rundlauf im kontrollierten Adapter. |
+| HF-Standardzonen | belegt | belegt | belegt | **belegt** | Zonen aus dem tatsächlichen Sportprofil, `Z2 HR`; F01/F02. |
+| Absolute Pace und Pacebereich | belegt | belegt | belegt | **belegt** | Explizite Einheit `/km` bzw. `/100m`, Bereichsrichtung; F02/F04/F05. |
+| Watt und Wattbereich | belegt | belegt | belegt | **belegt** | Watt-Einzelwert und -Bereich; `0 W` bleibt gültig; F03. |
+| `% FTP` | belegt | belegt | belegt | **belegt** | Relative Semantik bleibt beim Serialisieren erhalten; F03. |
+| Leistungszonen | offen | offen | gesperrt | **gesperrt** | Der Parser liest Leistung nur als `start`/`end`; String-Zonenreferenz und Zonenmodell fehlen. Die UI bietet die Zielart nur als „nicht belegt“ an. |
+| Absolute bpm-Werte | offen | offen | gesperrt | **gesperrt** | Kein eindeutiger aktueller Schreibbeleg. `150bpm` wird nicht als Textsyntax erfunden. |
+| Benutzerdefinierte Zonen | offen | offen | gesperrt | **gesperrt** | Standardzonen werden gelesen; nichtnumerische String-IDs und das vollständige Zonenmodell fehlen. |
+| Mehrere Ziele in einem Schritt | nicht unterstützt | nicht unterstützt | gesperrt | **nicht unterstützt** | Import bleibt als `UnsupportedNode` samt Rohsnapshot erhalten; keine Strukturbearbeitung. |
+| Rampen, Lap-Taste, Spezialschritte | nicht unterstützt | nicht unterstützt | gesperrt | **nicht unterstützt** | Keine verlustbehaftete Vereinfachung; Erhalt als unbekannter Knoten mit Quellreferenz. |
+| Verschachtelte Wiederholungen | offen | offen | gesperrt | **gesperrt** | Der Reader erkennt Verschachtelung und begrenzt die Editierbarkeit; der Editor öffnet eine Ebene. Kein Schreibbeleg. |
+| Globale Zielpriorität | offen | offen | gesperrt | **gesperrt** | Ein Workout-weites Ziel-/Prioritätsfeld ist im vorhandenen Vertrag nicht belegt. |
+| Letzte Erholung auslassen (als Gruppe) | belegt | belegt | belegt | **gesperrt** | Lokal 34 min und neun Ausführungen; das bewusste Auflösen in Einzelabschnitte ist speicherbar. Die Gruppe selbst wird vor der Payload-Erzeugung mit konkretem Grund abgelehnt, weil `EditorShapeMetadata` noch keinen lesenden Konsumenten hat. |
 
-## Konsequenz für P02
+## Schreibweg, der tatsächlich existiert
 
-Das in P02 ergänzte Planungsmodell kann diese Fälle **darstellen** und
-unbekannte Inhalte als `UnsupportedNode` mit Quellreferenz erhalten. Es
-behauptet keine Schreibfähigkeit. Der Schreibkoordinator nimmt ausschließlich
-einen geplanten `WorkoutDraft` an; eine Aktivitätsreferenz oder ein
-generisches „Training speichern“ erreicht den Event-Schreibpfad nicht.
+- `POST /api/planner/plan/{event_id}/save` — bestätigtes Update über die
+  ursprüngliche Event-ID.
+- `POST /api/planner/draft/save` — bestätigte Neuanlage über den vorhandenen
+  Bulk-Upsert mit stabiler `external_id`.
+- `GET /api/planner/plan/{event_id}/remote` — aktuelle Remoteversion lesen und
+  lokal einsortieren; kein Event-Write.
+- `GET /api/planner/operations` und
+  `POST /api/planner/operations/{id}/reconcile` — offene Vorgänge und lesender
+  Abgleich. Ein bestätigter Reconcile wird lokal einsortiert (P26-Fix).
+- Update und Create prüfen den zurückgelesenen Aufbau semantisch. Ein
+  fehlgeschlagenes Rücklesen bleibt `savedUnverified`; es gibt keinen
+  automatischen zweiten Write.
 
-Offene Schreibfähigkeiten bleiben bis zu ihrem jeweiligen Rundlaufnachweis
-gesperrt. Insbesondere absolute bpm-Ziele, benutzerdefinierte Zonen,
-Leistungszonen, verschachtelte Wiederholungen und die globale Zielpriorität
-dürfen nicht durch eine erfundene Text- oder JSON-Syntax freigeschaltet werden.
+## Verbleibende Einschränkungen
+
+- **Skip-Gruppe:** „Letzte Erholung auslassen“ ist als Gruppe nicht
+  serialisierbar. Die sichere Alternative ist das Auflösen in
+  Einzelabschnitte. Der Metadatenweg aus Abschnitt 8.10 ist vorbereitet
+  gespeichert, aber noch nicht beim Lesen angebunden.
+- **Live-Rundlauf:** Alle Schreibbelege stammen aus kontrollierten Adaptern.
+  Eine echte intervals.icu-Gegenprobe mit einem dafür vorgesehenen
+  Testdatensatz und Freigabe steht aus.
+- **Plan-/Aktivitätsbeziehung:** Der Produktbestand führt weiterhin keine
+  dauerhaft bestätigte Beziehung. Die Anzeige kann einen übergebenen Vertrag
+  darstellen, erzeugt aber keine Beziehung und keinen Write.
+- **Konflikte:** Der Vorab-GET und der PUT sind keine atomare Vorbedingung.
+  Die Restlücke ist in `KONFLIKTE.md` dokumentiert.
+- **Ältere Wochen/Pagination:** Die intervals-Abfrage nutzt einen
+  Datumsbereich und keine Seiten-/Cursor-Schleife. Bei Events ist `limit`
+  nicht gesetzt (API: „default is all“); eine serverseitige Kappung könnte die
+  aktuelle Implementierung nicht erkennen. Garmin lädt Aktivitäten in
+  100er-Seiten bis maximal 1000. Die historische Verfügbarkeit endet dort, wo
+  der lokale Sync sie hinterlässt (Standard 365 Tage, API maximal 730 Tage;
+  Events zusätzlich 365 Tage voraus).
+- **Geräteübertragung:** Ein gespeicherter Plan belegt nur den Write nach
+  intervals.icu, nicht die Übertragung auf ein Gerät.
+
+## Bezug
+
+- Fachmodell und Identitäten: `src/trainings_cockpit/planner/`.
+- Serializer: `src/trainings_cockpit/planner/serializer.py`,
+  `docs/trainingsplaner/SERIALIZER-VERTRAG.md`.
+- Sync/Konflikte: `docs/trainingsplaner/SYNC.md`,
+  `docs/trainingsplaner/KONFLIKTE.md`, `docs/trainingsplaner/VORGAENGE.md`.
+- Abnahme: `docs/training-planner-progress.md` (P26/P27) und
+  `docs/trainingsplaner/UEBERGABE.md`.
