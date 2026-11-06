@@ -470,13 +470,28 @@ def _parse_end(
 
     if distance is not None and distance > 0:
         if duration is not None and duration > 0:
-            # Beide Werte vorhanden: Nur eine nachgewiesene Quellenangabe sagt,
+            # Beide Werte vorhanden: Eine ausdrückliche Quellenangabe sagt,
             # welche Größe die Ende-Bedingung ist. `duration_source=estimated`
-            # ist der belegte F04-Fall: die Distanz bleibt das Ende.
+            # ist der belegte F04-Fall: die vorgegebene Distanz bleibt das
+            # Ende, die Dauer ist die berechnete Schätzung.
+            # `distance_source=estimated` ist der umgekehrte Fall einer
+            # Zeitvorgabe, deren Strecke intervals geschätzt hat.
             if duration_source in {"estimated", "distance"}:
                 return DistanceEnd(distance)
             if distance_source == "estimated":
                 return TimeEnd(duration)
+            if not duration_source and not distance_source:
+                # Die echte intervals-API nennt bei einer vom Nutzer
+                # vorgegebenen Distanz gar keine Quelle: der Distanzschritt
+                # kommt als `{"distance": 8000, "duration": 3235}` zurück.
+                # Bei einer Zeitvorgabe liefert sie dagegen nur die Dauer,
+                # etwa `{"duration": 600}` für einen Zeitabschnitt oder
+                # `{"duration": 2700}` für 45 Minuten Rad. Treffen beide
+                # Werte ohne Quelle zusammen, ist deshalb die Distanz die
+                # vorgegebene Ende-Bedingung und die Dauer die von intervals
+                # berechnete Schätzung; eine Schätzung darf das Ende nie
+                # bestimmen.
+                return DistanceEnd(distance)
             state.restrict(
                 RestrictionCode.UNKNOWN_CONTENT,
                 f"{path}: Distanz und Dauer ohne eindeutige Ende-Bedingung.",

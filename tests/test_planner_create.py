@@ -22,6 +22,7 @@ from trainings_cockpit.planner import (
     TimeEnd,
     Value,
     WorkoutDraft,
+    ZoneMetric,
     ZoneTarget,
     prepare_write,
     stable_external_id,
@@ -361,6 +362,86 @@ def test_fremde_externe_id_in_der_antwort_wird_nicht_zugeordnet() -> None:
     assert outcome.status.remote_id is None
     assert outcome.confirmed is None
     assert len(gateway.create_calls) == 1
+
+
+class RealIntervalsFormGateway:
+    """Antwortet auf einen Distanz-Create wie die echte intervals.icu-API.
+
+    Der zurückgelesene Distanzschritt trägt zusätzlich die von intervals
+    berechnete Dauer — ohne `duration_source` und ohne `distance_source`:
+    `{"distance": 8000, "duration": 3235}`. Genau diese Form hat den Rundlauf
+    fälschlich als Abweichung gemeldet.
+    """
+
+    def __init__(self, *, event_id: int = 145277995) -> None:
+        self.event_id = event_id
+        self.events: dict[int, dict] = {}
+        self.create_calls: list[dict] = []
+        self.read_calls: list[str] = []
+
+    def create_event(self, payload: dict) -> dict:
+        self.create_calls.append(copy.deepcopy(payload))
+        self.events[self.event_id] = {
+            "id": self.event_id,
+            "category": "WORKOUT",
+            "start_date_local": payload["start_date_local"],
+            "type": payload["type"],
+            "name": payload["name"],
+            "external_id": payload["external_id"],
+            "workout_doc": {
+                "steps": [
+                    {
+                        "text": "Obere Zone zwei",
+                        "distance": 10000,
+                        "duration": 3000,
+                        "hr": {"units": "hr_zone", "value": 2},
+                    }
+                ],
+                "distance": 10000,
+                "duration": 3000,
+            },
+        }
+        return {"id": self.event_id, "external_id": payload["external_id"]}
+
+    def update_event(self, remote_id: str, payload: dict) -> dict:
+        raise AssertionError("Ein Create darf kein Update auslösen")
+
+    def read_event(self, remote_id: str) -> dict:
+        self.read_calls.append(remote_id)
+        return copy.deepcopy(self.events[int(remote_id)])
+
+
+def _distance_plan() -> PlannedWorkout:
+    return replace(
+        _new_plan("10 km Zone 2", "plan:draft:distanz"),
+        nodes=(
+            StepNode(
+                id="node:draft:distanz",
+                name="Obere Zone zwei",
+                end=DistanceEnd(10000),
+                target=ZoneTarget(ZoneMetric.HEART_RATE, "run-hr-2", "run-hr"),
+            ),
+        ),
+    )
+
+
+def test_create_distanzplan_bestaetigt_rundlauf_mit_berechneter_dauer() -> None:
+    # Ein 10-km-Plan (Zone 2) wird angelegt; intervals liefert den Schritt mit
+    # Distanz plus berechneter Dauer ohne Quellenangabe zurück. Der Rundlauf
+    # muss die Distanz als Ende wiedererkennen und den Write bestätigen.
+    gateway = RealIntervalsFormGateway()
+    service = EventWriteService(gateway)
+
+    outcome = _activate(WorkoutDraft.new(_distance_plan()), service)
+
+    assert outcome.status.state is SaveState.SAVED
+    assert outcome.status.remote_id == "145277995"
+    assert outcome.confirmed is not None
+    confirmed_node = outcome.confirmed.nodes[0]
+    assert isinstance(confirmed_node, StepNode)
+    assert confirmed_node.end == DistanceEnd(10000)
+    assert len(gateway.create_calls) == 1
+    assert gateway.read_calls == ["145277995"]
 
 
 def test_neue_plaene_erfinden_keine_aktivitaetsbeziehung() -> None:
