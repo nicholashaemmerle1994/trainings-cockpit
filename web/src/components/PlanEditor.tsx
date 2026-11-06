@@ -873,7 +873,9 @@ function StepEditor({
         </div>
 
         <div className="plan-field">
-          <label htmlFor={fieldId(node.node_id, "end")}>Umfang</label>
+          <label htmlFor={fieldId(node.node_id, "end")}>
+            Umfang{endKind === "distance" ? " (km)" : ""}
+          </label>
           <input
             id={fieldId(node.node_id, "end")}
             className="plan-input"
@@ -901,7 +903,7 @@ function StepEditor({
             className="plan-field__hint"
           >
             {endKind === "distance"
-              ? "Meter oder Kilometer; 1,5 km wird zu 1.500 m."
+              ? "Nur Kilometer, z. B. 1,5. Eine Zahl ohne Einheit gilt als km."
               : "Minuten, z. B. 45; auch 1:30 oder 45 min."}
           </p>
           {endError && (

@@ -58,9 +58,10 @@ _DURATION_TOKEN_RE = re.compile(
 )
 _CLOCK_RE = re.compile(r"^(\d+):([0-5]\d)(?::([0-5]\d))?$")
 _DISTANCE_RE = re.compile(
-    r"^(\d+(?:[.,]\d+)?)\s*(km|kilometer|m|mtr|meter|metres?|metre)?$",
+    r"^(\d+(?:[.,]\d+)?)\s*(km|kilometer)?$",
     re.IGNORECASE,
 )
+_METRE_UNIT_RE = re.compile(r"\s*(m|mtr|meter|metres?|metre)$", re.IGNORECASE)
 _RANGE_SPLIT_RE = re.compile(r"\s*(?:-|–|bis|to)\s*", re.IGNORECASE)
 
 
@@ -129,23 +130,23 @@ def parse_duration(text: str) -> float:
 
 
 def parse_distance(text: str) -> float:
-    """Distanz als Meter; ohne Einheit gilt Meter als Feldstandard."""
+    """Distanz als Meter; das Feld rechnet in Kilometern.
+
+    Eine Zahl ohne Einheit bedeutet Kilometer, ``km`` ist erlaubt. Eine
+    Meterangabe wird bewusst abgewiesen, statt sie still als Kilometer zu
+    lesen: ein Standard, keine zweite Deutung.
+    """
     raw = text.strip()
     if not raw:
         raise ValueError("Die Distanz fehlt.")
     match = _DISTANCE_RE.fullmatch(raw)
     if not match:
+        if _METRE_UNIT_RE.search(raw):
+            raise ValueError("Bitte in Kilometern angeben, z. B. 1,5.")
         raise ValueError(f"{text!r} ist keine Distanz.")
-    number_text, unit = match.groups()
-    unit = (unit or "m").lower()
-    # „1.000 m“ ist im Sporttext eine Tausenderangabe, „1.5 km“ dagegen
-    # dezimal. Komma bleibt immer dezimal.
-    if "." in number_text and "," not in number_text:
-        groups = number_text.split(".")
-        if len(groups) > 1 and all(len(group) == 3 for group in groups[1:]):
-            number_text = "".join(groups)
+    number_text = match.group(1)
     number = parse_decimal(number_text)
-    metres = number * 1000 if unit.startswith(("km", "kilometer")) else number
+    metres = number * 1000
     _require_positive(metres, "Die Distanz")
     return metres
 

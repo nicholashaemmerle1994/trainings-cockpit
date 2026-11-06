@@ -124,7 +124,7 @@ def test_entwurf_rechnet_1_5_km_zu_1500_m_und_aktualisiert_graph(
         ],
         "field_buffers": {
             f"{node['node_id']}:end.value": _buffer(
-                node, "end.value", "distance", "1,5 km"
+                node, "end.value", "distance", "1,5"
             ),
             f"{node['node_id']}:name": _buffer(node, "name", "text", "Einlaufen"),
         },
