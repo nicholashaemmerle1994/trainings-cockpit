@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cockpit – Trainingsplaner · visuelle Referenz</title>
+<style>
+:root {
+  color-scheme:dark;
+  --bg-app:#05090D; --bg-surface:#0D171D; --bg-surface-raised:#102229; --bg-interactive:#132B31;
+  --border-subtle:#203039;--border-strong:#2D4650;--text-primary:#F6F8FA;--text-secondary:#ABB8C4;--text-muted:#82919F;
+  --accent:#35DCC5;--accent-soft:#123831;--positive:#49DEA4;--warning:#F3BE6A;--negative:#F1787F;
+  --chart-neutral:#465763;--graph-easy:#687883;--graph-hard:#ECA05C;--input:#1C282E;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;min-height:100%;background:var(--bg-app);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-variant-numeric:tabular-nums}
+button,input{font:inherit}button{cursor:pointer}
+#app{max-width:880px;min-height:100vh;margin:auto;padding:30px 28px 42px;background:radial-gradient(ellipse 65% 12% at 53% 0%,rgba(53,220,197,.035),transparent 75%)}
+nav.page-nav{height:48px;display:flex;align-items:center;justify-content:space-between;margin:0 0 28px;gap:12px}
+.nav-left{display:flex;gap:12px;align-items:center}.nav-label{font-size:13px;color:var(--text-muted);letter-spacing:.03em}
+.back{width:46px;height:46px;background:#0b161c;border:1px solid var(--border-subtle);color:var(--text-secondary);border-radius:14px;display:grid;place-items:center}
+.back svg,.iconbutton svg,.icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nav-right{display:flex;gap:8px}.ghost-action{border:1px solid var(--border-strong);border-radius:12px;padding:10px 15px;background:transparent;color:var(--text-secondary);font-size:13px}
+.primary-action{border:0;border-radius:12px;padding:13px 18px;background:var(--accent);color:#05201c;font-weight:650;font-size:14px}
+.eyebrow{font-size:12px;color:var(--text-muted);font-weight:500;letter-spacing:.12em;text-transform:uppercase;margin:0 0 9px}
+h1{font-size:32px;font-weight:650;letter-spacing:-.035em;line-height:1.16;margin:0}
+.date-serif{font-family:"Iowan Old Style",Baskerville,Georgia,serif;font-size:31px;font-weight:400;line-height:1.28;letter-spacing:-.025em;color:#C3CDD5;margin:10px 0 24px}
+.subheading{font-size:14px;line-height:1.45;color:var(--text-secondary);margin:10px 0 0}
+.section-title{font-size:17px;font-weight:600;margin:0}.muted{color:var(--text-muted)}
+.panel{border:1px solid var(--border-subtle);border-radius:22px;background:var(--bg-surface);padding:20px;margin-top:18px}
+.divider{height:1px;background:var(--border-subtle);margin:20px 0}
+.week-line{display:flex;align-items:center;gap:8px;margin:20px 0 14px}
+.week-name{flex:1;text-align:center}.week-name strong{display:block;font-size:18px;letter-spacing:-.02em}.week-name span{display:block;font-size:12px;color:var(--text-muted);margin-top:3px}
+.iconbutton{flex:0 0 45px;width:45px;height:45px;border:1px solid var(--border-subtle);background:var(--bg-surface);color:var(--text-secondary);border-radius:13px;display:grid;place-items:center}
+.now{border:0;color:var(--text-muted);padding:0;background:transparent;font-size:12px}
+.weekstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--border-subtle);border-radius:18px;overflow:hidden;margin-top:14px;background:var(--bg-surface)}
+.weekstats>div{padding:17px 15px}.weekstats>div+div{border-left:1px solid var(--border-subtle)}.weekstats strong{display:block;font-size:21px;font-weight:600;letter-spacing:-.02em}.weekstats span{color:var(--text-muted);font-size:12px;display:block;margin-top:6px}
+.weekdays{margin-top:28px}.day{margin:0 0 20px}.day-title{display:flex;align-items:center;justify-content:space-between;margin:0 4px 10px;gap:8px}.day-title span{color:var(--text-secondary);font-size:15px;font-weight:500}.day-title .today{color:var(--accent)}
+.dayplus{width:44px;height:44px;display:grid;place-items:center;border:1px solid transparent;background:transparent;border-radius:13px;color:var(--text-muted)}.dayplus svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:2}
+.dayplus:hover{background:var(--bg-surface);border-color:var(--border-subtle)}
+.workout{border:1px solid var(--border-subtle);border-radius:17px;background:var(--bg-surface);padding:14px 16px;display:flex;align-items:center;gap:13px;margin-bottom:9px;cursor:pointer;min-height:75px}
+.workout:hover{border-color:var(--border-strong)}.sporticon{width:45px;height:45px;flex:0 0 45px;display:grid;place-items:center;border-radius:13px;background:#123831;color:var(--accent)}
+.sporticon svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.workout-main{min-width:0;flex:1}.workout-name{font-size:15px;font-weight:600;line-height:1.25}.workout-meta{margin-top:6px;color:var(--text-muted);font-size:13px;line-height:1.3}
+.status{font-size:11px;padding:6px 9px;border-radius:99px;color:var(--text-secondary);border:1px solid var(--border-subtle);white-space:nowrap}.status.done{color:var(--positive);background:rgba(73,222,164,.07);border-color:rgba(73,222,164,.19)}
+.chevron{font-size:21px;color:var(--text-muted);margin-left:0;line-height:1}.empty-day{padding:13px 16px;border:1px dashed var(--border-subtle);border-radius:15px;color:var(--text-muted);font-size:13px}
+.bottomnav{position:relative;display:flex;justify-content:space-around;gap:5px;border-top:1px solid var(--border-subtle);margin-top:25px;padding:18px 0 2px}.bottom-item{min-width:85px;text-align:center;font-size:12px;color:var(--text-muted)}.bottom-item.active{color:var(--text-primary)}.bottom-item .icon{color:var(--text-muted);height:22px;display:flex;justify-content:center;margin-bottom:6px}.bottom-item.active .icon{color:var(--accent)}
+.toptitle{font-size:29px;line-height:1.18;font-weight:650;letter-spacing:-.028em;margin:0}.metarow{font-size:14px;color:var(--text-secondary);margin-top:10px;line-height:1.45}
+.badge{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border-subtle);padding:5px 11px;color:var(--text-secondary);border-radius:99px;margin:14px 0 0;font-size:12px}
+.blocktitle{font-size:14px;color:var(--text-muted);margin:26px 0 12px}
+.countline{display:flex;gap:12px;justify-content:space-between;align-items:flex-end;margin:16px 0 8px}.countline strong{font-size:29px;letter-spacing:-.025em}.countline span{font-size:13px;color:var(--text-muted)}
+.chart{padding:20px 18px 14px;border:1px solid var(--border-subtle);background:linear-gradient(180deg,rgba(255,255,255,.014),transparent),var(--bg-surface);border-radius:22px;margin-top:17px}
+.charthead{display:flex;align-items:center;justify-content:space-between;margin-bottom:25px}.charthead .name{font-size:17px;font-weight:600}.charthead .axis-unit{font-size:12px;color:var(--text-muted)}
+.chartlabel{color:var(--text-muted);font-size:12px;margin-bottom:10px}
+.plot{height:115px;border-bottom:1px solid #3a4a54;display:flex;align-items:flex-end;gap:3px;padding-bottom:2px}
+.bar{display:block;min-width:1px;border-radius:6px 6px 2px 2px;align-self:flex-end;background:var(--graph-easy);flex-shrink:1}
+.bar.burden{background:var(--graph-hard)}.bar.selected{box-shadow:0 0 0 1.5px rgba(242,193,127,.7)}
+.xaxis{display:flex;justify-content:space-between;color:var(--text-muted);font-size:11px;margin-top:7px}
+.chartfoot{font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:12px}
+.metricrow{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--border-subtle);margin-top:18px}.metricrow>div{padding:13px 6px 1px}.metricrow>div+div{border-left:1px solid var(--border-subtle);padding-left:15px}.metricrow strong{font-size:17px;display:block;font-weight:600}.metricrow span{display:block;color:var(--text-muted);font-size:12px;margin-top:6px}
+.block{border:1px solid var(--border-subtle);border-radius:17px;background:var(--bg-surface);overflow:hidden;margin-bottom:10px}
+.block.active{border-color:#3B5759;box-shadow:inset 0 0 0 .5px rgba(53,220,197,.07)}
+.block-heading{display:flex;gap:12px;align-items:center;min-height:77px;padding:13px 15px;cursor:pointer}.number{width:28px;height:28px;flex:0 0 28px;border-radius:9px;background:var(--bg-surface-raised);color:var(--text-secondary);display:grid;place-items:center;font-size:12px}
+.block-name{font-size:15px;font-weight:600}.block-sub{color:var(--text-muted);font-size:12px;margin-top:5px;line-height:1.4}.grow{flex:1;min-width:0}
+.block-inline{background:#0a1419;border-top:1px solid var(--border-subtle);padding:18px 17px 16px}
+.repeat-context{font-size:12px;color:var(--accent);margin-bottom:16px}
+.repeatshell{border:1px solid #2b3b44;border-radius:18px;padding:13px;background:#0a1216;margin-bottom:11px}.repeatshell>.block-heading{padding:4px 0 11px;min-height:49px}.repeatshell .block{margin:0 0 8px}.repeatshell .block:last-child{margin:0}
+.field{margin-bottom:17px}.fieldlabel{font-size:13px;color:var(--text-secondary);margin-bottom:8px;display:block}
+.textinput,.selection{height:51px;display:flex;align-items:center;justify-content:space-between;width:100%;border:1px solid var(--border-strong);border-radius:13px;background:var(--input);color:var(--text-primary);padding:0 16px;font-size:16px;outline:none}
+.textinput::placeholder{color:#8B98A4}.textinput:focus{border-color:var(--accent)}
+.selection{cursor:pointer}.selection:focus-visible{outline:2px solid var(--accent)}.selection svg{height:18px;width:18px;stroke:var(--text-secondary);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fieldrow{display:grid;grid-template-columns:1fr 1fr;gap:12px}.help{font-size:12px;color:var(--text-muted);margin:9px 0 0;line-height:1.4}
+.block-actions{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border-subtle);padding-top:16px;margin-top:8px}.moveactions{display:flex;gap:8px}.smallbutton{height:44px;min-width:44px;border:1px solid var(--border-subtle);border-radius:12px;background:var(--bg-surface);color:var(--text-secondary);display:grid;place-items:center}
+.danger{background:transparent;border:0;color:#E4A6A9;font-size:14px;padding:8px 0}.addblock{display:flex;align-items:center;justify-content:center;gap:8px;height:54px;width:100%;background:#111B21;border:1px solid var(--border-strong);border-radius:14px;color:var(--text-primary);font-size:15px;margin-top:13px}
+.disclosure{display:flex;justify-content:space-between;align-items:center;color:var(--text-secondary);font-size:15px;border-top:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);padding:20px 0;margin-top:22px}
+.savebar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:25px}.savebar .state-label{font-size:13px;color:var(--warning)}.savebar .micro{font-size:11px;color:var(--text-muted);margin-top:5px}
+.specnote{border-left:2px solid #31434a;padding-left:12px;font-size:11px;color:var(--text-muted);margin-top:20px;line-height:1.5}
+.disclosure svg,.primary-action svg,.addblock svg {width:20px;height:20px;flex:0 0 20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
+.primary-action svg{margin-right:6px}
+/* New workout setup: text dropdown, never sport icons */
+.addform h1{font-size:35px;letter-spacing:-.03em}.addform .date-serif{margin-bottom:36px}
+.selectwrap{position:relative}
+.option-list{position:absolute;top:calc(100% + 7px);left:0;right:0;border:1px solid #3b4348;background:#202020;border-radius:14px;padding:6px;box-shadow:0 12px 30px #0008;z-index:10}
+.option-item{display:flex;align-items:center;justify-content:space-between;padding:12px 15px;height:46px;border-radius:9px;color:#EDEDED;background:none;border:0;width:100%;text-align:left;font-size:16px}
+.option-item.selected{background:#343434}
+.option-item svg{height:19px;width:19px;stroke:currentColor;stroke-width:2;fill:none}
+.setupheading{font-size:17px;font-weight:600;margin:31px 0 14px}
+.radio-option{border:1px solid var(--border-strong);border-radius:16px;padding:19px 17px;display:flex;gap:15px;align-items:center;background:#10171c;margin:11px 0;cursor:pointer}
+.radio-option.active{border-color:#3b5c4e;background:#14211d}
+.dot{width:23px;height:23px;border:2px solid #737b7e;border-radius:50%;display:grid;place-items:center;flex:0 0 23px}.radio-option.active .dot{border-color:var(--accent)}.radio-option.active .dot::after{content:"";width:13px;height:13px;background:var(--accent);border-radius:50%}
+.radio-text .name{font-size:16px;font-weight:600}.radio-text .desc{font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.4}
+.setupfooter{border-top:1px solid var(--border-subtle);padding-top:22px;margin-top:27px;display:flex;align-items:center;justify-content:space-between;gap:14px}.setupfooter p{font-size:12px;color:var(--text-muted);margin:0;line-height:1.4}
+.mini-lanes{display:flex;flex-direction:column;gap:13px;padding:10px 0 5px}.lane{display:grid;grid-template-columns:50px 1fr;gap:10px;align-items:center}.lane-label{font-size:12px;color:var(--text-secondary);text-align:right}.lane-track{height:30px;display:flex;gap:3px;align-items:center}.lane-fill{height:20px;border-radius:5px;background:#35434c}.lane-fill.active{background:var(--graph-hard)}.lane-fill.hr{background:#466d79}.lane-fill.pace{background:#977a59}
+/* Desktop keeps the same single-column visual hierarchy */
+@media (min-width:800px){#app{padding:34px 60px 70px}.date-serif{font-size:39px}.addform h1{font-size:39px}.panel{padding:24px}.workout{padding:18px}.plot{height:135px}.nav-label{font-size:14px}.radio-option{padding:23px 22px}.option-item{height:48px}}
+@media (max-width:460px){#app{padding:20px 20px 38px}.weekstats>div{padding:15px 9px}.weekstats strong{font-size:17px}.weekstats span{font-size:11px}.date-serif{font-size:30px}.workout{gap:9px;padding:12px}.sporticon{width:42px;height:42px;flex-basis:42px}.workout-name{font-size:14px}.workout-meta{font-size:12px}.status{font-size:10px;padding:5px 6px}.chart{padding:16px 13px}.block-inline{padding:15px 12px}.setupfooter{align-items:flex-end}.setupfooter p{max-width:50%}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const $ = s => document.querySelector(s);
+const qs = new URLSearchParams(location.search);
+let screen = qs.get('screen') || 'week';
+let sport = qs.get('sport') || 'Laufen';
+let dropdownOpen = screen === 'add-open';
+let startChoice = qs.get('choice') || 'simple';
+let selectedBlock = 'effort';
+let intervalReps = 4;
+const SVG = {
+  back:'<svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>',
+  right:'<svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>',
+  down:'<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
+  up:'<svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>',
+  plus:'<svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></svg>',
+  check:'<svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>',
+  bike:'<svg viewBox="0 0 24 24"><circle cx="5.5" cy="17.5" r="3.2"/><circle cx="18.5" cy="17.5" r="3.2"/><path d="M5.5 17.5 9 9h4l5.5 8.5M9 9l4.5 8.5M7 7h3M13 5h3"/></svg>',
+  run:'<svg viewBox="0 0 24 24"><circle cx="15" cy="4" r="2"/><path d="m11 9 3-2 3 4-3 2-2 6m-1-9-3 4-4 2m10-3 4 4 1 4M12 19l-5 2"/></svg>',
+  swim:'<svg viewBox="0 0 24 24"><path d="M3 18q3-3 6 0t6 0t6 0M3 21q3-3 6 0t6 0t6 0M8 13l3-4 5 1 3 4M13 5a2 2 0 1 1 0 4"/></svg>',
+  house:'<svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9H3zM9 20v-6h6v6"/></svg>',
+  calendar:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>',
+  bottle:'<svg viewBox="0 0 24 24"><path d="M9 3h6v3l2 3v12H7V9l2-3zM7 12h10M9 6h6"/></svg>'
+};
+function go(dest){ screen=dest; dropdownOpen=dest==='add-open'; history.replaceState({},'',`?screen=${dest}`); render(); window.scrollTo(0,0); }
+function nav(left='',right=''){return `<nav class="page-nav"><div class="nav-left"><button class="back" aria-label="Zurück" onclick="go('${left||'week'}')">${SVG.back}</button><span class="nav-label">${right||'Trainingsplaner'}</span></div><div class="nav-right">${screen==='detail'?'<button class="ghost-action" onclick="go(\'inline\')">Bearbeiten</button>':''}</div></nav>`}
+function icon(t){return `<div class="sporticon">${SVG[t]||SVG.run}</div>`}
+function bottom(){return `<div class="bottomnav"><div class="bottom-item"><div class="icon">${SVG.house}</div>Heute</div><div class="bottom-item active"><div class="icon">${SVG.calendar}</div>Planer</div><div class="bottom-item"><div class="icon">${SVG.bottle}</div>Verpflegung</div></div>`}
+const days=[
+['Montag, 2. November',[['bike','Grundlagenfahrt','1 h 15 min · 34,2 km','Erledigt']]],
+['Dienstag, 3. November',[['run','Lockerer Dauerlauf','45 min · HF · Zone 2','Erledigt'],['bike','Regeneration auf dem Rad','30 min · 90–100 W','Erledigt']]],
+['Mittwoch, 4. November',[['run','4 × 4 min Schwelle','58 min · Pace + HF','Erledigt']]],
+['Donnerstag, 5. November',[]],
+['Heute · Freitag, 6. November',[['bike','Rad · Sweet Spot','65 min · 4 × 8 min · 160–170 W','Geplant']]],
+['Samstag, 7. November',[['run','4 × 2 min Tempo','36 min · Pace + HF','Geplant']]],
+['Sonntag, 8. November',[['swim','Schwimmtechnik','45 min · 2,2 km','Geplant']]]
+];
+function week(){return `<div class="eyebrow">Cockpit</div><h1>Trainingsplaner</h1><div class="subheading">Deine geplanten und absolvierten Einheiten</div>
+<div class="week-line"><button class="iconbutton" aria-label="Vorige Woche">${SVG.back}</button><div class="week-name"><strong>2.–8. November 2026</strong><span>Kalenderwoche 45 · Montag–Sonntag</span></div><button class="iconbutton" aria-label="Nächste Woche">${SVG.right}</button></div>
+<div style="text-align:center;margin:0 0 8px"><button class="now">Diese Woche</button></div>
+<div class="weekstats"><div><strong>2 h 26 min</strong><span>Geplant</span></div><div><strong>3 h 28 min</strong><span>Absolviert</span></div><div><strong>7</strong><span>Einheiten</span></div></div>
+<div class="weekdays">${days.map((day,i)=>`<section class="day"><div class="day-title"><span class="${i===4?'today':''}">${day[0]}</span><button class="dayplus" aria-label="Einheit am ${day[0]} hinzufügen" onclick="go('add')">${SVG.plus}</button></div>${day[1].length?day[1].map(x=>`<div class="workout" onclick="go('${x[3]==='Geplant'?'detail':'detail'}')">${icon(x[0])}<div class="workout-main"><div class="workout-name">${x[1]}</div><div class="workout-meta">${x[2]}</div></div><span class="status ${x[3]==='Erledigt'?'done':''}">${x[3]}</span><span class="chevron">›</span></div>`).join(''):'<div class="empty-day">Keine Einheit geplant · Ruhetag</div>'}</section>`).join('')}</div>
+${bottom()}<div class="specnote">Designreferenz · Beispieldaten · kein Live-Sync. Alle sieben Wochentage sind sichtbar.</div>`}
+function effortBars(){ const pieces=[[27.7,20,''],[5.55,83,'burden'],[5.55,31,''],[5.55,83,'burden'],[5.55,31,''],[5.55,83,'burden'],[5.55,31,''],[5.55,83,'burden'],[5.55,31,''],[27.7,20,'']];return pieces.map(([w,h,c])=>`<div class="bar ${c}" style="width:${w}%;height:${h}%"></div>`).join('') }
+function chart(type){if(type==='simple')return `<div class="chart"><div class="charthead"><span class="name">Trainingsverlauf</span><span class="axis-unit">Zeit (min)</span></div><div class="chartlabel">Herzfrequenz · Zonen</div><div class="plot" style="height:120px"><div style="display:flex;flex-direction:column;justify-content:space-between;height:100%;padding-bottom:1px;font-size:11px;color:var(--text-muted);min-width:24px"><span>Z5</span><span>Z3</span><span>Z1</span></div><div style="flex:1;align-self:flex-end;border-bottom:1px solid #46535b;height:100%;display:flex;align-items:flex-end"><div class="bar" style="height:26%;width:100%"></div></div></div><div class="xaxis" style="padding-left:29px"><span>0</span><span>22,5</span><span>45</span></div><div class="chartfoot">Der Balken zeigt die jeweilige HF-Zonenvorgabe. Dauer entspricht der Balkenbreite.</div></div>`;
+return `<div class="chart"><div class="charthead"><span class="name">Trainingsverlauf</span><span class="axis-unit">Zeit (min)</span></div><div class="chartlabel">Belastung und Erholung · geplante Abschnitte</div><div class="plot">${effortBars()}</div><div class="xaxis"><span>0</span><span>10</span><span>20</span><span>30</span><span>36</span></div><div class="chartfoot">Breite = Dauer. Die Zielart steht bei jedem Abschnitt; gemischte Werte werden nicht auf dieselbe y-Skala gelegt.</div></div>`;
+}
+function detail(){return `${nav('week','Geplante Einheit')}<h1 class="toptitle">4 × 2 min Tempo</h1><div class="metarow">Laufen · Samstag, 7. November</div><div class="badge">Geplant</div><div class="countline"><strong>36 min</strong><span>4 Wiederholungen</span></div>${chart('tempo')}
+<div class="blocktitle">Aufbau</div>${block(1,'Einlaufen','10 min · HF · Zone 2')}${block(2,'4 × Wiederholungen','2 min Tempo (Pace) / 2 min Erholung (HF)')}${block(3,'Auslaufen','10 min · HF · Zone 1')}
+<div class="specnote">Geplante Zielvorgaben – keine aufgezeichneten Ist-Daten. Bearbeiten öffnet den Editor im jeweiligen Block.</div>`}
+function block(n,name,sub){return `<div class="block"><div class="block-heading"><div class="number">${n}</div><div class="grow"><div class="block-name">${name}</div><div class="block-sub">${sub}</div></div><span class="chevron">›</span></div></div>`}
+function formfields(){return `<div class="block-inline"><div class="repeat-context">Gilt für alle ${intervalReps} Wiederholungen</div><div class="fieldrow"><div class="field"><label class="fieldlabel">Dauer</label><input class="textinput" value="2 min"></div><div class="field"><label class="fieldlabel">Zielart</label><button class="selection">Pace ${SVG.down}</button></div></div><div class="field"><label class="fieldlabel">Pace-Vorgabe</label><div class="fieldrow"><input class="textinput" aria-label="Pace von" value="5:20 min/km"><input class="textinput" aria-label="Pace bis" value="5:35 min/km"></div></div><div class="block-actions"><div class="moveactions"><button class="smallbutton" aria-label="Nach oben">↑</button><button class="smallbutton" aria-label="Nach unten">↓</button></div><button class="danger">Entfernen</button></div></div>`}
+function editor(){return `${nav('week','Einheit bearbeiten')}<h1 class="toptitle">4 × 2 min Tempo</h1><div class="metarow">Samstag, 7. November · Laufen</div><div class="countline"><strong>36 min</strong><span>3 Bausteine</span></div>${chart('tempo')}
+<div class="blocktitle">Aufbau · Abschnitt zum Bearbeiten wählen</div>${block(1,'Einlaufen','10 min · Herzfrequenz · Zone 2')}
+<div class="repeatshell"><div class="block-heading"><div class="number">2</div><div class="grow"><div class="block-name">${intervalReps} × Wiederholungen</div><div class="block-sub">Belastung und Erholung · 16 min</div></div><span class="chevron">⌄</span></div>
+<div class="block active"><div class="block-heading"><div class="number">A</div><div class="grow"><div class="block-name">Belastung</div><div class="block-sub">2 min · Pace · 5:20–5:35 min/km</div></div><span class="chevron">⌃</span></div>${formfields()}</div>
+<div class="block"><div class="block-heading"><div class="number">B</div><div class="grow"><div class="block-name">Erholung</div><div class="block-sub">2 min · Herzfrequenz · Zone 1</div></div><span class="chevron">›</span></div></div></div>
+${block(3,'Auslaufen','10 min · Herzfrequenz · Zone 1')}
+<button class="addblock">${SVG.plus} Baustein hinzufügen</button>
+<div class="disclosure"><span>Name &amp; Termin</span>${SVG.down}</div>
+<div class="savebar"><div><div class="state-label">Ungespeicherte Änderungen</div><div class="micro">Vorschau · kein echter Sync</div></div><button class="primary-action" onclick="alert('Designvorschau – kein echter Sync')">${SVG.check} Speichern</button></div>`}
+function sportSelect(){return `<div class="field"><label class="fieldlabel">Sportart</label><div class="selectwrap"><button class="selection" aria-haspopup="listbox" aria-expanded="${dropdownOpen}" onclick="dropdownOpen=!dropdownOpen;render()"><span>${sport}</span>${SVG.down}</button>${dropdownOpen?`<div class="option-list" role="listbox">${['Laufen','Radfahren','Schwimmen'].map(name=>`<button class="option-item ${sport===name?'selected':''}" role="option" aria-selected="${sport===name}" onclick="sport='${name}';dropdownOpen=false;render()"><span>${name}</span>${sport===name?SVG.check:''}</button>`).join('')}</div>`:''}</div></div>`}
+function radio(id,name,desc){return `<div class="radio-option ${startChoice===id?'active':''}" onclick="startChoice='${id}';render()"><span class="dot"></span><span class="radio-text"><span class="name">${name}</span><span class="desc" style="display:block">${desc}</span></span></div>`}
+function add(){return `${nav('week','Trainingsplaner')}<div class="addform"><div class="eyebrow">Neue Einheit</div><h1>Was steht an?</h1><div class="date-serif">Mittwoch, 11. November</div>
+${sportSelect()}
+<div class="field" style="margin-top:22px"><label class="fieldlabel">Name · optional</label><input class="textinput" placeholder="Name der Einheit" value=""></div>
+<div class="setupheading">Aufbau</div>${radio('simple','Einfacher Abschnitt','Zum Beispiel ein durchgehender Z2-Lauf.')}${radio('repeats','Mit Wiederholungen','Ein Startpunkt für Belastung und Erholung.')}${radio('empty','Leer beginnen','Den Aufbau selbst zusammenstellen.')}
+<div class="setupfooter"><p>Datum ist bereits übernommen.</p><button class="primary-action" onclick="go('simple')">Weiter →</button></div></div>
+<div class="specnote">Sportart wird ausschließlich in einem Text-Dropdown ausgewählt. Keine Icon-Kacheln als Sportauswahl.</div>`}
+function simple(){return `${nav('week','Einheit bearbeiten')}<h1 class="toptitle">Dauerlauf</h1><div class="date-serif" style="font-size:29px;margin:10px 0 18px">Mittwoch, 11. November</div>
+<div class="countline"><strong>45 min</strong><span>1 Baustein</span></div>${chart('simple')}
+<div class="blocktitle">Aufbau</div><div class="block active"><div class="block-heading"><div class="number">1</div><div class="grow"><div class="block-name">Dauerlauf</div><div class="block-sub">45 min · Herzfrequenz · Zone 2</div></div><span class="chevron">⌃</span></div>
+<div class="block-inline"><div class="fieldrow"><div class="field"><label class="fieldlabel">Umfang</label><input class="textinput" value="45 min"></div><div class="field"><label class="fieldlabel">Zielart</label><button class="selection"><span>Herzfrequenz</span>${SVG.down}</button></div></div><div class="field"><label class="fieldlabel">Ziel</label><button class="selection"><span>Zone 2</span>${SVG.down}</button></div><div class="block-actions"><div class="moveactions"><button class="smallbutton">↑</button><button class="smallbutton">↓</button></div><button class="danger">Entfernen</button></div></div></div>
+<button class="addblock">${SVG.plus} Baustein hinzufügen</button><div class="disclosure">Name &amp; Termin ${SVG.down}</div>
+<div class="savebar"><div><div class="state-label">Ungespeicherte Änderungen</div><div class="micro">Speichern nur in der Vorschau.</div></div><button class="primary-action">${SVG.check} Speichern</button></div><div class="specnote">Ein einfacher Z2-Lauf besteht aus genau einem Abschnitt. Intervalle sind optional.</div>`}
+function mixed(){return `${nav('week','Geplante Einheit')}<h1 class="toptitle">Lauf · Tempo und HF</h1><div class="metarow">Laufen · Samstag, 7. November</div><div class="countline"><strong>36 min</strong><span>HF + Pace · zwei Zielarten</span></div>
+<div class="chart"><div class="charthead"><span class="name">Trainingsverlauf</span><span class="axis-unit">Zeit (min)</span></div><div class="chartlabel">Getrennte Spuren, gemeinsame Zeitachse</div><div class="mini-lanes">
+<div class="lane"><span class="lane-label">HF</span><div class="lane-track"><div class="lane-fill hr" style="width:27.78%"></div><div class="lane-fill" style="width:5.56%"></div><div class="lane-fill hr" style="width:5.56%"></div><div class="lane-fill" style="width:5.56%"></div><div class="lane-fill hr" style="width:5.56%"></div><div class="lane-fill" style="width:5.56%"></div><div class="lane-fill hr" style="width:5.56%"></div><div class="lane-fill" style="width:5.56%"></div><div class="lane-fill hr" style="width:5.56%"></div><div class="lane-fill hr" style="width:27.78%"></div></div></div>
+<div class="lane"><span class="lane-label">Pace</span><div class="lane-track"><div class="lane-fill" style="width:27.78%"></div><div class="lane-fill active" style="width:5.56%"></div><div class="lane-fill" style="width:5.56%"></div><div class="lane-fill active" style="width:5.56%"></div><div class="lane-fill" style="width:5.56%"></div><div class="lane-fill active" style="width:5.56%"></div><div class="lane-fill" style="width:5.56%"></div><div class="lane-fill active" style="width:5.56%"></div><div class="lane-fill" style="width:5.56%"></div><div class="lane-fill" style="width:27.78%"></div></div></div></div>
+<div class="xaxis" style="margin-left:60px"><span>0</span><span>10</span><span>20</span><span>30</span><span>36</span></div><div class="chartfoot">Abschnitte mit Pacevorgabe erscheinen in der Pace-Spur, Abschnitte mit HF-Ziel in der HF-Spur. Beide Spuren besitzen ihre eigene Skala und werden nicht als identische Intensitäten dargestellt.</div></div>
+<div class="blocktitle">Aufbau</div>${block(1,'Einlaufen','10 min · HF · Zone 2')}${block(2,'4 × Wiederholungen','Belastung: Pace · Erholung: HF')}${block(3,'Auslaufen','10 min · HF · Zone 1')}<div class="specnote">Schematische Skizze einer gemischten Einheit für den Coding-Agenten; die produktive Umsetzung verwendet die echten Zielwerte und Skalen.</div>`}
+function render(){const chosen = screen==='week'?week():screen==='detail'?detail():screen==='inline'?editor():screen==='add'||screen==='add-open'?add():screen==='simple'?simple():screen==='mixed'?mixed():week();$('#app').innerHTML=chosen;}
+render();
+</script>
+</body></html>
