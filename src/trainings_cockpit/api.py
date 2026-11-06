@@ -27,6 +27,7 @@ from .planner.dates import (
     rolling_dashboard_range,
 )
 from .planner.details import build_plan_detail
+from .planner.drafts import DraftProjectionError, build_draft_projection
 from .planner.summaries import recorded_seconds
 from .planner.week import (
     SOURCE_COMPLETE,
@@ -259,6 +260,33 @@ def plan_detail(event_id: int) -> dict[str, Any]:
                 athlete_id=athlete_id,
                 zone_profiles=plan.sport_profiles(conn),
             )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+
+
+@app.post("/api/planner/plan/{event_id}/draft")
+def plan_draft(
+    event_id: int,
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    """Projiziert einen lokalen Entwurf, ohne Remote zu lesen oder zu schreiben."""
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Planung nicht gefunden")
+        settings = get_settings()
+        account_id, athlete_id = account_context(conn)
+        try:
+            return build_draft_projection(
+                row,
+                body,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except DraftProjectionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
 

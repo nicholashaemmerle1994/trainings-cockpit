@@ -447,7 +447,7 @@ export interface PlanGraph {
 }
 
 export interface PlanNodeEnd {
-  kind: "time" | "distance";
+  kind: "time" | "distance" | "open";
   seconds?: number;
   metres?: number;
   text: string;
@@ -480,6 +480,72 @@ export interface PlanRights {
   writes_on_open: false;
 }
 
+export interface PlanZoneOption {
+  id: string;
+  label: string;
+  level: number;
+  low: number;
+  high: number;
+}
+
+export interface PlanZoneOptions {
+  sport: string;
+  available: boolean;
+  zone_set_id: string | null;
+  max_hr: number | null;
+  zones: PlanZoneOption[];
+}
+
+export interface PlanTargetCapability {
+  local: boolean;
+  editable: boolean;
+  synchronizable: boolean;
+  gate?: string;
+  reason?: string;
+}
+
+export interface PlanCapabilities {
+  write: { available: boolean; reason: string };
+  targets: {
+    heartRateZone: PlanTargetCapability;
+    heartRateBpm: PlanTargetCapability;
+    none: PlanTargetCapability;
+  };
+}
+
+export interface PlanSourceSnapshot {
+  remote_id: string;
+  fetched_at: string;
+  relevant_content_hash: string;
+  remote_updated_at: string | null;
+  remote_version: string | null;
+  raw_workout_text: string | null;
+}
+
+export interface DraftFieldState {
+  validity: "valid" | "incomplete" | "invalid";
+  message: string | null;
+  parsed: unknown;
+}
+
+export interface DraftIssue {
+  code: string;
+  message: string;
+  node_id: string | null;
+  field: string | null;
+}
+
+export interface PlanDraftMeta {
+  base_local_id: string;
+  base_source_hash: string;
+  dirty: boolean;
+  has_field_input: boolean;
+  valid: boolean;
+  field_states: Record<string, DraftFieldState>;
+  issues: DraftIssue[];
+  write: { available: boolean; reason: string };
+}
+
 export interface PlanDetail {
   kind: "planned";
   id: number;
@@ -506,8 +572,15 @@ export interface PlanDetail {
   };
   nodes: PlanNode[];
   graph: PlanGraph;
+  zone_options: PlanZoneOptions;
+  capabilities: PlanCapabilities;
+  source_snapshot: PlanSourceSnapshot;
   source: { name: string; remote_id: string | null; read_only: boolean };
   fetched_at: string;
+}
+
+export interface PlanDraftProjection extends PlanDetail {
+  draft: PlanDraftMeta;
 }
 
 export interface ZoneShare {

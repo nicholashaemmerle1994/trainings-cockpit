@@ -21,6 +21,7 @@ from .model import (
     Editability,
     HeartRateTarget,
     NoTarget,
+    OpenEnd,
     PaceTarget,
     PlannedWorkout,
     PowerTarget,
@@ -83,12 +84,14 @@ def _end_data(node: StepNode) -> dict[str, Any]:
             "seconds": node.end.seconds,
             "text": format_duration(node.end.seconds),
         }
-    assert isinstance(node.end, DistanceEnd)
-    return {
-        "kind": "distance",
-        "metres": node.end.metres,
-        "text": format_distance(node.end.metres),
-    }
+    if isinstance(node.end, DistanceEnd):
+        return {
+            "kind": "distance",
+            "metres": node.end.metres,
+            "text": format_distance(node.end.metres),
+        }
+    assert isinstance(node.end, OpenEnd)
+    return {"kind": "open", "text": "Ende offen"}
 
 
 def _target_data(target: Any) -> dict[str, Any]:
@@ -211,26 +214,27 @@ def _notes(plan: PlannedWorkout, event: Mapping[str, Any]) -> str | None:
     return None
 
 
-def build_plan_detail(
+def _source_data(source: Any) -> dict[str, Any]:
+    return {
+        "remote_id": str(source.remote_id),
+        "fetched_at": source.fetched_at,
+        "relevant_content_hash": source.relevant_content_hash,
+        "remote_updated_at": source.remote_updated_at,
+        "remote_version": source.remote_version,
+        "raw_workout_text": source.raw_workout_text,
+    }
+
+
+def _plan_payload(
+    plan: PlannedWorkout,
+    source: Any,
+    event: Mapping[str, Any],
     row: Mapping[str, Any],
     *,
-    time_zone: str,
+    zone_profiles: Mapping[str, Any] | None,
     account_id: str = "default",
     athlete_id: str = "default",
-    zone_profiles: Mapping[str, Any] | None = None,
-    now: str | None = None,
 ) -> dict[str, Any]:
-    """Eine planungsseitige Detailantwort ohne Schreibzugriff."""
-    event = _event_from_row(row)
-    fetched_at = now or datetime.now().astimezone().isoformat(timespec="seconds")
-    remote = read_remote_event(
-        event,
-        fetched_at=fetched_at,
-        time_zone=time_zone,
-        account_id=account_id,
-        athlete_id=athlete_id,
-    )
-    plan = remote.plan
     graph = build_workout_profile_data(
         plan,
         zone_profiles=zone_profiles,
@@ -258,13 +262,66 @@ def build_plan_detail(
         "known": _known_summary(plan),
         "nodes": [_node_data(node) for node in plan.nodes],
         "graph": graph,
+        "source_snapshot": _source_data(source),
         "source": {
             "name": "intervals.icu",
             "remote_id": str(plan.remote_id) if plan.remote_id is not None else None,
             "read_only": True,
         },
-        "fetched_at": fetched_at,
+        "fetched_at": source.fetched_at,
     }
+
+
+def build_plan_payload(
+    plan: PlannedWorkout,
+    source: Any,
+    event: Mapping[str, Any],
+    row: Mapping[str, Any],
+    *,
+    zone_profiles: Mapping[str, Any] | None = None,
+    account_id: str = "default",
+    athlete_id: str = "default",
+) -> dict[str, Any]:
+    """Gemeinsame Darstellung für Leseansicht und lokalen Entwurf."""
+    return _plan_payload(
+        plan,
+        source,
+        event,
+        row,
+        zone_profiles=zone_profiles,
+        account_id=account_id,
+        athlete_id=athlete_id,
+    )
+
+
+def build_plan_detail(
+    row: Mapping[str, Any],
+    *,
+    time_zone: str,
+    account_id: str = "default",
+    athlete_id: str = "default",
+    zone_profiles: Mapping[str, Any] | None = None,
+    now: str | None = None,
+) -> dict[str, Any]:
+    """Eine planungsseitige Detailantwort ohne Schreibzugriff."""
+    event = _event_from_row(row)
+    fetched_at = now or datetime.now().astimezone().isoformat(timespec="seconds")
+    remote = read_remote_event(
+        event,
+        fetched_at=fetched_at,
+        time_zone=time_zone,
+        account_id=account_id,
+        athlete_id=athlete_id,
+    )
+    return build_plan_payload(
+        remote.plan,
+        remote.source,
+        event,
+        row,
+        zone_profiles=zone_profiles,
+        account_id=account_id,
+        athlete_id=athlete_id,
+    )
 
 
 def _sport_label(sport: str | None) -> str:
@@ -273,4 +330,4 @@ def _sport_label(sport: str | None) -> str:
     return SPORT_LABELS.get(sport or "", sport or "Andere Sportart")
 
 
-__all__ = ["build_plan_detail"]
+__all__ = ["build_plan_detail", "build_plan_payload"]

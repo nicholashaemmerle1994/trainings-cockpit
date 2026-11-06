@@ -125,13 +125,17 @@ def _target_text(target: StepTarget | None) -> str:
 def _end_values(end: StepEnd) -> tuple[str, float | None, float | None]:
     if isinstance(end, TimeEnd):
         return "time", end.seconds, None
-    return "distance", None, end.metres
+    if isinstance(end, DistanceEnd):
+        return "distance", None, end.metres
+    return "open", None, None
 
 
 def _end_text(end: StepEnd) -> str:
     if isinstance(end, TimeEnd):
         return format_duration(end.seconds)
-    return format_distance(end.metres)
+    if isinstance(end, DistanceEnd):
+        return format_distance(end.metres)
+    return "Ende offen"
 
 
 def _zone_number(zone_id: str) -> int | None:

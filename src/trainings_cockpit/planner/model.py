@@ -152,7 +152,19 @@ class DistanceEnd:
         object.__setattr__(self, "metres", _positive(self.metres, "metres"))
 
 
-type StepEnd = TimeEnd | DistanceEnd
+@dataclass(frozen=True, slots=True)
+class OpenEnd:
+    """Ein Entwurfsabschnitt, dessen Ende noch nicht gültig gesetzt ist.
+
+    Der Wert existiert nur im lokalen Entwurf. Er hält die Stelle sichtbar,
+    statt eine leere Eingabe in ``0`` oder eine erfundene Dauer zu verwandeln;
+    gespeichert werden kann ein solcher Abschnitt nicht.
+    """
+
+    kind: ClassVar[str] = "open"
+
+
+type StepEnd = TimeEnd | DistanceEnd | OpenEnd
 
 
 # ------------------------------------------------------------------ Ziele
@@ -241,8 +253,8 @@ class StepNode:
             object.__setattr__(self, "id", NodeId(self.id))
         if not isinstance(self.role, StepRole):
             object.__setattr__(self, "role", StepRole(self.role))
-        if not isinstance(self.end, (TimeEnd, DistanceEnd)):
-            raise ValueError("end muss TimeEnd oder DistanceEnd sein.")
+        if not isinstance(self.end, (TimeEnd, DistanceEnd, OpenEnd)):
+            raise ValueError("end muss TimeEnd, DistanceEnd oder OpenEnd sein.")
         if not isinstance(self.target, _TARGET_TYPES):
             raise ValueError("target muss ein unterstütztes Ziel sein.")
         object.__setattr__(self, "notes", _optional_text(self.notes, "notes"))

@@ -24,10 +24,12 @@ from enum import StrEnum
 from typing import Any
 
 from .model import (
+    DistanceEnd,
     FieldBuffer,
     FieldValidity,
     HeartRateTarget,
     NoTarget,
+    OpenEnd,
     PaceTarget,
     PaceUnit,
     PlannedWorkout,
@@ -371,8 +373,10 @@ def _totals_nodes(nodes: Sequence[WorkoutNode]) -> KnownTotals:
                 first = node.end.kind
             if isinstance(node.end, TimeEnd):
                 duration += node.end.seconds
-            else:
+            elif isinstance(node.end, DistanceEnd):
                 distance += node.end.metres
+            else:
+                unknown = True
             executions += 1
             continue
         if isinstance(node, UnsupportedNode):
@@ -591,6 +595,7 @@ class ValidationCode(StrEnum):
     STRUCTURE_CHANGED = "structure_changed"
     INVALID_FIELD = "invalid_field"
     INCOMPLETE_FIELD = "incomplete_field"
+    OPEN_END = "open_end"
 
 
 @dataclass(frozen=True, slots=True)
@@ -641,6 +646,14 @@ def validate_workout(
                 ValidationIssue(
                     ValidationCode.EMPTY_REPEAT,
                     "Eine Wiederholungsgruppe ohne Kinder führt nichts aus.",
+                    node_id=node.id,
+                )
+            )
+        if isinstance(node, StepNode) and isinstance(node.end, OpenEnd):
+            issues.append(
+                ValidationIssue(
+                    ValidationCode.OPEN_END,
+                    "Der Abschnitt hat noch kein gültiges Ende.",
                     node_id=node.id,
                 )
             )

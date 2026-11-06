@@ -3,6 +3,7 @@ import type {
   FuelPlan,
   Overview,
   PlanDetail,
+  PlanDraftProjection,
   PlannerWeekResponse,
   SessionDetail,
   SyncResult,
@@ -40,6 +41,12 @@ export const api = {
     ),
   planDetail: (eventId: number) =>
     request<PlanDetail>(`/api/planner/plan/${eventId}`),
+  planDraft: (eventId: number, body: unknown) =>
+    request<PlanDraftProjection>(`/api/planner/plan/${eventId}/draft`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
   unit: (rowId: number) => request<UnitDetail>(`/api/unit/${rowId}`),
   fuel: (params: {
     minutes: number;
