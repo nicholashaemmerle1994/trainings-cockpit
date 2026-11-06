@@ -145,10 +145,6 @@ export function AddWorkoutSheet({
             Weiter →
           </button>
         </div>
-        <p className="add-workout__hint">
-          Sportart wird ausschließlich in einem Text-Dropdown ausgewählt. Keine
-          Icon-Kacheln als Sportauswahl.
-        </p>
       </form>
     </Sheet>
   );

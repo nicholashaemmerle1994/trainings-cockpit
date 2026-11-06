@@ -407,7 +407,9 @@ export function PlanSheet({
   };
 
   const startEdit = () => {
-    if (!data || !data.rights.can_edit_structure) return;
+    if (!data || (!data.rights.can_edit_structure && !data.rights.can_edit_metadata)) {
+      return;
+    }
     clearLocalDraft();
     draftActive.current = true;
     setEditing(true);
@@ -426,14 +428,19 @@ export function PlanSheet({
     setTargetEditors(targetEditorsFromNodes(data.nodes));
     setUndo(null);
     setAddOpen(false);
-    const first = firstEditableNode(data.nodes);
+    const first = data.rights.can_edit_structure
+      ? firstEditableNode(data.nodes)
+      : null;
     setSelected(first?.node_id ?? null);
     setExpanded(first?.node_id ?? null);
-    if (first) {
-      window.requestAnimationFrame(() =>
-        document.getElementById(planHeadingElementId(first.node_id))?.focus(),
-      );
-    }
+    window.requestAnimationFrame(() => {
+      if (first) {
+        document.getElementById(planHeadingElementId(first.node_id))?.focus();
+      } else {
+        // Metadatenmodus: kein Struktur-Editor, der Name ist das erste Feld.
+        document.getElementById("plan-meta-name")?.focus();
+      }
+    });
   };
 
   /** Nur den lokalen Zustand zurücksetzen; Navigation erledigt der Aufrufer. */
@@ -672,6 +679,9 @@ export function PlanSheet({
   };
 
   const adoptRemote = async () => {
+    // Bei einer extern gelöschten Einheit gibt es keine Remoteversion zum
+    // Übernehmen. Dann wird nur der lokale Entwurf verworfen und geschlossen.
+    const remoteExists = conflict?.remote != null;
     setConflict(null);
     setRemoteOpen(false);
     setSaveError(null);
@@ -679,7 +689,7 @@ export function PlanSheet({
     clearLocalDraft();
     editingRef.current = false;
     dirtyRef.current = false;
-    if (isNew || eventId == null) {
+    if (isNew || eventId == null || !remoteExists) {
       onClose();
       return;
     }
@@ -1141,6 +1151,7 @@ export function PlanSheet({
           buffers={buffers}
           endKinds={endKinds}
           targetEditors={targetEditors}
+          inputLocked={saving || saveLocked}
           undo={undo}
           addOpen={addOpen}
           projection={projection}
@@ -1202,6 +1213,7 @@ function PlanBody({
   buffers,
   endKinds,
   targetEditors,
+  inputLocked,
   undo,
   addOpen,
   projection,
@@ -1254,6 +1266,7 @@ function PlanBody({
   buffers: DraftFieldBuffers;
   endKinds: Record<string, "time" | "distance">;
   targetEditors: Record<string, TargetEditor>;
+  inputLocked: boolean;
   undo: UndoSnapshot | null;
   addOpen: boolean;
   projection: PlanDraftProjection | null;
@@ -1407,16 +1420,22 @@ function PlanBody({
         </section>
       )}
 
-      {!editing && !recovery && data.rights.can_edit_structure && (
-        <div className="plan-editbar">
-          <button type="button" className="btn btn--primary" onClick={onEdit}>
-            Bearbeiten
-          </button>
-          <span className="plan-note plan-note--muted">
-            Öffnet den lokalen Entwurf. Es wird nichts gespeichert.
-          </span>
-        </div>
-      )}
+      {!editing &&
+        !recovery &&
+        (data.rights.can_edit_structure || data.rights.can_edit_metadata) && (
+          <div className="plan-editbar">
+            <button type="button" className="btn btn--primary" onClick={onEdit}>
+              {data.rights.can_edit_structure
+                ? "Bearbeiten"
+                : "Name & Termin bearbeiten"}
+            </button>
+            <span className="plan-note plan-note--muted">
+              {data.rights.can_edit_structure
+                ? "Öffnet den lokalen Entwurf. Es wird nichts gespeichert."
+                : "Der Aufbau bleibt unverändert; nur Name und Termin sind bearbeitbar."}
+            </span>
+          </div>
+        )}
 
       <div className="plan-hero">
         <div>
@@ -1492,38 +1511,51 @@ function PlanBody({
         {undo && (
           <div className="plan-undo" role="status">
             <span>{undo.message}</span>
-            <button type="button" className="btn btn--ghost" onClick={onUndo}>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={inputLocked}
+              onClick={onUndo}
+            >
               Rückgängig
             </button>
           </div>
         )}
-        {editing ? (
-          <PlanEditor
-            detail={data}
-            projection={projection}
-            nodes={nodes}
-            buffers={buffers}
-            endKinds={endKinds}
-            targetEditors={targetEditors}
-            selectedNodeId={selected}
-            expandedNodeId={expanded}
-            onToggle={onToggle}
-            onBuffer={onBuffer}
-            onPatchNode={onPatchNode}
-            onEndKindChange={onEndKindChange}
-            onTargetKindChange={onTargetKindChange}
-            onTargetUnitChange={onTargetUnitChange}
-            onTargetModeChange={onTargetModeChange}
-            onMove={onMove}
-            onRemove={onRemove}
-            onAddChild={onAddChild}
-            onDissolve={onDissolve}
-            registerHead={registerHead}
-          />
+        {editing && !data.rights.can_edit_structure && (
+          <p className="plan-note plan-note--muted">
+            Der Aufbau ist bei dieser Planung nur lesbar. Nicht abbildbare
+            Inhalte bleiben unverändert; bearbeitbar sind Name und Termin.
+          </p>
+        )}
+        {editing && data.rights.can_edit_structure ? (
+          <fieldset className="plan-lock" disabled={inputLocked}>
+            <PlanEditor
+              detail={data}
+              projection={projection}
+              nodes={nodes}
+              buffers={buffers}
+              endKinds={endKinds}
+              targetEditors={targetEditors}
+              selectedNodeId={selected}
+              expandedNodeId={expanded}
+              onToggle={onToggle}
+              onBuffer={onBuffer}
+              onPatchNode={onPatchNode}
+              onEndKindChange={onEndKindChange}
+              onTargetKindChange={onTargetKindChange}
+              onTargetUnitChange={onTargetUnitChange}
+              onTargetModeChange={onTargetModeChange}
+              onMove={onMove}
+              onRemove={onRemove}
+              onAddChild={onAddChild}
+              onDissolve={onDissolve}
+              registerHead={registerHead}
+            />
+          </fieldset>
         ) : (
           <PlanNodeList nodes={nodes} selected={selected} onSelect={onSelect} />
         )}
-        {editing && (
+        {editing && data.rights.can_edit_structure && (
           <div className="plan-add">
             {!addOpen ? (
               <button
@@ -1531,6 +1563,7 @@ function PlanBody({
                 id="plan-add-trigger"
                 className="plan-add__trigger"
                 aria-expanded={false}
+                disabled={inputLocked}
                 onClick={() => onAddOpen(true)}
               >
                 <span aria-hidden="true">+</span> Baustein hinzufügen
@@ -1540,6 +1573,7 @@ function PlanBody({
                 <button
                   type="button"
                   className="plan-add__choice"
+                  disabled={inputLocked}
                   onClick={() => onAddRoot("step")}
                 >
                   <strong>Einzelabschnitt</strong>
@@ -1548,6 +1582,7 @@ function PlanBody({
                 <button
                   type="button"
                   className="plan-add__choice"
+                  disabled={inputLocked}
                   onClick={() => onAddRoot("repeat")}
                 >
                   <strong>Wiederholungsblock</strong>
@@ -1556,6 +1591,7 @@ function PlanBody({
                 <button
                   type="button"
                   className="plan-add__cancel"
+                  disabled={inputLocked}
                   onClick={() => onAddOpen(false)}
                 >
                   Abbrechen
@@ -1579,6 +1615,7 @@ function PlanBody({
                     className="plan-input"
                     type="text"
                     value={planName}
+                    disabled={inputLocked}
                     placeholder="Name der Einheit"
                     onChange={(event) => onPlanName(event.target.value)}
                   />
@@ -1590,6 +1627,7 @@ function PlanBody({
                     className="plan-input"
                     type="date"
                     value={planDate}
+                    disabled={inputLocked}
                     onChange={(event) => {
                       if (event.target.value) onPlanDate(event.target.value);
                     }}
@@ -1684,7 +1722,9 @@ function PlanBody({
               Zum Entwurf
             </button>
             <button type="button" className="btn btn--ghost" onClick={onAdoptRemote}>
-              Entwurf verwerfen, Remote übernehmen
+              {conflict.remote && !isNew
+                ? "Entwurf verwerfen, Remote übernehmen"
+                : "Entwurf verwerfen und schließen"}
             </button>
           </div>
         </section>

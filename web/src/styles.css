@@ -2938,6 +2938,17 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   margin-bottom: var(--space-2);
 }
 
+.plan-lock {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.plan-lock:disabled {
+  opacity: 0.72;
+}
+
 .plan-nodes,
 .plan-node__children {
   list-style: none;
@@ -3744,15 +3755,6 @@ button.plan-node:focus-visible {
 .add-workout__footer p {
   margin: 0;
   font-size: var(--text-label);
-  color: var(--text-muted);
-}
-
-.add-workout__hint {
-  margin: var(--space-3) 0 0;
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--border-strong);
-  font-size: 11px;
-  line-height: 1.5;
   color: var(--text-muted);
 }
 

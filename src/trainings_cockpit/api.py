@@ -48,6 +48,7 @@ from .planner.week import (
     SOURCE_COMPLETE,
     SOURCE_EMPTY,
     SOURCE_ERROR,
+    SOURCE_PARTIAL,
     SOURCE_UNAVAILABLE,
     account_context,
     build_planner_week,
@@ -155,7 +156,10 @@ def _source_state(
     if error:
         return SOURCE_ERROR
     if rows:
-        return SOURCE_COMPLETE
+        # Liegt die Woche nur teilweise im nachweislich gelesenen Bereich,
+        # sind die vorhandenen Zeilen sichtbar, aber die Summe ist keine
+        # vollständige Wochensumme. Das muss die Oberfläche kennzeichnen.
+        return SOURCE_PARTIAL if coverage == "uncovered" else SOURCE_COMPLETE
     # Eine Woche außerhalb des nachweislich gelesenen Bereichs ist nicht
     # „bestätigt leer“. Ohne Sync-Marke bleibt der lokale Bestand maßgeblich.
     if coverage == "uncovered":
@@ -217,7 +221,7 @@ def _planner_week(conn: sqlite3.Connection, parameter: str | None) -> dict[str, 
 
     plans_coverage = coverage_for_period(period, sync_range, to_field="events_to")
     activities_coverage = coverage_for_period(
-        period, sync_range, to_field="activities_to"
+        period, sync_range, to_field="activities_to", today=today
     )
     plans_state = _source_state(
         plans_rows, coverage=plans_coverage, error=plans_error

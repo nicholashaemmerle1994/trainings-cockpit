@@ -217,7 +217,7 @@ Wochenwechsel. Für einen echten Sync müssen `.env` und die Keys gesetzt sein;
 ohne ausdrücklich vorgesehenen Testdatensatz und Freigabe keine produktiven
 Schreibzugriffe gegen intervals.icu ausführen.
 
-**Prüfstand P26/P27:** 375 Backend-Tests, `tsc --noEmit` und Vite-Build
+**Prüfstand P26/P27 + Review:** 380 Backend-Tests, `tsc --noEmit` und Vite-Build
 erfolgreich. Die Abnahme lief mit einer separaten SQLite-Kopie und einem
 lokalen Kontrolladapter; ein Live-Rundlauf gegen intervals.icu und eine
 Geräteübertragung wurden nicht behauptet. Details:

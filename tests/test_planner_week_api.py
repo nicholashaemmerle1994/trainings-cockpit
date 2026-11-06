@@ -242,3 +242,106 @@ def test_week_liefert_gezielten_zeitraum(client: TestClient) -> None:
 def test_ungueltige_woche_wird_abgewiesen(client: TestClient) -> None:
     assert client.get("/api/planner", params={"week": "31.10.2026"}).status_code == 400
     assert client.get("/api/week", params={"from": "2026-09-01"}).status_code == 200
+
+
+def test_unvollstaendig_bekannter_plan_markiert_die_offene_summe(
+    client: TestClient,
+) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_events(
+        conn,
+        [
+            {
+                "id": 9107,
+                "category": "WORKOUT",
+                "start_date_local": "2026-11-08T09:15:00",
+                "type": "Ride",
+                "name": "Import mit unbekanntem Inhalt",
+                "workout_doc": {
+                    "steps": [
+                        {"text": "Einrollen", "duration": 600},
+                        {"text": "Rampe", "duration": 600, "ramp": True},
+                    ]
+                },
+            }
+        ],
+    )
+    conn.close()
+
+    payload = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+    open_plan = payload["summary"]["open_plan"]
+
+    assert open_plan["count"] == 1
+    assert open_plan["seconds"] == 600
+    assert open_plan["has_unknown"] is True
+
+
+def test_nur_teilweise_abgedeckte_woche_ist_nicht_bestaetigt_leer(
+    client: TestClient,
+) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.set_setting(
+        conn,
+        "synced_range",
+        '{"from":"2026-08-05","to":"2026-08-20",'
+        '"activities_to":"2026-08-20","events_to":"2027-08-20"}',
+    )
+    conn.close()
+
+    payload = client.get("/api/planner", params={"week": "2026-08-03"}).json()
+
+    assert payload["sources"]["activities"]["coverage"] == "uncovered"
+    assert payload["sources"]["activities"]["state"] == "unavailable"
+    assert payload["summary"]["recorded"]["seconds"] is None
+    assert all(day["entries"] == [] for day in payload["days"])
+
+
+def test_teilweise_abgedeckte_woche_mit_zeilen_ist_partial(
+    client: TestClient,
+) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    _activity(conn, "teil", "2026-08-07", 30)
+    db.set_setting(
+        conn,
+        "synced_range",
+        '{"from":"2026-08-06","to":"2026-08-20",'
+        '"activities_to":"2026-08-20","events_to":"2027-08-20"}',
+    )
+    conn.close()
+
+    payload = client.get("/api/planner", params={"week": "2026-08-03"}).json()
+
+    assert payload["sources"]["activities"]["state"] == "partial"
+    assert payload["summary"]["recorded"]["complete"] is False
+    assert payload["summary"]["recorded"]["seconds"] == 1800
+    # Die vorhandene Aufzeichnung bleibt sichtbar, auch wenn die Woche
+    # nicht vollständig gelesen wurde.
+    assert [entry["name"] for entry in payload["entries"]] == ["teil"]
+
+
+def test_aktuelles_wochenende_gilt_fuer_aufzeichnungen_als_abgedeckt(
+    client: TestClient,
+) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.set_setting(
+        conn,
+        "synced_range",
+        '{"from":"2025-11-06","to":"2026-11-06",'
+        '"activities_to":"2026-11-06","events_to":"2027-11-06"}',
+    )
+    conn.close()
+
+    payload = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+
+    assert payload["to"] == "2026-11-08"
+    assert payload["sources"]["activities"]["coverage"] == "covered"
+    assert payload["sources"]["activities"]["state"] == "empty"
+    assert payload["summary"]["recorded"]["seconds"] == 0

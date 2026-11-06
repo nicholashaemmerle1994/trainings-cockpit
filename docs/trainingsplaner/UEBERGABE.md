@@ -88,7 +88,7 @@ Freigabe **keine produktiven Schreibzugriffe** gegen intervals.icu ausführen.
 
 ## 6. Geprüft / nicht geprüft
 
-**Geprüft:** 375 Backend-Tests, `tsc --noEmit`, Vite-Build, manuelle Abläufe
+**Geprüft:** 380 Backend-Tests, `tsc --noEmit`, Vite-Build, manuelle Abläufe
 A–D mit separater SQLite-Kopie und lokalem Kontrolladapter, langsamer
 Wochenwechsel, alte Routen, Deep-Links, Krafttraining, Aktivitätsdetails und
 Dashboard-Volumen.

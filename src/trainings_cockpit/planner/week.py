@@ -469,8 +469,24 @@ def _source(
     }
 
 
-def coverage_for_period(period: TrainingRange, sync_range: object, *, to_field: str = "to") -> str:
-    """Ob der vorhandene Sync den Zeitraum nachweislich abdeckt."""
+def coverage_for_period(
+    period: TrainingRange,
+    sync_range: object,
+    *,
+    to_field: str = "to",
+    today: str | None = None,
+) -> str:
+    """Ob der vorhandene Sync den Zeitraum nachweislich **vollständig** abdeckt.
+
+    Eine bloße Überschneidung reicht nicht: Eine Woche, die vor dem
+    Sync-Beginn liegt oder in der Vergangenheit über das gelesene Ende hinaus
+    reicht, ist nur teilweise abgedeckt und darf nicht als bestätigt leer
+    oder vollständig summiert gelten.
+
+    Aufzeichnungen können nur bis zum lokalen Heute existieren. Für die
+    Aktivitätsquelle wird der Zeitraum deshalb am Heute begrenzt; zukünftige
+    Kalendertage sind keine offene Lücke der Quelle.
+    """
     if not isinstance(sync_range, Mapping):
         return "unknown"
     raw_from = sync_range.get("from")
@@ -486,7 +502,17 @@ def coverage_for_period(period: TrainingRange, sync_range: object, *, to_field: 
         return "unknown"
     week_start = date.fromisoformat(period.start_date)
     week_end = date.fromisoformat(period.end_date)
-    return "covered" if week_start <= end and week_end >= start else "uncovered"
+    if today is not None and to_field == "activities_to":
+        try:
+            today_date = date.fromisoformat(str(today)[:10])
+        except ValueError:
+            today_date = None
+        if today_date is not None:
+            if week_start > today_date:
+                # In der Zukunft kann noch keine Aufzeichnung liegen.
+                return "covered"
+            week_end = min(week_end, today_date)
+    return "covered" if week_start >= start and week_end <= end else "uncovered"
 
 
 def build_planner_week(
@@ -624,9 +650,13 @@ def build_planner_week(
     open_metres = 0.0
     open_unknown = False
     for entry in open_entries:
+        planned = entry.get("planned")
+        known = planned if isinstance(planned, Mapping) else {}
         seconds = planned_seconds(entry)
         metres = planned_metres(entry)
-        if seconds is None and metres is None:
+        # Schon ein einzelner Abschnitt ohne belegtes Ende oder eine
+        # unbekannte Zielmenge macht die Wochensumme zu einer Teilmenge.
+        if known.get("has_unknown") is True or (seconds is None and metres is None):
             open_unknown = True
         open_seconds += seconds or 0.0
         open_metres += metres or 0.0

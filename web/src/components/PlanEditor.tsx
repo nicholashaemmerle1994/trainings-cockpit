@@ -1296,7 +1296,9 @@ export function DraftStatus({
               ? "Der Entwurf bleibt lokal; es wird nichts remote gespeichert."
               : saveLocked
                 ? "Der offene Vorgang bleibt bestehen; Verwerfen entfernt nur den lokalen Entwurf."
-                : "Speichert in intervals.icu · Rückleseprüfung inklusive"}
+                : saveError
+                  ? "Der Entwurf bleibt lokal erhalten; der Fehler steht oben."
+                  : "Speichert in intervals.icu · Rückleseprüfung inklusive"}
         </span>
       </div>
       <div className="plan-savebar__actions">
