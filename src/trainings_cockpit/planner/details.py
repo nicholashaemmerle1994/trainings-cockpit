@@ -238,7 +238,7 @@ def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
     return {
         "write": {
             "available": False,
-            "reason": "Der Remote-Schreibpfad wird in P17 aktiviert.",
+            "reason": "Der Serializer steht; der Speicherkoordinator folgt in P18.",
         },
         "targets": {
             "heartRateZone": {

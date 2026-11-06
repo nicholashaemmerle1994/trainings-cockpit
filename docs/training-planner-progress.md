@@ -1701,3 +1701,85 @@ geöffnet. Screenshots unter `data/screens/`: `p16-add-390-viewport.png`,
 ## 5. Nächstes Paket
 
 **P17 — Serializer und Payload-Änderungen isoliert.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P17
+
+**Stand:** 06.11.2026  
+**Paket:** P17 — Serializer und Payload-Änderungen isoliert  
+**Basis:** Branch `feature/trainingsplaner`, HEAD nach P16
+
+## 1. Ergebnis
+
+- `prepare_write(WorkoutDraft)` ist eine eigene fachliche Grenze ohne
+  Netzwerkaufruf. Sie liefert einen unveränderlichen `PreparedWrite` mit
+  `create`, `metadata` oder `structure`; ein unveränderter Entwurf endet als
+  `NoWriteNeeded` ohne Payload.
+- Reine Name-/Datumsänderungen lassen `description` aus dem Payload. Der
+  vorhandene Workouttext bleibt damit unverändert; eine Datumsänderung behält
+  eine vorhandene lokale Uhrzeit.
+- Strukturänderungen erzeugen einen kanonischen Text: Zeit, Distanz
+  ausschließlich als `mtr`, Pace mit ausgeschriebener Referenz (`/km`,
+  `/100m`), HF-Zonen, Watt, `% FTP` und einfache Wiederholungen. `400 Meter`
+  werden nie zu `400m`/`400 Minuten`.
+- Rollen werden auf `intensity=warmup`, `intensity=active`, `intensity=rest`
+  und `intensity=cooldown` abgebildet; der Leseadapter versteht dieses Feld
+  jetzt ebenfalls.
+- Vor der Payload-Erzeugung abgelehnt werden unter anderem absolute bpm,
+  Leistungszonen, benutzerdefinierte Zonen, verschachtelte Wiederholungen,
+  `skip_final_recovery`, Workout-Dokumentnotizen, Schrittnotizen,
+  nicht ganzzahlige Sekunden/Meter und Namen mit Zeit-/Distanzangaben oder
+  reservierten Konstrukten.
+- Metadatenänderungen an F07 bleiben ohne Beschreibungs-Payload; eine
+  Strukturänderung an unbekanntem Inhalt oder an einer Dokumentnotiz wird
+  abgelehnt, statt den Inhalt zu verlieren.
+- Die Grenze akzeptiert nur exakt `WorkoutDraft`. Aktivitätsreferenzen,
+  Listenprojektionen, Roh-Dicts und fremde Objekte werden abgewiesen, auch bei
+  derselben numerischen Plan-/Aktivitäts-ID `9101`. Der Payload enthält keine
+  Node-IDs, Demo-IDs, `workout_doc`- oder berechneten Remote-Felder.
+- Welche Remote-Felder der Editor kontrolliert, steht exakt in
+  `docs/trainingsplaner/SERIALIZER-VERTRAG.md`.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/serializer.py` — neuer Serializer,
+  Payload-Grenze, Rollen-/Einheiten-/Namensprüfung.
+- `src/trainings_cockpit/planner/remote.py` — `intensity`-Rollen beim Lesen.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `src/trainings_cockpit/planner/details.py`, `web/src/components/PlanEditor.tsx`
+  — Statustext auf P18 aktualisiert.
+- `tests/test_planner_serializer.py` — Vertragstests F01–F07 und Syntaxfallen.
+- `docs/trainingsplaner/SERIALIZER-VERTRAG.md` — Feld- und Ablehnungsvertrag.
+- `docs/ENTSCHEIDUNGEN.md` — D-75.
+
+## 3. Prüfung
+
+| Befehl / Prüfung | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **311 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner tests/test_planner_serializer.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+| F01 | Text identisch zur Remote-Beschreibung; Name/Datum ohne Description-Payload |
+| F02 | 4x-Block, gemischte HF-/Pace-Ziele, Rollen-Tags |
+| F03 | Wattbereich und `% FTP` getrennt; `0 W` gültig |
+| F04 | `1000mtr`, `5:30/km Pace`, keine Minutenverwechslung |
+| F05 | `100mtr`, `2:00/100m Pace`; unsicherer Name wird abgelehnt |
+| F06 | alle drei leeren Aufbauten abgelehnt |
+| F07 | Metadaten ohne Description; Struktur/Notiz/Unbekanntes abgelehnt |
+| F12-Grenze | `ActivityId("9101")` wird abgewiesen, `PlanId("9101")` bleibt Plan |
+
+Produktiv wurde nichts geschrieben; `PreparedWrite` wird von keinem API-Pfad
+aufgerufen.
+
+## 4. Offene Punkte
+
+- Speicherkoordinator, Dirty-/Saving-Zustände und Retry folgen in P18.
+- Produktives Update und Create folgen in P19/P20; erst dort wird der
+  `PreparedWrite` an den vorhandenen Event-Adapter übergeben.
+- Absolute bpm, Leistungszonen und benutzerdefinierte Zonen bleiben bis zu
+  einem belegten Schreibvertrag gesperrt.
+
+## 5. Nächstes Paket
+
+**P18 — Speicherkoordinator und Statusmodell einführen.**

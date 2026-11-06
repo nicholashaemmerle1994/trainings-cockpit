@@ -1259,7 +1259,7 @@ export function DraftStatus({
           type="button"
           className="btn btn--primary"
           disabled
-          title="Der Remote-Schreibpfad wird in P17 aktiviert."
+          title="Der Serializer steht; der Speicherkoordinator folgt in P18."
         >
           Speichern
         </button>

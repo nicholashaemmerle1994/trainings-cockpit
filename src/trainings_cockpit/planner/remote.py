@@ -623,6 +623,14 @@ def _value_spec(
 
 
 def _role(raw: Mapping[str, Any]) -> StepRole:
+    intensity = str(raw.get("intensity") or "").strip().lower()
+    if intensity in {"warmup", "active", "rest", "cooldown"}:
+        return {
+            "warmup": StepRole.WARMUP,
+            "active": StepRole.WORK,
+            "rest": StepRole.RECOVERY,
+            "cooldown": StepRole.COOLDOWN,
+        }[intensity]
     if _truthy(raw.get("warmup")):
         return StepRole.WARMUP
     if _truthy(raw.get("cooldown")):
