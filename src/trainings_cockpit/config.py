@@ -13,6 +13,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE = PROJECT_ROOT / ".env"
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_BASE_URL = "https://intervals.icu/api/v1"
+#: Der Planer rechnet mit lokalen Kalendertagen des Athleten. Die Zeitzone ist
+#: eine explizite IANA-Zone, nicht die zufällige Zeitzone des Servers.
+DEFAULT_TIME_ZONE = "Europe/Vienna"
 
 DEFAULT_GOALS: tuple[dict[str, str], ...] = (
     {"name": "Halbmarathon", "date": "2026-11-21", "priority": "C"},
@@ -29,6 +32,7 @@ class Settings:
     data_dir: Path
     base_url: str
     goals: tuple[dict[str, str], ...] = DEFAULT_GOALS
+    time_zone: str = DEFAULT_TIME_ZONE
 
     @classmethod
     def load(cls, env_file: Path | None = None) -> Settings:
@@ -40,6 +44,7 @@ class Settings:
             data_dir=Path(os.getenv("TC_DATA_DIR") or DEFAULT_DATA_DIR),
             base_url=(_clean(os.getenv("INTERVALS_BASE_URL")) or DEFAULT_BASE_URL).rstrip("/"),
             goals=_load_goals(),
+            time_zone=_clean(os.getenv("TC_TIME_ZONE")) or DEFAULT_TIME_ZONE,
         )
 
     def ensure_data_dir(self) -> Path:

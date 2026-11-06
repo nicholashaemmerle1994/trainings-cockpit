@@ -470,6 +470,15 @@ class PlannedWorkout:
             raise KeyError(f"Knoten {node_id!r} nicht gefunden.")
         return replace(self, nodes=moved)
 
+    def reschedule(self, new_date: LocalDate) -> PlannedWorkout:
+        """Verschiebt nur den lokalen Kalendertag, nicht die lokale Uhrzeit.
+
+        Die Uhrzeit bleibt als lokaler Wert erhalten; eine UTC-Umrechnung würde
+        sie an Zeitumstellungen verschieben. Remote-ID, Knoten-IDs und
+        Zeitzone bleiben unverändert.
+        """
+        return replace(self, date=require_local_date(new_date))
+
 
 def _move_in_level(
     nodes: tuple[WorkoutNode, ...],
