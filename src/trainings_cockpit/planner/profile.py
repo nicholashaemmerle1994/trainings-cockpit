@@ -32,7 +32,6 @@ from .model import (
     TimeEnd,
     Value,
     ValueRange,
-    ZoneMetric,
     ZoneTarget,
 )
 from .validation import (
@@ -44,6 +43,7 @@ from .validation import (
     format_duration,
     format_pace,
     format_target,
+    format_target_label,
     format_totals,
 )
 
@@ -54,13 +54,6 @@ _METRIC_ORDER = {
     "power": 2,
     "none": 3,
 }
-
-_METRIC_LABEL = {
-    ZoneMetric.HEART_RATE: "HF",
-    ZoneMetric.POWER: "Leistung",
-    ZoneMetric.PACE: "Pace",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class _Block:
@@ -104,22 +97,7 @@ def _target_key(target: StepTarget | None) -> str | None:
 
 
 def _target_text(target: StepTarget | None) -> str:
-    if target is None:
-        return "Wert fehlt"
-    if isinstance(target, NoTarget):
-        return "Ohne Ziel"
-    if isinstance(target, ZoneTarget):
-        prefix = _METRIC_LABEL.get(target.metric, "")
-    elif isinstance(target, HeartRateTarget):
-        prefix = "HF"
-    elif isinstance(target, PowerTarget):
-        prefix = "Leistung"
-    elif isinstance(target, PaceTarget):
-        prefix = "Pace"
-    else:
-        prefix = ""
-    text = format_target(target)
-    return f"{prefix} {text}".strip()
+    return format_target_label(target)
 
 
 def _end_values(end: StepEnd) -> tuple[str, float | None, float | None]:

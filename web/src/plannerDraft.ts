@@ -6,7 +6,13 @@ import type {
   PlanNodeEnd,
 } from "./types";
 
-export type DraftFieldKind = "text" | "duration" | "distance";
+export type DraftFieldKind =
+  | "text"
+  | "duration"
+  | "distance"
+  | "decimal"
+  | "pace"
+  | "integer";
 
 /** Ein Feldpuffer gehört genau zu Knoten-ID und Feldpfad. */
 export interface DraftFieldBuffer {
@@ -14,9 +20,424 @@ export interface DraftFieldBuffer {
   fieldPath: string;
   kind: DraftFieldKind;
   raw: string;
+  targetKind?: TargetEditorKind;
+  unit?: TargetEditorUnit;
 }
 
 export type DraftFieldBuffers = Record<string, DraftFieldBuffer>;
+
+export type TargetEditorKind = "none" | "zone" | "heartRate" | "pace" | "power";
+
+export type TargetEditorUnit =
+  | "secondsPerKm"
+  | "secondsPer100m"
+  | "watts"
+  | "percentFtp";
+
+export interface TargetEditor {
+  kind: TargetEditorKind;
+  unit?: TargetEditorUnit;
+  mode: "value" | "range";
+}
+
+export const TARGET_KIND_LABELS: Record<TargetEditorKind, string> = {
+  none: "Ohne Ziel",
+  zone: "Herzfrequenz · Zone",
+  heartRate: "Herzfrequenz · bpm",
+  pace: "Pace",
+  power: "Leistung",
+};
+
+export function targetUnitLabel(unit: TargetEditorUnit | undefined): string {
+  if (unit === "secondsPerKm") return "min/km";
+  if (unit === "secondsPer100m") return "min/100 m";
+  if (unit === "percentFtp") return "% FTP";
+  if (unit === "watts") return "W";
+  return "";
+}
+
+export function targetEditorLabel(editor: TargetEditor): string {
+  if (editor.kind === "pace") {
+    return `${TARGET_KIND_LABELS.pace} · ${targetUnitLabel(editor.unit)}`;
+  }
+  if (editor.kind === "power") {
+    return `${TARGET_KIND_LABELS.power} · ${targetUnitLabel(editor.unit)}`;
+  }
+  return TARGET_KIND_LABELS[editor.kind];
+}
+
+export function targetEditorForNode(node: PlanNode): TargetEditor {
+  const target = node.target;
+  if (!target || target.kind === "none" || target.kind === "missing") {
+    return { kind: "none", mode: "value" };
+  }
+  if (target.kind === "zone") return { kind: "zone", mode: "value" };
+  if (target.kind === "heartRate") {
+    return {
+      kind: "heartRate",
+      mode: target.values?.kind === "range" ? "range" : "value",
+    };
+  }
+  if (target.kind === "power") {
+    return {
+      kind: "power",
+      unit: target.unit === "percentFtp" ? "percentFtp" : "watts",
+      mode: target.values?.kind === "range" ? "range" : "value",
+    };
+  }
+  return {
+    kind: "pace",
+    unit:
+      target.unit === "secondsPer100m" ? "secondsPer100m" : "secondsPerKm",
+    mode: target.values?.kind === "range" ? "range" : "value",
+  };
+}
+
+export function targetEditorsFromNodes(
+  nodes: PlanNode[],
+  existing: Record<string, TargetEditor> = {},
+): Record<string, TargetEditor> {
+  const out = { ...existing };
+  for (const node of nodes) {
+    if (node.kind === "step") out[node.node_id] = targetEditorForNode(node);
+    if (node.kind === "repeat") {
+      Object.assign(out, targetEditorsFromNodes(node.children ?? [], out));
+    }
+  }
+  return out;
+}
+/** Standard-Paceeinheit einer Sportart; importierte Einheiten bleiben sichtbar. */
+export function defaultPaceUnit(sport: string): TargetEditorUnit {
+  return sport.toLowerCase().includes("swim") ? "secondsPer100m" : "secondsPerKm";
+}
+
+export function paceUnitOptions(
+  sport: string,
+  current: TargetEditorUnit | undefined,
+): TargetEditorUnit[] {
+  const options: TargetEditorUnit[] = [defaultPaceUnit(sport)];
+  if (current && !options.includes(current)) options.push(current);
+  return options;
+}
+
+/** Echte Umrechnung zwischen min/km und min/100 m (1 km = zehn 100-m-Strecken). */
+export function convertPace(
+  seconds: number,
+  from: TargetEditorUnit,
+  to: TargetEditorUnit,
+): number {
+  if (from === to) return seconds;
+  if (from === "secondsPerKm" && to === "secondsPer100m") return seconds / 10;
+  if (from === "secondsPer100m" && to === "secondsPerKm") return seconds * 10;
+  return seconds;
+}
+
+export function numberText(value: number): string {
+  const text = Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  return text.replace(".", ",");
+}
+
+export function paceText(seconds: number): string {
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return `${minutes}:${String(rest).padStart(2, "0")}`;
+}
+
+export function targetValueText(
+  node: PlanNode,
+  editor: TargetEditor,
+): string {
+  const values = node.target?.values;
+  if (!values) return "";
+  const raw =
+    values.kind === "range"
+      ? values.min
+      : values.value ?? values.min;
+  if (raw == null || Number.isNaN(raw)) return "";
+  if (editor.kind === "pace") return paceText(raw);
+  return numberText(raw);
+}
+
+export function targetRangeText(
+  node: PlanNode,
+  editor: TargetEditor,
+  bound: "min" | "max",
+): string {
+  const values = node.target?.values;
+  if (!values) return "";
+  if (values.kind === "range" && values.max === values.min && bound === "max") {
+    return "";
+  }
+  const raw = bound === "min" ? values.min : values.max;
+  if (raw == null || Number.isNaN(raw)) return "";
+  if (editor.kind === "pace") return paceText(raw);
+  return numberText(raw);
+}
+
+interface TargetFieldSpec {
+  single: string;
+  from: string;
+  to: string;
+  placeholder: string;
+  hint: string;
+}
+
+/** Eine Quelle für Feldtitel, Grenzbezeichnungen und Hinweise. */
+export function targetFieldSpec(editor: TargetEditor): TargetFieldSpec {
+  if (editor.kind === "pace") {
+    const unit = targetUnitLabel(editor.unit);
+    return {
+      single: `Pace-Einzelwert (${unit})`,
+      from: `Schneller (${unit})`,
+      to: `Langsamer (${unit})`,
+      placeholder: editor.unit === "secondsPer100m" ? "z. B. 2:00" : "z. B. 5:30",
+      hint:
+        "Pace als Minuten:Sekunden. Der schnellere Wert ist die kleinere Zeit; " +
+        "Sekunden müssen zwischen 00 und 59 liegen.",
+    };
+  }
+  if (editor.kind === "power") {
+    const unit = targetUnitLabel(editor.unit);
+    return {
+      single: `Watt-Einzelwert (${unit})`,
+      from: `Von (${unit})`,
+      to: `Bis (${unit})`,
+      placeholder: editor.unit === "percentFtp" ? "z. B. 60" : "z. B. 160",
+      hint:
+        editor.unit === "percentFtp"
+          ? "Prozent der Schwelle; die relative Vorgabe bleibt erhalten."
+          : "Watt als Zahl; auch 0 W ist eine gültige Vorgabe.",
+    };
+  }
+  return {
+    single: "Zielwert",
+    from: "Von",
+    to: "Bis",
+    placeholder: "",
+    hint: "",
+  };
+}
+
+export function newNodeId(): string {
+  const random =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `node:draft:${random}`;
+}
+
+export function createStepNode(): PlanNode {
+  return {
+    kind: "step",
+    node_id: newNodeId(),
+    name: "Neuer Abschnitt",
+    role: "steady",
+    end: { kind: "open", text: "Ende offen" },
+    target: { kind: "none", text: "Ohne Ziel" },
+    notes: null,
+    source_ref: null,
+  };
+}
+
+export function createRepeatNode(): PlanNode {
+  return {
+    kind: "repeat",
+    node_id: newNodeId(),
+    name: "Wiederholungsblock",
+    repetitions: 3,
+    skip_final_recovery: false,
+    children: [],
+    source_ref: null,
+  };
+}
+
+export function subtreeIds(node: PlanNode): string[] {
+  const ids = [node.node_id];
+  for (const child of node.children ?? []) ids.push(...subtreeIds(child));
+  return ids;
+}
+
+export function nodeListAt(
+  nodes: PlanNode[],
+  parentId: string | null,
+): PlanNode[] | null {
+  if (parentId == null) return nodes;
+  for (const node of nodes) {
+    if (node.node_id === parentId) {
+      return node.kind === "repeat" ? node.children ?? [] : null;
+    }
+    if (node.kind === "repeat") {
+      const found = nodeListAt(node.children ?? [], parentId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+export function insertChild(
+  nodes: PlanNode[],
+  parentId: string | null,
+  child: PlanNode,
+): PlanNode[] {
+  if (parentId == null) return [...nodes, child];
+  return nodes.map((node) => {
+    if (node.node_id === parentId && node.kind === "repeat") {
+      return { ...node, children: [...(node.children ?? []), child] };
+    }
+    if (node.kind === "repeat") {
+      return { ...node, children: insertChild(node.children ?? [], parentId, child) };
+    }
+    return node;
+  });
+}
+
+export interface RemovedNode {
+  nodes: PlanNode[];
+  removed: PlanNode;
+  parentId: string | null;
+  nextSelection: string | null;
+}
+
+export function removeNode(
+  nodes: PlanNode[],
+  nodeId: string,
+): RemovedNode | null {
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node.node_id === nodeId) {
+      const remaining = [...nodes.slice(0, index), ...nodes.slice(index + 1)];
+      const next = remaining[index] ?? remaining[index - 1] ?? null;
+      return {
+        nodes: remaining,
+        removed: node,
+        parentId: null,
+        nextSelection: next?.node_id ?? null,
+      };
+    }
+    if (node.kind === "repeat") {
+      const inner = removeNode(node.children ?? [], nodeId);
+      if (inner) {
+        const parentId = node.node_id;
+        return {
+          nodes: nodes.map((candidate) =>
+            candidate.node_id === parentId
+              ? { ...candidate, children: inner.nodes }
+              : candidate,
+          ),
+          removed: inner.removed,
+          parentId,
+          nextSelection: inner.nextSelection ?? parentId,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+export function moveNodeInLevel(
+  nodes: PlanNode[],
+  nodeId: string,
+  delta: -1 | 1,
+): PlanNode[] {
+  const index = nodes.findIndex((node) => node.node_id === nodeId);
+  if (index >= 0) {
+    const target = index + delta;
+    if (target < 0 || target >= nodes.length) return nodes;
+    const next = [...nodes];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved);
+    return next;
+  }
+  return nodes.map((node) => {
+    if (node.kind !== "repeat") return node;
+    const children = moveNodeInLevel(node.children ?? [], nodeId, delta);
+    return children === node.children ? node : { ...node, children };
+  });
+}
+
+export function finalRecoveryChild(node: PlanNode): PlanNode | null {
+  if (node.kind !== "repeat") return null;
+  const children = node.children ?? [];
+  const last = children[children.length - 1];
+  return last?.kind === "step" && last.role === "recovery" ? last : null;
+}
+
+/** Hält „letzte Erholung auslassen“ nach jeder Strukturänderung ehrlich. */
+export function normalizeSkipFinalRecovery(nodes: PlanNode[]): PlanNode[] {
+  return nodes.map((node) => {
+    if (node.kind !== "repeat") return node;
+    const children = normalizeSkipFinalRecovery(node.children ?? []);
+    const skip =
+      node.skip_final_recovery === true &&
+      finalRecoveryChild({ ...node, children }) !== null;
+    return { ...node, children, skip_final_recovery: skip };
+  });
+}
+
+function cloneWithNewIds(node: PlanNode): PlanNode {
+  if (node.kind === "repeat") {
+    return {
+      ...node,
+      node_id: newNodeId(),
+      children: (node.children ?? []).map(cloneWithNewIds),
+    };
+  }
+  if (node.kind === "step") {
+    return { ...node, node_id: newNodeId() };
+  }
+  return { ...node, node_id: newNodeId() };
+}
+
+export interface DissolvedRepeat {
+  nodes: PlanNode[];
+  firstId: string | null;
+}
+
+/** Erzeugt die tatsächliche Ausführungsfolge; Summe und Ablauf bleiben gleich. */
+export function dissolveRepeat(
+  nodes: PlanNode[],
+  nodeId: string,
+): DissolvedRepeat | null {
+  const index = nodes.findIndex((node) => node.node_id === nodeId);
+  if (index >= 0) {
+    const node = nodes[index];
+    if (node.kind !== "repeat") return null;
+    const children = node.children ?? [];
+    if (children.length === 0) return null;
+    const repetitions = node.repetitions ?? 1;
+    const expanded: PlanNode[] = [];
+    for (let repetition = 1; repetition <= repetitions; repetition += 1) {
+      const isLast = repetition === repetitions;
+      const omitted =
+        isLast && node.skip_final_recovery ? finalRecoveryChild(node) : null;
+      for (const child of children) {
+        if (omitted && child.node_id === omitted.node_id) continue;
+        expanded.push(cloneWithNewIds(child));
+      }
+    }
+    const next = [...nodes.slice(0, index), ...expanded, ...nodes.slice(index + 1)];
+    return { nodes: next, firstId: expanded[0]?.node_id ?? null };
+  }
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node.kind !== "repeat") continue;
+    const inner = dissolveRepeat(node.children ?? [], nodeId);
+    if (inner) {
+      return {
+        nodes: nodes.map((candidate) =>
+          candidate.node_id === node.node_id
+            ? { ...candidate, children: inner.nodes }
+            : candidate,
+        ),
+        firstId: inner.firstId,
+      };
+    }
+  }
+  return null;
+}
 
 export function fieldKey(nodeId: string, fieldPath: string): string {
   return `${nodeId}:${fieldPath}`;
@@ -110,6 +531,8 @@ export function serializeBuffers(buffers: DraftFieldBuffers): Record<string, unk
         field_path: buffer.fieldPath,
         kind: buffer.kind,
         raw: buffer.raw,
+        target_kind: buffer.targetKind ?? null,
+        unit: buffer.unit ?? null,
       },
     ]),
   );

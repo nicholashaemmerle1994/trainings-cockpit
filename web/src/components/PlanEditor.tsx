@@ -8,11 +8,23 @@ import type {
 import {
   endSeed,
   fieldKey,
+  finalRecoveryChild,
   nameFieldKey,
   nodeMeta,
   nodeTitle,
+  paceUnitOptions,
+  subtreeIds,
+  targetEditorLabel,
+  targetFieldSpec,
+  targetRangeText,
+  targetUnitLabel,
+  targetValueText,
   visibleFieldMessage,
   type DraftFieldBuffers,
+  type DraftFieldKind,
+  type TargetEditor,
+  type TargetEditorKind,
+  type TargetEditorUnit,
 } from "../plannerDraft";
 
 const ROLE_OPTIONS = [
@@ -23,13 +35,12 @@ const ROLE_OPTIONS = [
   { value: "cooldown", label: "Abwärmen" },
 ];
 
-const TARGET_LABEL: Record<string, string> = {
-  none: "Ohne Ziel",
-  zone: "Herzfrequenz · Zone",
-  heartRate: "Herzfrequenz · bpm",
-  power: "Leistung",
-  pace: "Pace",
-};
+const MAX_DISSOLVE_NODES = 2000;
+
+export interface BufferOptions {
+  targetKind?: TargetEditorKind;
+  unit?: TargetEditorUnit;
+}
 
 function editorId(nodeId: string): string {
   return `plan-editor-${nodeId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -39,19 +50,88 @@ function headingId(nodeId: string): string {
   return `plan-head-${nodeId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
+function fieldId(nodeId: string, field: string): string {
+  return `field-${nodeId.replace(/[^a-zA-Z0-9_-]/g, "-")}-${field}`;
+}
+
+function targetFieldKind(editor: TargetEditor): DraftFieldKind {
+  return editor.kind === "pace" ? "pace" : "decimal";
+}
+
+function bufferValue(
+  buffers: DraftFieldBuffers,
+  nodeId: string,
+  path: string,
+  fallback: string,
+): string {
+  return buffers[fieldKey(nodeId, path)]?.raw ?? fallback;
+}
+
+function issueForNode(
+  projection: PlanDraftProjection | null,
+  nodeId: string,
+): string | null {
+  const issue = projection?.draft.issues.find(
+    (candidate) =>
+      candidate.node_id === nodeId &&
+      candidate.code !== "open_end" &&
+      candidate.code !== "incomplete_field" &&
+      candidate.code !== "invalid_field",
+  );
+  return issue?.message ?? null;
+}
+
+function invalidBufferInSubtree(
+  projection: PlanDraftProjection | null,
+  buffers: DraftFieldBuffers,
+  node: PlanNode,
+): string | null {
+  const ids = new Set(subtreeIds(node));
+  for (const key of Object.keys(buffers)) {
+    const owner = key.slice(0, key.lastIndexOf(":"));
+    if (!ids.has(owner)) continue;
+    const state = projection?.draft.field_states[key];
+    if (!state || state.validity !== "valid") {
+      return state?.message || "Ein Feld ist noch unvollständig.";
+    }
+  }
+  return null;
+}
+
+function invalidIssueInSubtree(
+  projection: PlanDraftProjection | null,
+  node: PlanNode,
+): string | null {
+  const ids = new Set(subtreeIds(node));
+  const issue = projection?.draft.issues.find(
+    (candidate) =>
+      candidate.node_id != null &&
+      ids.has(candidate.node_id) &&
+      ["open_end", "empty_repeat", "no_executed_steps"].includes(candidate.code),
+  );
+  return issue?.message ?? null;
+}
+
 export function PlanEditor({
   detail,
   projection,
   nodes,
   buffers,
   endKinds,
+  targetEditors,
   selectedNodeId,
   expandedNodeId,
   onToggle,
   onBuffer,
-  onClearBuffer,
   onPatchNode,
   onEndKindChange,
+  onTargetKindChange,
+  onTargetUnitChange,
+  onTargetModeChange,
+  onMove,
+  onRemove,
+  onAddChild,
+  onDissolve,
   registerHead,
 }: {
   detail: PlanDetail;
@@ -59,18 +139,30 @@ export function PlanEditor({
   nodes: PlanNode[];
   buffers: DraftFieldBuffers;
   endKinds: Record<string, "time" | "distance">;
+  targetEditors: Record<string, TargetEditor>;
   selectedNodeId: string | null;
   expandedNodeId: string | null;
   onToggle: (nodeId: string) => void;
   onBuffer: (
     nodeId: string,
     fieldPath: string,
-    kind: "text" | "duration" | "distance",
+    kind: DraftFieldKind,
     raw: string,
+    options?: BufferOptions,
   ) => void;
-  onClearBuffer: (nodeId: string, fieldPath: string) => void;
   onPatchNode: (nodeId: string, patch: Partial<PlanNode>) => void;
   onEndKindChange: (nodeId: string, kind: "time" | "distance") => void;
+  onTargetKindChange: (
+    nodeId: string,
+    kind: TargetEditorKind,
+    unit?: TargetEditorUnit,
+  ) => void;
+  onTargetUnitChange: (nodeId: string, unit: TargetEditorUnit) => void;
+  onTargetModeChange: (nodeId: string, mode: "value" | "range") => void;
+  onMove: (nodeId: string, delta: -1 | 1) => void;
+  onRemove: (nodeId: string) => void;
+  onAddChild: (groupId: string) => void;
+  onDissolve: (groupId: string) => void;
   registerHead: (nodeId: string, element: HTMLButtonElement | null) => void;
 }) {
   return (
@@ -80,17 +172,27 @@ export function PlanEditor({
           key={node.node_id}
           node={node}
           index={index + 1}
+          siblingCount={nodes.length}
+          parentId={null}
+          parentRepetitions={undefined}
           detail={detail}
           projection={projection}
           buffers={buffers}
           endKinds={endKinds}
+          targetEditors={targetEditors}
           selectedNodeId={selectedNodeId}
           expandedNodeId={expandedNodeId}
           onToggle={onToggle}
           onBuffer={onBuffer}
-          onClearBuffer={onClearBuffer}
           onPatchNode={onPatchNode}
           onEndKindChange={onEndKindChange}
+          onTargetKindChange={onTargetKindChange}
+          onTargetUnitChange={onTargetUnitChange}
+          onTargetModeChange={onTargetModeChange}
+          onMove={onMove}
+          onRemove={onRemove}
+          onAddChild={onAddChild}
+          onDissolve={onDissolve}
           registerHead={registerHead}
         />
       ))}
@@ -101,42 +203,78 @@ export function PlanEditor({
 function PlanNodeBranch({
   node,
   index,
+  siblingCount,
+  parentId,
+  parentRepetitions,
   detail,
   projection,
   buffers,
   endKinds,
+  targetEditors,
   selectedNodeId,
   expandedNodeId,
   onToggle,
   onBuffer,
-  onClearBuffer,
   onPatchNode,
   onEndKindChange,
+  onTargetKindChange,
+  onTargetUnitChange,
+  onTargetModeChange,
+  onMove,
+  onRemove,
+  onAddChild,
+  onDissolve,
   registerHead,
 }: {
   node: PlanNode;
   index: number;
+  siblingCount: number;
+  parentId: string | null;
+  parentRepetitions?: number;
   detail: PlanDetail;
   projection: PlanDraftProjection | null;
   buffers: DraftFieldBuffers;
   endKinds: Record<string, "time" | "distance">;
+  targetEditors: Record<string, TargetEditor>;
   selectedNodeId: string | null;
   expandedNodeId: string | null;
   onToggle: (nodeId: string) => void;
   onBuffer: (
     nodeId: string,
     fieldPath: string,
-    kind: "text" | "duration" | "distance",
+    kind: DraftFieldKind,
     raw: string,
+    options?: BufferOptions,
   ) => void;
-  onClearBuffer: (nodeId: string, fieldPath: string) => void;
   onPatchNode: (nodeId: string, patch: Partial<PlanNode>) => void;
   onEndKindChange: (nodeId: string, kind: "time" | "distance") => void;
+  onTargetKindChange: (
+    nodeId: string,
+    kind: TargetEditorKind,
+    unit?: TargetEditorUnit,
+  ) => void;
+  onTargetUnitChange: (nodeId: string, unit: TargetEditorUnit) => void;
+  onTargetModeChange: (nodeId: string, mode: "value" | "range") => void;
+  onMove: (nodeId: string, delta: -1 | 1) => void;
+  onRemove: (nodeId: string) => void;
+  onAddChild: (groupId: string) => void;
+  onDissolve: (groupId: string) => void;
   registerHead: (nodeId: string, element: HTMLButtonElement | null) => void;
 }) {
   const selected = selectedNodeId === node.node_id;
   const open = expandedNodeId === node.node_id;
   const region = editorId(node.node_id);
+  const editor = targetEditors[node.node_id] ?? { kind: "none", mode: "value" };
+  const actions = (
+    <NodeActions
+      node={node}
+      index={index}
+      siblingCount={siblingCount}
+      parentId={parentId}
+      onMove={onMove}
+      onRemove={onRemove}
+    />
+  );
 
   if (node.kind === "unsupported") {
     return (
@@ -196,18 +334,38 @@ function PlanNodeBranch({
 
       {open &&
         (node.kind === "repeat" ? (
-          <GroupEditor node={node} region={region} />
+          <GroupEditor
+            node={node}
+            projection={projection}
+            buffers={buffers}
+            editor={editor}
+            region={region}
+            onBuffer={onBuffer}
+            onPatchNode={onPatchNode}
+            onAddChild={onAddChild}
+            onDissolve={onDissolve}
+            actions={actions}
+          />
         ) : (
           <StepEditor
             node={node}
             detail={detail}
             projection={projection}
             buffers={buffers}
-            endKind={endKinds[node.node_id] ?? (node.end?.kind === "distance" ? "distance" : "time")}
+            editor={editor}
+            parentRepetitions={parentRepetitions}
+            endKind={
+              endKinds[node.node_id] ??
+              (node.end?.kind === "distance" ? "distance" : "time")
+            }
             region={region}
             onBuffer={onBuffer}
-            onPatchNode={onPatchNode}
+              onPatchNode={onPatchNode}
             onEndKindChange={onEndKindChange}
+            onTargetKindChange={onTargetKindChange}
+            onTargetUnitChange={onTargetUnitChange}
+            onTargetModeChange={onTargetModeChange}
+            actions={actions}
           />
         ))}
 
@@ -218,17 +376,27 @@ function PlanNodeBranch({
               key={child.node_id}
               node={child}
               index={childIndex + 1}
+              siblingCount={node.children?.length ?? 0}
+              parentId={node.node_id}
+              parentRepetitions={node.repetitions ?? 1}
               detail={detail}
               projection={projection}
               buffers={buffers}
               endKinds={endKinds}
+              targetEditors={targetEditors}
               selectedNodeId={selectedNodeId}
               expandedNodeId={expandedNodeId}
               onToggle={onToggle}
               onBuffer={onBuffer}
-              onClearBuffer={onClearBuffer}
-              onPatchNode={onPatchNode}
+                  onPatchNode={onPatchNode}
               onEndKindChange={onEndKindChange}
+              onTargetKindChange={onTargetKindChange}
+              onTargetUnitChange={onTargetUnitChange}
+              onTargetModeChange={onTargetModeChange}
+              onMove={onMove}
+              onRemove={onRemove}
+              onAddChild={onAddChild}
+              onDissolve={onDissolve}
               registerHead={registerHead}
             />
           ))}
@@ -238,7 +406,119 @@ function PlanNodeBranch({
   );
 }
 
-function GroupEditor({ node, region }: { node: PlanNode; region: string }) {
+function NodeActions({
+  node,
+  index,
+  siblingCount,
+  parentId,
+  onMove,
+  onRemove,
+}: {
+  node: PlanNode;
+  index: number;
+  siblingCount: number;
+  parentId: string | null;
+  onMove: (nodeId: string, delta: -1 | 1) => void;
+  onRemove: (nodeId: string) => void;
+}) {
+  const first = index <= 1;
+  const last = index >= siblingCount;
+  return (
+    <div className="plan-node__actions">
+      <div className="plan-node__move">
+        <button
+          type="button"
+          className="plan-icon-button"
+          aria-label={`${nodeTitle(node)} nach oben verschieben`}
+          title="Nach oben"
+          disabled={first}
+          onClick={() => onMove(node.node_id, -1)}
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          className="plan-icon-button"
+          aria-label={`${nodeTitle(node)} nach unten verschieben`}
+          title="Nach unten"
+          disabled={last}
+          onClick={() => onMove(node.node_id, 1)}
+        >
+          ↓
+        </button>
+      </div>
+      {parentId && (
+        <span className="plan-node__level">nur in dieser Gruppe</span>
+      )}
+      <button
+        type="button"
+        className="plan-node__remove"
+        onClick={() => onRemove(node.node_id)}
+      >
+        Entfernen
+      </button>
+    </div>
+  );
+}
+
+function GroupEditor({
+  node,
+  projection,
+  buffers,
+  editor,
+  region,
+  onBuffer,
+  onPatchNode,
+  onAddChild,
+  onDissolve,
+  actions,
+}: {
+  node: PlanNode;
+  projection: PlanDraftProjection | null;
+  buffers: DraftFieldBuffers;
+  editor: TargetEditor;
+  region: string;
+  onBuffer: (
+    nodeId: string,
+    fieldPath: string,
+    kind: DraftFieldKind,
+    raw: string,
+    options?: BufferOptions,
+  ) => void;
+  onPatchNode: (nodeId: string, patch: Partial<PlanNode>) => void;
+  onAddChild: (groupId: string) => void;
+  onDissolve: (groupId: string) => void;
+  actions: ReactNode;
+}) {
+  const nameKey = nameFieldKey(node.node_id);
+  const repetitionsKey = fieldKey(node.node_id, "repetitions");
+  const nameRaw = buffers[nameKey]?.raw ?? node.name ?? "";
+  const repetitionsRaw =
+    buffers[repetitionsKey]?.raw ?? String(node.repetitions ?? 1);
+  const nameError = visibleFieldMessage(projection, nameKey);
+  const repetitionsError = visibleFieldMessage(projection, repetitionsKey);
+  const lastRecovery = finalRecoveryChild(node);
+  const skipChecked = node.skip_final_recovery === true && lastRecovery !== null;
+  const groupIssue = issueForNode(projection, node.node_id);
+  const invalidBuffer = invalidBufferInSubtree(projection, buffers, node);
+  const invalidIssue = invalidIssueInSubtree(projection, node);
+  const repetitionsNumber = node.repetitions ?? 1;
+  const estimated = repetitionsNumber * (node.children?.length ?? 0);
+  let dissolveReason: string | null = null;
+  if ((node.children?.length ?? 0) === 0) {
+    dissolveReason = "Der Block hat noch keine Schritte.";
+  } else if (repetitionsError) {
+    dissolveReason = repetitionsError;
+  } else if (invalidBuffer) {
+    dissolveReason = `Auflösen gesperrt: ${invalidBuffer}`;
+  } else if (invalidIssue) {
+    dissolveReason = `Auflösen gesperrt: ${invalidIssue}`;
+  } else if (estimated > MAX_DISSOLVE_NODES) {
+    dissolveReason =
+      `Der Block würde ${estimated.toLocaleString("de-DE")} Einzelabschnitte ` +
+      `erzeugen. Diese Größe bleibt als Gruppe erhalten.`;
+  }
+
   return (
     <section
       id={region}
@@ -247,19 +527,145 @@ function GroupEditor({ node, region }: { node: PlanNode; region: string }) {
       aria-labelledby={headingId(node.node_id)}
     >
       <p className="plan-inline__context">
-        Gilt für alle {node.repetitions ?? 1}{" "}
-        {(node.repetitions ?? 1) === 1 ? "Wiederholung" : "Wiederholungen"}
+        {editor.kind === "none" ? "Gruppe" : targetEditorLabel(editor)}
       </p>
-      <div className="plan-inline__summary">
-        <span>Name</span>
-        <strong>{node.name || "Wiederholung"}</strong>
-        <span>Wiederholungen</span>
-        <strong>{node.repetitions ?? 1}</strong>
+      <p className="plan-inline__context plan-inline__context--accent">
+        Gilt für alle {repetitionsNumber}{" "}
+        {repetitionsNumber === 1 ? "Wiederholung" : "Wiederholungen"}
+      </p>
+
+      <div className="plan-field-row">
+        <div className="plan-field">
+          <label htmlFor={fieldId(node.node_id, "group-name")}>Gruppenname</label>
+          <input
+            id={fieldId(node.node_id, "group-name")}
+            className="plan-input"
+            type="text"
+            value={nameRaw}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={
+              nameError ? `${fieldId(node.node_id, "group-name")}-error` : undefined
+            }
+            onChange={(event) =>
+              onBuffer(node.node_id, "name", "text", event.target.value)
+            }
+          />
+          {nameError && (
+            <p
+              id={`${fieldId(node.node_id, "group-name")}-error`}
+              className="plan-field__error"
+              role="alert"
+            >
+              {nameError}
+            </p>
+          )}
+        </div>
+        <div className="plan-field">
+          <label htmlFor={fieldId(node.node_id, "repetitions")}>
+            Wiederholungen
+          </label>
+          <input
+            id={fieldId(node.node_id, "repetitions")}
+            className="plan-input"
+            type="text"
+            inputMode="numeric"
+            value={repetitionsRaw}
+            aria-invalid={repetitionsError ? true : undefined}
+            aria-describedby={
+              repetitionsError
+                ? `${fieldId(node.node_id, "repetitions")}-error`
+                : `${fieldId(node.node_id, "repetitions")}-hint`
+            }
+            onChange={(event) =>
+              onBuffer(node.node_id, "repetitions", "integer", event.target.value)
+            }
+          />
+          <p
+            id={`${fieldId(node.node_id, "repetitions")}-hint`}
+            className="plan-field__hint"
+          >
+            Positive ganze Zahl. Große Zahlen bleiben rechnerisch exakt; der Graph
+            fasst nur die Darstellung zusammen.
+          </p>
+          {repetitionsError && (
+            <p
+              id={`${fieldId(node.node_id, "repetitions")}-error`}
+              className="plan-field__error"
+              role="alert"
+            >
+              {repetitionsError}
+            </p>
+          )}
+        </div>
       </div>
-      <p className="plan-note plan-note--muted">
-        Gruppeneinstellungen und das Verschieben der Kinder folgen in P15. Die
-        Kinder dieses Blocks bleiben einzeln bearbeitbar.
+
+      {(node.children?.length ?? 0) === 0 && (
+        <p className="plan-note plan-note--warning" role="status">
+          Dieser Wiederholungsblock enthält noch keinen Schritt und führt damit
+          nichts aus. Speichern bleibt gesperrt.
+        </p>
+      )}
+
+      <label className="plan-check">
+        <input
+          type="checkbox"
+          checked={skipChecked}
+          disabled={!lastRecovery}
+          onChange={(event) =>
+            onPatchNode(node.node_id, {
+              skip_final_recovery: event.target.checked,
+            })
+          }
+        />
+        <span>
+          Letzte Erholung auslassen
+          <span className="plan-check__hint">
+            Gilt nur für die letzte der {repetitionsNumber} Wiederholungen. Das
+            letzte Kind muss als Erholung gekennzeichnet sein.
+          </span>
+        </span>
+      </label>
+      {!lastRecovery && (
+        <p className="plan-field__hint">
+          Nicht aktivierbar: Das letzte Kind ist keine Erholung.
+        </p>
+      )}
+
+      <div className="plan-inline__buttons">
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => onAddChild(node.node_id)}
+        >
+          + Schritt im Block
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          disabled={dissolveReason !== null}
+          title={dissolveReason ?? "In unabhängige Einzelabschnitte auflösen"}
+          onClick={() => onDissolve(node.node_id)}
+        >
+          In einzelne Abschnitte auflösen
+        </button>
+      </div>
+      {dissolveReason && (
+        <p className="plan-field__hint" role="status">
+          {dissolveReason}
+        </p>
+      )}
+
+      {groupIssue && (
+        <p className="plan-field__warning" role="status">
+          {groupIssue}
+        </p>
+      )}
+
+      <p className="plan-inline__footer">
+        Es wird nur eine Vorlage der Kinder bearbeitet. Der Graph darf die
+        Ausführungen mehrfach zeigen; gespeichert wird in diesem Paket noch nichts.
       </p>
+      {actions}
     </section>
   );
 }
@@ -269,26 +675,43 @@ function StepEditor({
   detail,
   projection,
   buffers,
+  editor,
+  parentRepetitions,
   endKind,
   region,
   onBuffer,
   onPatchNode,
   onEndKindChange,
+  onTargetKindChange,
+  onTargetUnitChange,
+  onTargetModeChange,
+  actions,
 }: {
   node: PlanNode;
   detail: PlanDetail;
   projection: PlanDraftProjection | null;
   buffers: DraftFieldBuffers;
+  editor: TargetEditor;
+  parentRepetitions?: number;
   endKind: "time" | "distance";
   region: string;
   onBuffer: (
     nodeId: string,
     fieldPath: string,
-    kind: "text" | "duration" | "distance",
+    kind: DraftFieldKind,
     raw: string,
+    options?: BufferOptions,
   ) => void;
   onPatchNode: (nodeId: string, patch: Partial<PlanNode>) => void;
   onEndKindChange: (nodeId: string, kind: "time" | "distance") => void;
+  onTargetKindChange: (
+    nodeId: string,
+    kind: TargetEditorKind,
+    unit?: TargetEditorUnit,
+  ) => void;
+  onTargetUnitChange: (nodeId: string, unit: TargetEditorUnit) => void;
+  onTargetModeChange: (nodeId: string, mode: "value" | "range") => void;
+  actions: ReactNode;
 }) {
   const nameKey = nameFieldKey(node.node_id);
   const endKey = fieldKey(node.node_id, "end.value");
@@ -296,9 +719,29 @@ function StepEditor({
   const endRaw = buffers[endKey]?.raw ?? endSeed(node);
   const nameError = visibleFieldMessage(projection, nameKey);
   const endError = visibleFieldMessage(projection, endKey);
-  const target = node.target;
-  const targetKind = target?.kind ?? "none";
-  const targetLocked = targetKind === "power" || targetKind === "pace";
+  const targetSpec = targetFieldSpec(editor);
+  const unit = editor.unit;
+  const valueKey = fieldKey(node.node_id, "target.value");
+  const minKey = fieldKey(node.node_id, "target.min");
+  const maxKey = fieldKey(node.node_id, "target.max");
+  const valueFallback =
+    editor.kind === "pace" || editor.kind === "power" || editor.kind === "heartRate"
+      ? targetValueText(node, editor)
+      : "";
+  const minFallback =
+    editor.kind === "pace" || editor.kind === "power" || editor.kind === "heartRate"
+      ? targetRangeText(node, editor, "min")
+      : "";
+  const maxFallback =
+    editor.kind === "pace" || editor.kind === "power" || editor.kind === "heartRate"
+      ? targetRangeText(node, editor, "max")
+      : "";
+  const valueRaw = bufferValue(buffers, node.node_id, "target.value", valueFallback);
+  const minRaw = bufferValue(buffers, node.node_id, "target.min", minFallback);
+  const maxRaw = bufferValue(buffers, node.node_id, "target.max", maxFallback);
+  const valueError = visibleFieldMessage(projection, valueKey);
+  const minError = visibleFieldMessage(projection, minKey);
+  const maxError = visibleFieldMessage(projection, maxKey);
   const zoneOptions = detail.zone_options ?? {
     sport: detail.sport,
     available: false,
@@ -306,23 +749,42 @@ function StepEditor({
     max_hr: null,
     zones: [],
   };
-  const currentZone = zoneOptions.zones.find((zone) => zone.id === target?.zone_id);
+  const currentZone = zoneOptions.zones.find(
+    (zone) => zone.id === node.target?.zone_id,
+  );
   const unknownZone =
-    targetKind === "zone" && target?.zone_id && !currentZone ? target.zone_id : null;
+    node.target?.kind === "zone" &&
+    node.target.zone_id &&
+    !currentZone
+      ? node.target.zone_id
+      : null;
   const bpmCapability = detail.capabilities?.targets?.heartRateBpm ?? {
     local: true,
     editable: false,
     synchronizable: false,
     reason: "Kein belegter Schreibvertrag für absolute bpm-Werte.",
   };
-
-  const endValueId = `field-${node.node_id.replace(/[^a-zA-Z0-9_-]/g, "-")}-end`;
-  const nameId = `field-${node.node_id.replace(/[^a-zA-Z0-9_-]/g, "-")}-name`;
-  const roleId = `field-${node.node_id.replace(/[^a-zA-Z0-9_-]/g, "-")}-role`;
-  const targetId = `field-${node.node_id.replace(/[^a-zA-Z0-9_-]/g, "-")}-target`;
-  const zoneId = `field-${node.node_id.replace(/[^a-zA-Z0-9_-]/g, "-")}-zone`;
-  const endErrorId = `${endValueId}-error`;
-  const nameErrorId = `${nameId}-error`;
+  const powerZoneCapability = detail.capabilities?.targets?.powerZone;
+  const paceUnits =
+    editor.kind === "pace"
+      ? paceUnitOptions(detail.sport, editor.unit)
+      : [];
+  const powerUnits: TargetEditorUnit[] =
+    editor.kind === "power" ? ["watts", "percentFtp"] : [];
+  const unitOptions = editor.kind === "pace" ? paceUnits : powerUnits;
+  const unitLocked =
+    editor.kind === "pace" &&
+    unitOptions.length > 1 &&
+    Boolean(valueError || minError || maxError);
+  const unitId = fieldId(node.node_id, "target-unit");
+  const modeId = fieldId(node.node_id, "target-mode");
+  const targetId = fieldId(node.node_id, "target");
+  const zoneId = fieldId(node.node_id, "zone");
+  const targetFieldProps = {
+    kind: targetFieldKind(editor),
+    targetKind: editor.kind,
+    unit,
+  } as const;
 
   return (
     <section
@@ -331,21 +793,33 @@ function StepEditor({
       role="region"
       aria-labelledby={headingId(node.node_id)}
     >
+      {parentRepetitions != null && (
+        <p className="plan-inline__context plan-inline__context--accent">
+          Gilt für alle {parentRepetitions}{" "}
+          {parentRepetitions === 1 ? "Wiederholung" : "Wiederholungen"}
+        </p>
+      )}
       <div className="plan-field">
-        <label htmlFor={nameId}>Name</label>
+        <label htmlFor={fieldId(node.node_id, "name")}>Name</label>
         <input
-          id={nameId}
+          id={fieldId(node.node_id, "name")}
           className="plan-input"
           type="text"
           value={nameRaw}
           aria-invalid={nameError ? true : undefined}
-          aria-describedby={nameError ? nameErrorId : undefined}
+          aria-describedby={
+            nameError ? `${fieldId(node.node_id, "name")}-error` : undefined
+          }
           onChange={(event) =>
             onBuffer(node.node_id, "name", "text", event.target.value)
           }
         />
         {nameError && (
-          <p id={nameErrorId} className="plan-field__error" role="alert">
+          <p
+            id={`${fieldId(node.node_id, "name")}-error`}
+            className="plan-field__error"
+            role="alert"
+          >
             {nameError}
           </p>
         )}
@@ -353,9 +827,11 @@ function StepEditor({
 
       <div className="plan-field-row">
         <div className="plan-field">
-          <label htmlFor={`${endValueId}-kind`}>Abschnitt endet nach</label>
+          <label htmlFor={`${fieldId(node.node_id, "end")}-kind`}>
+            Abschnitt endet nach
+          </label>
           <select
-            id={`${endValueId}-kind`}
+            id={`${fieldId(node.node_id, "end")}-kind`}
             className="plan-input"
             value={endKind}
             onChange={(event) => {
@@ -371,16 +847,20 @@ function StepEditor({
         </div>
 
         <div className="plan-field">
-          <label htmlFor={endValueId}>Umfang</label>
+          <label htmlFor={fieldId(node.node_id, "end")}>Umfang</label>
           <input
-            id={endValueId}
+            id={fieldId(node.node_id, "end")}
             className="plan-input"
             type="text"
             inputMode="decimal"
             value={endRaw}
             placeholder={endKind === "distance" ? "z. B. 1,5 km" : "z. B. 45 min"}
             aria-invalid={endError ? true : undefined}
-            aria-describedby={endError ? endErrorId : `${endValueId}-hint`}
+            aria-describedby={
+              endError
+                ? `${fieldId(node.node_id, "end")}-error`
+                : `${fieldId(node.node_id, "end")}-hint`
+            }
             onChange={(event) =>
               onBuffer(
                 node.node_id,
@@ -390,13 +870,20 @@ function StepEditor({
               )
             }
           />
-          <p id={`${endValueId}-hint`} className="plan-field__hint">
+          <p
+            id={`${fieldId(node.node_id, "end")}-hint`}
+            className="plan-field__hint"
+          >
             {endKind === "distance"
               ? "Meter oder Kilometer; 1,5 km wird zu 1.500 m."
               : "Minuten, z. B. 45; auch 1:30 oder 45 min."}
           </p>
           {endError && (
-            <p id={endErrorId} className="plan-field__error" role="alert">
+            <p
+              id={`${fieldId(node.node_id, "end")}-error`}
+              className="plan-field__error"
+              role="alert"
+            >
               {endError}
             </p>
           )}
@@ -405,9 +892,9 @@ function StepEditor({
 
       <div className="plan-field-row">
         <div className="plan-field">
-          <label htmlFor={roleId}>Abschnittstyp</label>
+          <label htmlFor={fieldId(node.node_id, "role")}>Abschnittstyp</label>
           <select
-            id={roleId}
+            id={fieldId(node.node_id, "role")}
             className="plan-input"
             value={node.role ?? "steady"}
             onChange={(event) =>
@@ -427,62 +914,154 @@ function StepEditor({
           <select
             id={targetId}
             className="plan-input"
-            value={targetKind}
-            disabled={targetLocked}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (next === "none") {
-                onPatchNode(node.node_id, {
-                  target: { kind: "none", text: "Ohne Ziel" },
-                });
-                return;
-              }
-              if (next === "zone") {
-                const first = zoneOptions.zones[0];
-                onPatchNode(node.node_id, {
-                  target: {
-                    kind: "zone",
-                    metric: "heartRate",
-                    zone_id: currentZone?.id ?? first?.id ?? "",
-                    zone_set_id: zoneOptions.zone_set_id,
-                    text: first?.label ?? "HF-Zone",
-                  },
-                });
-              }
-            }}
+            value={editor.kind}
+            onChange={(event) =>
+              onTargetKindChange(
+                node.node_id,
+                event.target.value as TargetEditorKind,
+              )
+            }
           >
             <option value="none">Ohne Ziel</option>
-            <option value="zone">Herzfrequenz · Zone</option>
-            {targetKind === "heartRate" && (
+            <option value="zone" disabled={!zoneOptions.available}>
+              Herzfrequenz · Zone
+            </option>
+            <option value="pace">Pace</option>
+            <option value="power">Leistung</option>
+            {editor.kind === "heartRate" && (
               <option value="heartRate" disabled>
-                Herzfrequenz · bpm (nicht synchronisierbar)
+                Herzfrequenz · bpm (nicht bearbeitbar)
               </option>
             )}
-            {targetKind === "power" && (
-              <option value="power" disabled>
-                Leistung (folgt in P13)
-              </option>
-            )}
-            {targetKind === "pace" && (
-              <option value="pace" disabled>
-                Pace (folgt in P13)
+            {powerZoneCapability && !powerZoneCapability.editable && (
+              <option value="powerZone" disabled>
+                Leistungszone (nicht belegt)
               </option>
             )}
           </select>
           <p className="plan-field__hint">
-            HF-Zonen kommen aus dem tatsächlichen Profil. Absolute bpm-Felder
-            bleiben bis zum nachgewiesenen Adapter-Gate gesperrt.
+            Jede Zielart trägt ihre eigene Einheit. Ein Wechsel übernimmt keine
+            Zahlen der bisherigen Einheit.
           </p>
         </div>
       </div>
 
-      {targetKind === "zone" && (
+      {(editor.kind === "pace" || editor.kind === "power") && unitOptions.length > 0 && (
+        <div className="plan-field-row">
+          <div className="plan-field">
+            <label htmlFor={unitId}>Zieleinheit</label>
+            <select
+              id={unitId}
+              className="plan-input"
+              value={editor.unit ?? unitOptions[0]}
+              disabled={unitLocked}
+              onChange={(event) =>
+                onTargetUnitChange(
+                  node.node_id,
+                  event.target.value as TargetEditorUnit,
+                )
+              }
+            >
+              {unitOptions.map((option) => (
+                <option key={option} value={option}>
+                  {targetUnitLabel(option)}
+                </option>
+              ))}
+            </select>
+            {unitLocked && (
+              <p className="plan-field__hint">
+                Einheitenwechsel erst nach einem gültigen Pacewert.
+              </p>
+            )}
+          </div>
+          <div className="plan-field">
+            <label htmlFor={modeId}>Wert oder Bereich</label>
+            <select
+              id={modeId}
+              className="plan-input"
+              value={editor.mode}
+              onChange={(event) =>
+                onTargetModeChange(
+                  node.node_id,
+                  event.target.value as "value" | "range",
+                )
+              }
+            >
+              <option value="value">Einzelwert</option>
+              <option value="range">Bereich</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {(editor.kind === "pace" || editor.kind === "power") && (
+        <>
+          {editor.mode === "value" ? (
+            <TargetField
+              nodeId={node.node_id}
+              field="target-value"
+              label={targetSpec.single}
+              placeholder={targetSpec.placeholder}
+              value={valueRaw}
+              error={valueError}
+              inputMode={editor.kind === "power" ? "decimal" : "text"}
+              onChange={(raw) =>
+                onBuffer(node.node_id, "target.value", targetFieldProps.kind, raw, {
+                  targetKind: targetFieldProps.targetKind,
+                  unit: targetFieldProps.unit,
+                })
+              }
+            />
+          ) : (
+            <div className="plan-field-row">
+              <TargetField
+                nodeId={node.node_id}
+                field="target-min"
+                label={targetSpec.from}
+                placeholder={targetSpec.placeholder}
+                value={minRaw}
+                error={minError}
+                inputMode={editor.kind === "power" ? "decimal" : "text"}
+                onChange={(raw) =>
+                  onBuffer(node.node_id, "target.min", targetFieldProps.kind, raw, {
+                    targetKind: targetFieldProps.targetKind,
+                    unit: targetFieldProps.unit,
+                  })
+                }
+              />
+              <TargetField
+                nodeId={node.node_id}
+                field="target-max"
+                label={targetSpec.to}
+                placeholder={targetSpec.placeholder}
+                value={maxRaw}
+                error={maxError}
+                inputMode={editor.kind === "power" ? "decimal" : "text"}
+                onChange={(raw) =>
+                  onBuffer(node.node_id, "target.max", targetFieldProps.kind, raw, {
+                    targetKind: targetFieldProps.targetKind,
+                    unit: targetFieldProps.unit,
+                  })
+                }
+              />
+            </div>
+          )}
+          <p className="plan-field__hint">{targetSpec.hint}</p>
+          {editor.kind === "power" && powerZoneCapability && (
+            <p className="plan-field__hint">
+              {powerZoneCapability.reason}
+            </p>
+          )}
+        </>
+      )}
+
+      {editor.kind === "zone" && (
         <div className="plan-field">
           <label htmlFor={zoneId}>HF-Zone</label>
           <select
             id={zoneId}
             className="plan-input"
-            value={target?.zone_id ?? ""}
+            value={node.target?.zone_id ?? ""}
             disabled={!zoneOptions.available}
             onChange={(event) => {
               const zone = zoneOptions.zones.find(
@@ -509,7 +1088,7 @@ function StepEditor({
             ))}
             {unknownZone && (
               <option value={unknownZone}>
-                {target?.text ?? unknownZone} · Referenz nicht im Profil
+                {node.target?.text ?? unknownZone} · Referenz nicht im Profil
               </option>
             )}
           </select>
@@ -520,9 +1099,9 @@ function StepEditor({
           )}
           {unknownZone && (
             <p className="plan-field__warning">
-              Die gespeicherte Zonenreferenz {unknownZone} ist im aktuellen
-              Profil nicht enthalten. Sie bleibt erhalten, bis du bewusst eine
-              vorhandene Zone wählst.
+              Die gespeicherte Zonenreferenz {unknownZone} ist im aktuellen Profil
+              nicht enthalten. Sie bleibt erhalten, bis du bewusst eine vorhandene
+              Zone wählst.
             </p>
           )}
           {!zoneOptions.available && (
@@ -534,30 +1113,80 @@ function StepEditor({
         </div>
       )}
 
-      {targetKind === "heartRate" && (
+      {editor.kind === "heartRate" && (
         <div className="plan-field">
           <p className="plan-field__warning">
             Absolute bpm-Werte bleiben lesbar, sind aber ohne belegten
-            Schreibvertrag nicht als synchronisierbares Feld freigeschaltet.
-            {" "}
+            Schreibvertrag nicht als synchronisierbares Feld freigeschaltet.{" "}
             {bpmCapability.reason ?? ""}
           </p>
-          <p className="plan-field__hint">Gespeichert: {target?.text ?? "—"}</p>
+          <p className="plan-field__hint">
+            Gespeichert: {node.target?.text ?? "—"}
+          </p>
         </div>
       )}
 
-      {targetLocked && (
+      {editor.kind === "none" && (
         <p className="plan-note plan-note--muted">
-          {TARGET_LABEL[targetKind] ?? targetKind} bleibt unverändert erhalten.
-          Die Bearbeitung dieser Zielart folgt in P13.
+          Ohne Ziel werden keine Intensitätsfelder angezeigt und keine künstlichen
+          Nullwerte gespeichert.
         </p>
       )}
 
       <p className="plan-inline__footer">
-        Änderungen bleiben lokal. Ein Feld darf unfertig sein; gespeichert wird
-        in diesem Paket noch nichts.
+        Änderungen bleiben lokal. Ein Feld darf unfertig sein; gespeichert wird in
+        diesem Paket noch nichts.
       </p>
+      {actions}
     </section>
+  );
+}
+
+function TargetField({
+  nodeId,
+  field,
+  label,
+  placeholder,
+  value,
+  error,
+  inputMode,
+  onChange,
+}: {
+  nodeId: string;
+  field: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  error: string | null;
+  inputMode: "text" | "decimal";
+  onChange: (raw: string) => void;
+}) {
+  const id = fieldId(nodeId, field);
+  const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+  return (
+    <div className="plan-field">
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        className="plan-input"
+        type="text"
+        inputMode={inputMode}
+        value={value}
+        placeholder={placeholder}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : hintId}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <p id={hintId} className="plan-field__hint">
+        {placeholder}
+      </p>
+      {error && (
+        <p id={errorId} className="plan-field__error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -573,11 +1202,13 @@ export function DraftStatus({
   projection,
   buffers,
   dirty,
+  nodes,
   onDiscard,
 }: {
   projection: PlanDraftProjection | null;
   buffers: DraftFieldBuffers;
   dirty: boolean;
+  nodes: PlanNode[];
   onDiscard: () => void;
 }): ReactNode {
   const fieldCount = Object.keys(buffers).length;
@@ -588,19 +1219,32 @@ export function DraftStatus({
     : 0;
   const issues = projection?.draft.issues ?? [];
   const openEnds = issues.filter((issue) => issue.code === "open_end").length;
-  const status = invalid
-    ? `${invalid} ${invalid === 1 ? "Feld ist" : "Felder sind"} unvollständig`
-    : openEnds
-      ? `${openEnds} ${openEnds === 1 ? "Abschnitt hat" : "Abschnitte haben"} noch kein Ende`
-      : dirty
-        ? "Ungespeicherte Änderungen"
-        : fieldCount > 0
-          ? "Keine fachliche Änderung"
-          : "Entwurf unverändert";
+  const structural = issues.find((issue) =>
+    ["empty_workout", "empty_repeat", "no_executed_steps"].includes(issue.code),
+  );
+  const status = structural
+    ? structural.message
+    : nodes.length === 0
+      ? "Aufbau leer · Speichern gesperrt"
+      : invalid
+        ? `${invalid} ${invalid === 1 ? "Feld ist" : "Felder sind"} unvollständig`
+        : openEnds
+          ? `${openEnds} ${openEnds === 1 ? "Abschnitt hat" : "Abschnitte haben"} noch kein Ende`
+          : dirty
+            ? "Ungespeicherte Änderungen"
+            : fieldCount > 0
+              ? "Keine fachliche Änderung"
+              : "Entwurf unverändert";
   return (
     <div className="plan-savebar">
       <div>
-        <span className={dirty ? "plan-savebar__state plan-savebar__state--dirty" : "plan-savebar__state"}>
+        <span
+          className={
+            dirty
+              ? "plan-savebar__state plan-savebar__state--dirty"
+              : "plan-savebar__state"
+          }
+        >
           {status}
         </span>
         <span className="plan-savebar__hint">

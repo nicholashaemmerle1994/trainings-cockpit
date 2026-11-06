@@ -16,6 +16,7 @@ die unvollständige Stelle zeigen, statt eine Dauer zu erfinden.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -232,12 +233,126 @@ def _parse_buffer(raw: object) -> FieldBuffer:
         field_kind = FieldKind(kind)
     except ValueError as exc:
         raise DraftProjectionError(f"Unbekannte Feldart {kind!r}.") from exc
+    field_path = str(raw.get("field_path") or "")
     unit = raw.get("unit")
+    minimum = 1 if field_kind is FieldKind.INTEGER and field_path == "repetitions" else None
+    maximum = (
+        2**53 - 1
+        if field_kind is FieldKind.INTEGER and field_path == "repetitions"
+        else None
+    )
     return parse_field_input(
         text,
         field_kind,
-        unit=PaceUnit(str(unit)) if unit else None,
+        unit=(
+            PaceUnit(str(unit))
+            if unit and field_kind is FieldKind.PACE
+            else None
+        ),
+        minimum=minimum,
+        maximum=maximum,
     )
+
+
+def _target_values(parsed: object) -> Value | ValueRange | None:
+    if isinstance(parsed, (Value, ValueRange)):
+        return parsed
+    if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+        return Value(float(parsed))
+    return None
+
+
+def _build_target(
+    kind: str,
+    unit: str | None,
+    values: Value | ValueRange,
+    node: StepNode,
+):
+    if kind == "pace":
+        current = getattr(node.target, "unit", None)
+        pace_unit = (
+            PaceUnit(unit)
+            if unit
+            else current if isinstance(current, PaceUnit) else PaceUnit.SECONDS_PER_KM
+        )
+        return PaceTarget(unit=pace_unit, values=values)
+    if kind == "power":
+        current = getattr(node.target, "unit", None)
+        power_unit = (
+            PowerUnit(unit)
+            if unit
+            else current if isinstance(current, PowerUnit) else PowerUnit.WATTS
+        )
+        return PowerTarget(unit=power_unit, values=values)
+    if kind == "heartRate":
+        return HeartRateTarget(values=values, unit="bpm")
+    return None
+
+
+def _target_entries(
+    entries: list[tuple[str, FieldBuffer, Mapping[str, Any]]],
+) -> tuple[str, str | None, Value | ValueRange] | None:
+    """Ein Zielwert entsteht nur aus vollständigen, gültigen Feldern."""
+    kind = "none"
+    unit: str | None = None
+    for path, buffer, spec in entries:
+        if spec.get("target_kind"):
+            kind = str(spec.get("target_kind"))
+        if spec.get("unit"):
+            unit = str(spec.get("unit"))
+        if buffer.validity is FieldValidity.VALID and path == "target.value":
+            values = _target_values(buffer.parsed)
+            if values is not None:
+                return kind, unit, values
+    minimum: float | None = None
+    maximum: float | None = None
+    for path, buffer, _ in entries:
+        if buffer.validity is not FieldValidity.VALID:
+            return None
+        if not isinstance(buffer.parsed, (int, float)) or isinstance(buffer.parsed, bool):
+            return None
+        if path == "target.min":
+            minimum = float(buffer.parsed)
+        elif path == "target.max":
+            maximum = float(buffer.parsed)
+    if minimum is None or maximum is None or minimum > maximum:
+        return None
+    return kind, unit, ValueRange(minimum, maximum)
+
+
+def _apply_target(
+    nodes: tuple[WorkoutNode, ...],
+    node_id: NodeId,
+    entries: list[tuple[str, FieldBuffer, Mapping[str, Any]]],
+) -> tuple[WorkoutNode, ...] | None:
+    values = list(nodes)
+    for index, node in enumerate(nodes):
+        if node.id == node_id:
+            if not isinstance(node, StepNode):
+                return None
+            if any(buffer.validity is not FieldValidity.VALID for _, buffer, _ in entries):
+                # Ein unfertiger oder ungültiger Zielwert lässt bewusst keinen
+                # alten gültigen Wert derselben Einheit stehen (Abschnitt 6.4/6.5).
+                values[index] = replace(node, target=NoTarget())
+                return tuple(values)
+            built = _target_entries(entries)
+            if built is None:
+                values[index] = replace(node, target=NoTarget())
+                return tuple(values)
+            kind, unit, values_spec = built
+            if kind == "none":
+                kind = str(getattr(node.target, "kind", "none"))
+            target = _build_target(kind, unit, values_spec, node)
+            if target is None:
+                return tuple(values)
+            values[index] = replace(node, target=target)
+            return tuple(values)
+        if isinstance(node, RepeatNode):
+            replaced = _apply_target(node.children, node_id, entries)
+            if replaced is not None:
+                values[index] = replace(node, children=replaced)
+                return tuple(values)
+    return None
 
 
 def _apply_buffer(
@@ -251,38 +366,28 @@ def _apply_buffer(
     values = list(nodes)
     for index, node in enumerate(values):
         if node.id == node_id:
-            if not isinstance(node, StepNode):
-                return None
             if buffer.validity is not FieldValidity.VALID:
                 return tuple(values)
-            if field_path == "name":
-                values[index] = StepNode(
-                    id=node.id,
-                    name=str(buffer.parsed),
-                    end=node.end,
-                    role=node.role,
-                    target=node.target,
-                    notes=node.notes,
-                    source_ref=node.source_ref,
-                )
-            elif field_path == "end.value":
-                if isinstance(buffer.parsed, (int, float)) and not isinstance(
-                    buffer.parsed, bool
-                ):
-                    end = (
-                        TimeEnd(float(buffer.parsed))
-                        if kind == "duration"
-                        else DistanceEnd(float(buffer.parsed))
-                    )
-                    values[index] = StepNode(
-                        id=node.id,
-                        name=node.name,
-                        end=end,
-                        role=node.role,
-                        target=node.target,
-                        notes=node.notes,
-                        source_ref=node.source_ref,
-                    )
+            if isinstance(node, StepNode):
+                if field_path == "name":
+                    values[index] = replace(node, name=str(buffer.parsed))
+                elif field_path == "end.value":
+                    if isinstance(buffer.parsed, (int, float)) and not isinstance(
+                        buffer.parsed, bool
+                    ):
+                        end = (
+                            TimeEnd(float(buffer.parsed))
+                            if kind == "duration"
+                            else DistanceEnd(float(buffer.parsed))
+                        )
+                        values[index] = replace(node, end=end)
+                return tuple(values)
+            if isinstance(node, RepeatNode):
+                if field_path == "name":
+                    values[index] = replace(node, name=str(buffer.parsed))
+                elif field_path == "repetitions":
+                    if isinstance(buffer.parsed, int) and not isinstance(buffer.parsed, bool):
+                        values[index] = replace(node, repetitions=buffer.parsed)
                 return tuple(values)
             return tuple(values)
         if isinstance(node, RepeatNode):
@@ -294,16 +399,46 @@ def _apply_buffer(
                 kind=kind,
             )
             if replaced is not None:
-                values[index] = RepeatNode(
-                    id=node.id,
-                    name=node.name,
-                    repetitions=node.repetitions,
-                    children=replaced,
-                    skip_final_recovery=node.skip_final_recovery,
-                    source_ref=node.source_ref,
-                )
+                values[index] = replace(node, children=replaced)
                 return tuple(values)
     return None
+
+
+def _validate_target_ranges(
+    buffers: dict[str, FieldBuffer],
+    specs: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Erklärt vertauschte Grenzen am Obergrenzenfeld statt sie still zu sortieren."""
+    for key, buffer in list(buffers.items()):
+        spec = specs.get(key) or {}
+        if spec.get("field_path") != "target.min":
+            continue
+        node_id = str(spec.get("node_id") or "")
+        max_key = field_buffer_key(node_id, "target.max")
+        maximum = buffers.get(max_key)
+        if maximum is None or maximum.validity is not FieldValidity.VALID:
+            continue
+        if buffer.validity is not FieldValidity.VALID:
+            continue
+        if not isinstance(buffer.parsed, (int, float)) or not isinstance(
+            maximum.parsed, (int, float)
+        ):
+            continue
+        if float(buffer.parsed) <= float(maximum.parsed):
+            continue
+        kind = str(spec.get("target_kind") or "")
+        message = (
+            "Die schnellere Pace muss eine kleinere Zeit sein als die langsamere. "
+            "Bitte die Grenzen tauschen."
+            if kind == "pace"
+            else "Der Minimalwert darf nicht größer als der Maximalwert sein."
+        )
+        buffers[max_key] = FieldBuffer(
+            raw=maximum.raw,
+            parsed=None,
+            validity=FieldValidity.INVALID,
+            message=message,
+        )
 
 
 def _apply_buffers(
@@ -312,6 +447,7 @@ def _apply_buffers(
     specs: Mapping[str, Mapping[str, Any]],
 ) -> PlannedWorkout:
     nodes = plan.nodes
+    target_buffers: dict[str, list[tuple[str, FieldBuffer, Mapping[str, Any]]]] = {}
     for key, buffer in buffers.items():
         spec = specs.get(key) or {}
         node_id = spec.get("node_id")
@@ -324,6 +460,9 @@ def _apply_buffers(
                 prefix, _, rest = key.rpartition(":")
                 if rest and prefix.startswith("node:"):
                     node_id, field_path = prefix, rest
+        if field_path.startswith("target."):
+            target_buffers.setdefault(node_id, []).append((field_path, buffer, spec))
+            continue
         try:
             replaced = _apply_buffer(
                 nodes,
@@ -334,6 +473,15 @@ def _apply_buffers(
             )
         except (TypeError, ValueError) as exc:
             raise DraftProjectionError(f"Feldpuffer {key!r} ist ungültig.") from exc
+        if replaced is not None:
+            nodes = replaced
+    for node_id, entries in target_buffers.items():
+        try:
+            replaced = _apply_target(nodes, NodeId(node_id), entries)
+        except (TypeError, ValueError) as exc:
+            raise DraftProjectionError(
+                f"Zielwert für {node_id!r} ist ungültig."
+            ) from exc
         if replaced is not None:
             nodes = replaced
     return PlannedWorkout(
@@ -397,6 +545,7 @@ def build_draft_projection(
             raise DraftProjectionError(f"Knoten {node_id!r} gehört nicht zum Entwurf.")
         buffers[key] = _parse_buffer(spec)
 
+    _validate_target_ranges(buffers, specs)
     current = _apply_buffers(current, buffers, specs)
     draft = WorkoutDraft.start(base, remote.source)
     draft.current = current

@@ -38,7 +38,7 @@ from .validation import (
     calculate_known_totals,
     format_distance,
     format_duration,
-    format_target,
+    format_target_label,
     format_totals,
 )
 
@@ -103,30 +103,30 @@ def _target_data(target: Any) -> dict[str, Any]:
             "metric": target.metric.value,
             "zone_id": target.zone_id,
             "zone_set_id": target.zone_set_id,
-            "text": format_target(target),
+            "text": format_target_label(target),
         }
     if isinstance(target, HeartRateTarget):
         return {
             "kind": "heartRate",
             "unit": "bpm",
             "values": _values_data(target.values),
-            "text": format_target(target),
+            "text": format_target_label(target),
         }
     if isinstance(target, PowerTarget):
         return {
             "kind": "power",
             "unit": target.unit.value,
             "values": _values_data(target.values),
-            "text": format_target(target),
+            "text": format_target_label(target),
         }
     if isinstance(target, PaceTarget):
         return {
             "kind": "pace",
             "unit": target.unit.value,
             "values": _values_data(target.values),
-            "text": format_target(target),
+            "text": format_target_label(target),
         }
-    return {"kind": "none", "text": format_target(target)}
+    return {"kind": "none", "text": format_target_label(target)}
 
 
 def _values_data(values: Any) -> dict[str, Any]:
@@ -228,9 +228,9 @@ def _source_data(source: Any) -> dict[str, Any]:
 def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
     """Lokale Modellfähigkeit und belegter Remote-Schreibweg getrennt.
 
-    P12 darf HF-Zonen lokal bearbeiten. Absolute bpm bleiben im Modell
-    darstellbar, sind aber ohne nachgewiesenen Schreibvertrag kein
-    synchronisierbares Eingabefeld (Abschnitt 6.3/8.4).
+    P12/P13 dürfen HF-Zonen, Pace und Leistung lokal bearbeiten. Absolute bpm
+    und Leistungszonen bleiben hinter der Fähigkeitsmatrix gesperrt; die
+    Remote-Schreibfähigkeit ist davon getrennt.
     """
     editable = plan.is_structure_editable
     return {
@@ -251,6 +251,34 @@ def _capabilities(plan: PlannedWorkout) -> dict[str, Any]:
                 "synchronizable": False,
                 "gate": "absolute_hr",
                 "reason": "Kein belegter Schreibvertrag für absolute bpm-Werte.",
+            },
+            "pace": {
+                "local": True,
+                "editable": editable,
+                "synchronizable": False,
+                "reason": "Lokaler Entwurf; der Serializer-Rundlauf folgt in P17.",
+            },
+            "powerWatts": {
+                "local": True,
+                "editable": editable,
+                "synchronizable": False,
+                "reason": "Lokaler Entwurf; der Serializer-Rundlauf folgt in P17.",
+            },
+            "powerPercentFtp": {
+                "local": True,
+                "editable": editable,
+                "synchronizable": False,
+                "reason": "Relative Semantik bleibt lokal erhalten; Schreibbeleg folgt.",
+            },
+            "powerZone": {
+                "local": False,
+                "editable": False,
+                "synchronizable": False,
+                "gate": "power_zone",
+                "reason": (
+                    "Leistungszonen sind laut Fähigkeitsmatrix weder gelesen "
+                    "noch geschrieben belegt."
+                ),
             },
             "none": {
                 "local": True,

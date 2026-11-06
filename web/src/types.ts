@@ -509,6 +509,10 @@ export interface PlanCapabilities {
   targets: {
     heartRateZone: PlanTargetCapability;
     heartRateBpm: PlanTargetCapability;
+    pace: PlanTargetCapability;
+    powerWatts: PlanTargetCapability;
+    powerPercentFtp: PlanTargetCapability;
+    powerZone: PlanTargetCapability;
     none: PlanTargetCapability;
   };
 }

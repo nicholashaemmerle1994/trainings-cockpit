@@ -294,7 +294,261 @@ def test_unbekannte_zonenreferenz_bleibt_erhalten(client: TestClient) -> None:
     assert response.status_code == 200
     draft = response.json()
     assert draft["nodes"][0]["target"]["zone_id"] == "run-hr-99"
-    assert draft["nodes"][0]["target"]["text"] == "Zone 99"
+    assert draft["nodes"][0]["target"]["text"] == "HF Zone 99"
     assert "run-hr-99" not in {
         zone["id"] for zone in draft["zone_options"]["zones"]
     }
+
+
+def _event_for(case_id: str) -> dict:
+    path = load_case(case_id)["remoteFixture"]
+    return load_remote(str(path).rsplit("/", 1)[-1])["event"]
+
+
+def _find_node(nodes: list[dict], **fields) -> dict | None:
+    for node in nodes:
+        if all(node.get(field) == value for field, value in fields.items()):
+            return node
+        if node.get("kind") == "repeat":
+            found = _find_node(node.get("children") or [], **fields)
+            if found:
+                return found
+    return None
+
+
+def _target_buffer(
+    node: dict,
+    path: str,
+    kind: str,
+    raw: str,
+    *,
+    target_kind: str,
+    unit: str | None = None,
+) -> dict:
+    return {
+        **_buffer(node, path, kind, raw),
+        "target_kind": target_kind,
+        "unit": unit,
+    }
+
+
+def test_p13_pace_einzelwert_bereich_und_zieltext_aus_einer_quelle(
+    client: TestClient,
+) -> None:
+    event = _event_for("F02")
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    work = _find_node(detail["nodes"], role="work")
+    assert work is not None
+    body = {
+        "name": detail["name"],
+        "nodes": detail["nodes"],
+        "field_buffers": {
+            f"{work['node_id']}:target.value": _target_buffer(
+                work,
+                "target.value",
+                "pace",
+                "5:20",
+                target_kind="pace",
+                unit="secondsPerKm",
+            )
+        },
+    }
+
+    single = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert single.status_code == 200
+    single_draft = single.json()
+    single_work = _find_node(single_draft["nodes"], role="work")
+    assert single_work["target"]["kind"] == "pace"
+    assert single_work["target"]["values"] == {
+        "kind": "value",
+        "value": 320.0,
+    }
+    assert single_work["target"]["text"] == "Pace 5:20 min/km"
+    pace_segment = next(
+        segment
+        for segment in single_draft["graph"]["segments"]
+        if segment["node_id"] == single_work["node_id"]
+    )
+    assert pace_segment["target_text"] == "Pace 5:20 min/km"
+
+    body["field_buffers"] = {
+        f"{work['node_id']}:target.min": _target_buffer(
+            work, "target.min", "pace", "5:30", target_kind="pace", unit="secondsPerKm"
+        ),
+        f"{work['node_id']}:target.max": _target_buffer(
+            work, "target.max", "pace", "5:45", target_kind="pace", unit="secondsPerKm"
+        ),
+    }
+    ranged = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert ranged.status_code == 200
+    ranged_work = _find_node(ranged.json()["nodes"], role="work")
+    assert ranged_work["target"]["values"] == {
+        "kind": "range",
+        "min": 330.0,
+        "max": 345.0,
+    }
+    assert ranged_work["target"]["text"] == "Pace 5:30–5:45 min/km"
+
+
+def test_p13_watt_prozent_ftp_und_null_watt_bleiben_unterscheidbar(
+    client: TestClient,
+) -> None:
+    event = _event()
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    node = detail["nodes"][0]
+
+    def draft_for(path: str, kind: str, raw: str, target_kind: str, unit: str) -> dict:
+        body = {
+            "name": detail["name"],
+            "nodes": [{**node, "target": {"kind": "none", "text": "Ohne Ziel"}}],
+            "field_buffers": {
+                f"{node['node_id']}:{path}": _target_buffer(
+                    node, path, kind, raw, target_kind=target_kind, unit=unit
+                )
+            },
+        }
+        response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+        assert response.status_code == 200
+        return response.json()["nodes"][0]["target"]
+
+    watts = draft_for("target.value", "decimal", "0", "power", "watts")
+    assert watts["kind"] == "power"
+    assert watts["unit"] == "watts"
+    assert watts["values"] == {"kind": "value", "value": 0.0}
+    assert watts["text"] == "Leistung 0 W"
+
+    ftp = draft_for("target.min", "decimal", "60", "power", "percentFtp")
+    assert ftp["kind"] == "none"
+    # Ein einzelner Bereichsrand bleibt unvollständig und erfindet keinen Wert.
+    detail_body = {
+        "name": detail["name"],
+        "nodes": [{**node, "target": {"kind": "none", "text": "Ohne Ziel"}}],
+        "field_buffers": {
+            f"{node['node_id']}:target.min": _target_buffer(
+                node, "target.min", "decimal", "60", target_kind="power", unit="percentFtp"
+            ),
+            f"{node['node_id']}:target.max": _target_buffer(
+                node, "target.max", "decimal", "90", target_kind="power", unit="percentFtp"
+            ),
+        },
+    }
+    range_response = client.post(
+        f"/api/planner/plan/{event['id']}/draft", json=detail_body
+    )
+    assert range_response.status_code == 200
+    range_target = range_response.json()["nodes"][0]["target"]
+    assert range_target["kind"] == "power"
+    assert range_target["unit"] == "percentFtp"
+    assert range_target["text"] == "Leistung 60–90 % FTP"
+
+
+def test_p13_zielwechsel_uebernimmt_keine_zahlen_der_alten_einheit(
+    client: TestClient,
+) -> None:
+    event = _event()
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    node = detail["nodes"][0]
+    body = {
+        "name": detail["name"],
+        "nodes": [{**node, "target": {"kind": "none", "text": "Ohne Ziel"}}],
+        "field_buffers": {
+            f"{node['node_id']}:target.value": _target_buffer(
+                node, "target.value", "decimal", "", target_kind="power", unit="watts"
+            )
+        },
+    }
+
+    response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+
+    assert response.status_code == 200
+    draft = response.json()
+    target = draft["nodes"][0]["target"]
+    assert target == {"kind": "none", "text": "Ohne Ziel"}
+    assert draft["draft"]["valid"] is False
+    state = draft["draft"]["field_states"][f"{node['node_id']}:target.value"]
+    assert state["validity"] == "incomplete"
+    assert "fehlt" in state["message"].lower()
+
+
+def test_p13_5_75_und_vertauschte_pacegrenzen_werden_erklaert(
+    client: TestClient,
+) -> None:
+    event = _event()
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    node = detail["nodes"][0]
+    body = {
+        "name": detail["name"],
+        "nodes": [{**node, "target": {"kind": "none", "text": "Ohne Ziel"}}],
+        "field_buffers": {
+            f"{node['node_id']}:target.value": _target_buffer(
+                node, "target.value", "pace", "5:75", target_kind="pace",
+                unit="secondsPerKm",
+            )
+        },
+    }
+    invalid = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert invalid.status_code == 200
+    state = invalid.json()["draft"]["field_states"][f"{node['node_id']}:target.value"]
+    assert state["validity"] == "invalid"
+    assert "Sekunden" in state["message"]
+
+    body["field_buffers"] = {
+        f"{node['node_id']}:target.min": _target_buffer(
+            node, "target.min", "pace", "5:45", target_kind="pace",
+            unit="secondsPerKm",
+        ),
+        f"{node['node_id']}:target.max": _target_buffer(
+            node, "target.max", "pace", "5:30", target_kind="pace",
+            unit="secondsPerKm",
+        ),
+    }
+    swapped = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert swapped.status_code == 200
+    swapped_body = swapped.json()
+    max_state = swapped_body["draft"]["field_states"][
+        f"{node['node_id']}:target.max"
+    ]
+    assert max_state["validity"] == "invalid"
+    assert "schnellere Pace" in max_state["message"]
+    assert swapped_body["nodes"][0]["target"]["kind"] == "none"
+
+
+def test_p13_leistungszonen_bleiben_hinter_der_faehigkeitsmatrix(
+    client: TestClient,
+) -> None:
+    event = _event()
+    _store(client, event)
+    detail = _detail(client, event["id"])
+
+    power_zone = detail["capabilities"]["targets"]["powerZone"]
+    assert power_zone["local"] is False
+    assert power_zone["editable"] is False
+    assert power_zone["gate"] == "power_zone"
+    assert "Fähigkeitsmatrix" in power_zone["reason"]
+    assert detail["capabilities"]["targets"]["pace"]["editable"] is True
+    assert detail["capabilities"]["targets"]["powerWatts"]["editable"] is True
+    assert detail["capabilities"]["targets"]["powerPercentFtp"]["editable"] is True
+
+
+def test_p13_importierte_zusatzziele_bleiben_erhalten(client: TestClient) -> None:
+    event = _event_for("F07")
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    body = {
+        "name": detail["name"],
+        "nodes": detail["nodes"],
+        "field_buffers": {},
+    }
+
+    response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert [node["kind"] for node in draft["nodes"]] == ["step", "unsupported", "unsupported"]
+    assert detail["source_snapshot"]["raw_workout_text"] == event["description"]
+    assert draft["source_snapshot"]["raw_workout_text"] == event["description"]
+

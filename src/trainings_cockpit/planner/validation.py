@@ -45,6 +45,7 @@ from .model import (
     Value,
     ValueRange,
     WorkoutNode,
+    ZoneMetric,
     ZoneTarget,
 )
 
@@ -169,6 +170,12 @@ def parse_pace(text: str, unit: PaceUnit | str = PaceUnit.SECONDS_PER_KM) -> flo
     else:
         clock = _CLOCK_RE.fullmatch(raw)
         if not clock:
+            invalid_clock = re.fullmatch(r"(\d+):(\d{2,})", raw)
+            if invalid_clock and int(invalid_clock.group(2)) > 59:
+                raise ValueError(
+                    f"{text!r} ist keine gültige Pace: Sekunden müssen 00–59 "
+                    "sein, zum Beispiel 6:15."
+                )
             raise ValueError(f"{text!r} ist keine Pace.")
         first, second, third = clock.groups()
         seconds = int(first) * 60 + int(second)
@@ -192,7 +199,12 @@ def parse_pace_range(
     values = [parse_pace(part, unit) for part in parts]
     if len(values) == 1:
         return Value(values[0])
-    low, high = sorted(values)
+    low, high = values
+    if low > high:
+        raise ValueError(
+            "Die erste Pacegrenze ist langsamer als die zweite. Bitte den "
+            "schnelleren Wert zuerst nennen."
+        )
     if low == high:
         return Value(low)
     return ValueRange(low, high)
@@ -834,6 +846,34 @@ def _number_text(value: float) -> str:
     return text.replace(".", ",") if "," not in text else text
 
 
+def format_target_label(target: StepTarget | None) -> str:
+    """Eine gemeinsame Zielbeschriftung für Kopfzeile, Graph und Validierung.
+
+    ``format_target`` bleibt die reine Wertdarstellung (``0 W``,
+    ``5:30 min/km``); diese Funktion ergänzt genau einmal die Zielart. Damit
+    zeigen Listenzeile und Diagrammsegment denselben Text.
+    """
+    if target is None:
+        return "Wert fehlt"
+    if isinstance(target, NoTarget):
+        return "Ohne Ziel"
+    if isinstance(target, ZoneTarget):
+        prefix = {
+            ZoneMetric.HEART_RATE: "HF",
+            ZoneMetric.POWER: "Leistung",
+            ZoneMetric.PACE: "Pace",
+        }.get(target.metric, "")
+    elif isinstance(target, HeartRateTarget):
+        prefix = "HF"
+    elif isinstance(target, PowerTarget):
+        prefix = "Leistung"
+    elif isinstance(target, PaceTarget):
+        prefix = "Pace"
+    else:
+        prefix = ""
+    return f"{prefix} {format_target(target)}".strip()
+
+
 def format_totals(totals: KnownTotals) -> str:
     """Bekannte Teil Mengen, ausdrücklich ohne Schätzung."""
     parts: list[str] = []
@@ -900,6 +940,7 @@ __all__ = [
     "format_duration",
     "format_pace",
     "format_target",
+    "format_target_label",
     "format_totals",
     "parse_decimal",
     "parse_distance",

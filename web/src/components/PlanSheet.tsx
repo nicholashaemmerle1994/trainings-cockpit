@@ -2,10 +2,28 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { fmtDateLong } from "../format";
 import {
+  convertPace,
+  createRepeatNode,
+  createStepNode,
+  defaultPaceUnit,
+  dissolveRepeat,
   draftRequest,
   fieldKey,
+  insertChild,
+  moveNodeInLevel,
+  nodeById,
+  normalizeSkipFinalRecovery,
+  removeNode,
   semanticallyDirty,
+  targetEditorForNode,
+  targetEditorsFromNodes,
+  targetRangeText,
+  targetValueText,
   type DraftFieldBuffers,
+  type DraftFieldKind,
+  type TargetEditor,
+  type TargetEditorKind,
+  type TargetEditorUnit,
 } from "../plannerDraft";
 import type {
   PlanDetail,
@@ -50,6 +68,48 @@ function patchNodeTree(
   });
 }
 
+interface UndoSnapshot {
+  message: string;
+  nodes: PlanNode[];
+  buffers: DraftFieldBuffers;
+  endKinds: Record<string, "time" | "distance">;
+  targetEditors: Record<string, TargetEditor>;
+  selected: string | null;
+  expanded: string | null;
+}
+
+function withoutNodeData(
+  buffers: DraftFieldBuffers,
+  targetEditors: Record<string, TargetEditor>,
+  ids: Set<string>,
+): {
+  buffers: DraftFieldBuffers;
+  targetEditors: Record<string, TargetEditor>;
+} {
+  const nextBuffers = Object.fromEntries(
+    Object.entries(buffers).filter(([key]) => {
+      const owner = key.slice(0, key.lastIndexOf(":"));
+      return !ids.has(owner);
+    }),
+  );
+  const nextEditors = Object.fromEntries(
+    Object.entries(targetEditors).filter(([nodeId]) => !ids.has(nodeId)),
+  );
+  return { buffers: nextBuffers, targetEditors: nextEditors };
+}
+
+function subtreeNodeIds(nodes: PlanNode[], nodeId: string): Set<string> {
+  const node = nodeById(nodes, nodeId);
+  if (!node) return new Set([nodeId]);
+  const ids = new Set<string>();
+  const walk = (candidate: PlanNode) => {
+    ids.add(candidate.node_id);
+    for (const child of candidate.children ?? []) walk(child);
+  };
+  walk(node);
+  return ids;
+}
+
 export function PlanSheet({
   eventId,
   onClose,
@@ -62,6 +122,9 @@ export function PlanSheet({
   const [nodes, setNodes] = useState<PlanNode[]>([]);
   const [buffers, setBuffers] = useState<DraftFieldBuffers>({});
   const [endKinds, setEndKinds] = useState<Record<string, "time" | "distance">>({});
+  const [targetEditors, setTargetEditors] = useState<Record<string, TargetEditor>>({});
+  const [undo, setUndo] = useState<UndoSnapshot | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -80,6 +143,9 @@ export function PlanSheet({
     setNodes([]);
     setBuffers({});
     setEndKinds({});
+    setTargetEditors({});
+    setUndo(null);
+    setAddOpen(false);
     setEditing(false);
     setExpanded(null);
     setSelected(null);
@@ -146,6 +212,9 @@ export function PlanSheet({
     setNodes(data.nodes);
     setBuffers({});
     setEndKinds({});
+    setTargetEditors(targetEditorsFromNodes(data.nodes));
+    setUndo(null);
+    setAddOpen(false);
     const first = firstEditableNode(data.nodes);
     setSelected(first?.node_id ?? null);
     setExpanded(first?.node_id ?? null);
@@ -159,6 +228,9 @@ export function PlanSheet({
     setNodes(data?.nodes ?? []);
     setBuffers({});
     setEndKinds({});
+    setTargetEditors({});
+    setUndo(null);
+    setAddOpen(false);
     setSelected(null);
     setExpanded(null);
   };
@@ -183,34 +255,384 @@ export function PlanSheet({
   const onBuffer = (
     nodeId: string,
     fieldPath: string,
-    kind: "text" | "duration" | "distance",
+    kind: DraftFieldKind,
     raw: string,
+    options?: { targetKind?: TargetEditorKind; unit?: TargetEditorUnit },
   ) => {
     const key = fieldKey(nodeId, fieldPath);
+    setUndo(null);
     setBuffers((currentBuffers) => ({
       ...currentBuffers,
-      [key]: { nodeId, fieldPath, kind, raw },
+      [key]: {
+        nodeId,
+        fieldPath,
+        kind,
+        raw,
+        targetKind: options?.targetKind,
+        unit: options?.unit,
+      },
     }));
   };
 
-  const onClearBuffer = (nodeId: string, fieldPath: string) => {
-    const key = fieldKey(nodeId, fieldPath);
+  const replaceTargetBuffers = (
+    nodeId: string,
+    entries: {
+      fieldPath: string;
+      kind: DraftFieldKind;
+      raw: string;
+      targetKind: TargetEditorKind;
+      unit?: TargetEditorUnit;
+    }[],
+  ) => {
     setBuffers((currentBuffers) => {
-      if (!(key in currentBuffers)) return currentBuffers;
       const next = { ...currentBuffers };
-      delete next[key];
+      for (const key of Object.keys(next)) {
+        if (key.startsWith(`${nodeId}:target.`)) delete next[key];
+      }
+      for (const entry of entries) {
+        next[fieldKey(nodeId, entry.fieldPath)] = {
+          nodeId,
+          fieldPath: entry.fieldPath,
+          kind: entry.kind,
+          raw: entry.raw,
+          targetKind: entry.targetKind,
+          unit: entry.unit,
+        };
+      }
       return next;
     });
   };
 
   const onPatchNode = (nodeId: string, patch: Partial<PlanNode>) => {
-    setNodes((currentNodes) => patchNodeTree(currentNodes, nodeId, patch));
+    setUndo(null);
+    setNodes((currentNodes) =>
+      normalizeSkipFinalRecovery(patchNodeTree(currentNodes, nodeId, patch)),
+    );
   };
 
   const onEndKindChange = (nodeId: string, kind: "time" | "distance") => {
+    setUndo(null);
     setEndKinds((currentKinds) => ({ ...currentKinds, [nodeId]: kind }));
-    onClearBuffer(nodeId, "end.value");
-    onPatchNode(nodeId, { end: { kind: "open", text: "Ende offen" } });
+    setBuffers((currentBuffers) => {
+      const key = fieldKey(nodeId, "end.value");
+      if (!(key in currentBuffers)) return currentBuffers;
+      const next = { ...currentBuffers };
+      delete next[key];
+      return next;
+    });
+    setNodes((currentNodes) =>
+      patchNodeTree(currentNodes, nodeId, {
+        end: { kind: "open", text: "Ende offen" },
+      }),
+    );
+  };
+
+  const onTargetKindChange = (
+    nodeId: string,
+    kind: TargetEditorKind,
+    unit?: TargetEditorUnit,
+  ) => {
+    const node = nodeById(nodes, nodeId);
+    if (!node || node.kind !== "step") return;
+    setUndo(null);
+    replaceTargetBuffers(nodeId, []);
+    if (kind === "none") {
+      setTargetEditors((current) => ({
+        ...current,
+        [nodeId]: { kind: "none", mode: "value" },
+      }));
+      setNodes((currentNodes) =>
+        patchNodeTree(currentNodes, nodeId, {
+          target: { kind: "none", text: "Ohne Ziel" },
+        }),
+      );
+      return;
+    }
+    if (kind === "zone") {
+      const zone = data?.zone_options.zones[0];
+      const editor: TargetEditor = { kind: "zone", mode: "value" };
+      setTargetEditors((current) => ({ ...current, [nodeId]: editor }));
+      setNodes((currentNodes) =>
+        patchNodeTree(currentNodes, nodeId, {
+          target: {
+            kind: "zone",
+            metric: "heartRate",
+            zone_id: zone?.id ?? "",
+            zone_set_id: data?.zone_options.zone_set_id ?? null,
+            text: zone?.label ?? "HF-Zone",
+          },
+        }),
+      );
+      return;
+    }
+    if (kind === "heartRate") {
+      setTargetEditors((current) => ({
+        ...current,
+        [nodeId]: { kind: "heartRate", mode: "value" },
+      }));
+      return;
+    }
+    const nextUnit =
+      unit ?? (kind === "pace" ? defaultPaceUnit(data?.sport ?? "") : "watts");
+    const editor: TargetEditor = { kind, unit: nextUnit, mode: "value" };
+    setTargetEditors((current) => ({ ...current, [nodeId]: editor }));
+    setNodes((currentNodes) =>
+      patchNodeTree(currentNodes, nodeId, {
+        target: { kind: "none", text: "Ohne Ziel" },
+      }),
+    );
+    replaceTargetBuffers(nodeId, [
+      {
+        fieldPath: "target.value",
+        kind: kind === "pace" ? "pace" : "decimal",
+        raw: "",
+        targetKind: kind,
+        unit: nextUnit,
+      },
+    ]);
+  };
+
+  const onTargetUnitChange = (nodeId: string, unit: TargetEditorUnit) => {
+    const node = nodeById(nodes, nodeId);
+    const editor = targetEditors[nodeId] ?? (node ? targetEditorForNode(node) : null);
+    if (!node || node.kind !== "step" || !editor) return;
+    setUndo(null);
+    if (editor.kind === "pace" && node.target?.kind === "pace" && node.target.values) {
+      const currentTarget = node.target;
+      const values = currentTarget.values;
+      if (!values) return;
+      setNodes((currentNodes) =>
+        patchNodeTree(currentNodes, nodeId, {
+          target: {
+            kind: "pace",
+            metric: "pace",
+            unit,
+            values:
+              values.kind === "range"
+                ? {
+                    kind: "range",
+                    min: convertPace(values.min, editor.unit ?? "secondsPerKm", unit),
+                    max: convertPace(values.max, editor.unit ?? "secondsPerKm", unit),
+                  }
+                : {
+                    kind: "value",
+                    value: convertPace(
+                      values.value ?? values.min,
+                      editor.unit ?? "secondsPerKm",
+                      unit,
+                    ),
+                    min: convertPace(
+                      values.value ?? values.min,
+                      editor.unit ?? "secondsPerKm",
+                      unit,
+                    ),
+                    max: convertPace(
+                      values.value ?? values.min,
+                      editor.unit ?? "secondsPerKm",
+                      unit,
+                    ),
+                  },
+            text: currentTarget.text,
+          },
+        }),
+      );
+      replaceTargetBuffers(nodeId, []);
+      setTargetEditors((current) => ({
+        ...current,
+        [nodeId]: { ...editor, unit },
+      }));
+      return;
+    }
+    // Watt ↔ % FTP ist keine Umrechnung: die alte Zahl wird bewusst gelöscht.
+    const nextEditor: TargetEditor = { ...editor, unit };
+    setTargetEditors((current) => ({ ...current, [nodeId]: nextEditor }));
+    setNodes((currentNodes) =>
+      patchNodeTree(currentNodes, nodeId, {
+        target: { kind: "none", text: "Ohne Ziel" },
+      }),
+    );
+    replaceTargetBuffers(
+      nodeId,
+      nextEditor.mode === "range"
+        ? [
+            {
+              fieldPath: "target.min",
+              kind: editor.kind === "pace" ? "pace" : "decimal",
+              raw: "",
+              targetKind: editor.kind,
+              unit,
+            },
+            {
+              fieldPath: "target.max",
+              kind: editor.kind === "pace" ? "pace" : "decimal",
+              raw: "",
+              targetKind: editor.kind,
+              unit,
+            },
+          ]
+        : [
+            {
+              fieldPath: "target.value",
+              kind: editor.kind === "pace" ? "pace" : "decimal",
+              raw: "",
+              targetKind: editor.kind,
+              unit,
+            },
+          ],
+    );
+  };
+
+  const onTargetModeChange = (nodeId: string, mode: "value" | "range") => {
+    const node = nodeById(nodes, nodeId);
+    const editor = targetEditors[nodeId] ?? (node ? targetEditorForNode(node) : null);
+    if (!node || node.kind !== "step" || !editor || editor.mode === mode) return;
+    setUndo(null);
+    const fieldKind: DraftFieldKind = editor.kind === "pace" ? "pace" : "decimal";
+    if (mode === "range") {
+      const first =
+        buffers[fieldKey(nodeId, "target.value")]?.raw ??
+        targetValueText(node, editor);
+      setTargetEditors((current) => ({
+        ...current,
+        [nodeId]: { ...editor, mode: "range" },
+      }));
+      replaceTargetBuffers(nodeId, [
+        {
+          fieldPath: "target.min",
+          kind: fieldKind,
+          raw: first,
+          targetKind: editor.kind,
+          unit: editor.unit,
+        },
+        {
+          fieldPath: "target.max",
+          kind: fieldKind,
+          raw: "",
+          targetKind: editor.kind,
+          unit: editor.unit,
+        },
+      ]);
+      return;
+    }
+    const first =
+      buffers[fieldKey(nodeId, "target.min")]?.raw ??
+      targetRangeText(node, editor, "min");
+    setTargetEditors((current) => ({
+      ...current,
+      [nodeId]: { ...editor, mode: "value" },
+    }));
+    replaceTargetBuffers(nodeId, [
+      {
+        fieldPath: "target.value",
+        kind: fieldKind,
+        raw: first,
+        targetKind: editor.kind,
+        unit: editor.unit,
+      },
+    ]);
+  };
+
+  const snapshot = (message: string): UndoSnapshot => ({
+    message,
+    nodes,
+    buffers,
+    endKinds,
+    targetEditors,
+    selected,
+    expanded,
+  });
+
+  const addRoot = (kind: "step" | "repeat") => {
+    const node = kind === "step" ? createStepNode() : createRepeatNode();
+    setUndo(null);
+    setAddOpen(false);
+    setNodes((currentNodes) => normalizeSkipFinalRecovery([...currentNodes, node]));
+    setTargetEditors((current) =>
+      kind === "step"
+        ? { ...current, [node.node_id]: targetEditorForNode(node) }
+        : current,
+    );
+    setSelected(node.node_id);
+    setExpanded(node.node_id);
+    window.requestAnimationFrame(() => headScroll.reveal(node.node_id));
+  };
+
+  const addChild = (groupId: string) => {
+    const node = createStepNode();
+    setUndo(null);
+    setNodes((currentNodes) =>
+      normalizeSkipFinalRecovery(insertChild(currentNodes, groupId, node)),
+    );
+    setTargetEditors((current) => ({
+      ...current,
+      [node.node_id]: targetEditorForNode(node),
+    }));
+    setSelected(node.node_id);
+    setExpanded(node.node_id);
+    window.requestAnimationFrame(() => headScroll.reveal(node.node_id));
+  };
+
+  const remove = (nodeId: string) => {
+    const result = removeNode(nodes, nodeId);
+    if (!result) return;
+    const removed = result.removed;
+    const ids = subtreeNodeIds(nodes, nodeId);
+    const cleaned = withoutNodeData(buffers, targetEditors, ids);
+    setUndo(snapshot(
+      removed.kind === "repeat" ? "Wiederholungsblock entfernt" : "Abschnitt entfernt",
+    ));
+    setNodes(normalizeSkipFinalRecovery(result.nodes));
+    setBuffers(cleaned.buffers);
+    setTargetEditors(cleaned.targetEditors);
+    setEndKinds((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => !ids.has(key))),
+    );
+    setSelected(result.nextSelection);
+    setExpanded(result.nextSelection);
+    if (result.nextSelection) {
+      window.requestAnimationFrame(() => headScroll.reveal(result.nextSelection!));
+    }
+  };
+
+  const move = (nodeId: string, delta: -1 | 1) => {
+    setUndo(null);
+    setNodes((currentNodes) =>
+      normalizeSkipFinalRecovery(moveNodeInLevel(currentNodes, nodeId, delta)),
+    );
+    setSelected(nodeId);
+  };
+
+  const dissolve = (groupId: string) => {
+    const result = dissolveRepeat(nodes, groupId);
+    if (!result) return;
+    const ids = subtreeNodeIds(nodes, groupId);
+    const cleaned = withoutNodeData(buffers, targetEditors, ids);
+    setUndo(snapshot("Wiederholungsblock aufgelöst"));
+    setNodes(normalizeSkipFinalRecovery(result.nodes));
+    setBuffers(cleaned.buffers);
+    setTargetEditors({
+      ...cleaned.targetEditors,
+      ...targetEditorsFromNodes(result.nodes),
+    });
+    setEndKinds((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => !ids.has(key))),
+    );
+    setSelected(result.firstId);
+    setExpanded(result.firstId);
+    if (result.firstId) {
+      window.requestAnimationFrame(() => headScroll.reveal(result.firstId!));
+    }
+  };
+
+  const undoAction = () => {
+    if (!undo) return;
+    setNodes(undo.nodes);
+    setBuffers(undo.buffers);
+    setEndKinds(undo.endKinds);
+    setTargetEditors(undo.targetEditors);
+    setSelected(undo.selected);
+    setExpanded(undo.expanded);
+    setUndo(null);
   };
 
   return (
@@ -228,6 +650,9 @@ export function PlanSheet({
           nodes={nodes}
           buffers={buffers}
           endKinds={endKinds}
+          targetEditors={targetEditors}
+          undo={undo}
+          addOpen={addOpen}
           projection={projection}
           selected={selected}
           expanded={expanded}
@@ -237,9 +662,18 @@ export function PlanSheet({
           onSelect={onSelect}
           onToggle={onToggle}
           onBuffer={onBuffer}
-          onClearBuffer={onClearBuffer}
           onPatchNode={onPatchNode}
           onEndKindChange={onEndKindChange}
+          onTargetKindChange={onTargetKindChange}
+          onTargetUnitChange={onTargetUnitChange}
+          onTargetModeChange={onTargetModeChange}
+          onMove={move}
+          onRemove={remove}
+          onAddRoot={addRoot}
+          onAddChild={addChild}
+          onDissolve={dissolve}
+          onUndo={undoAction}
+          onAddOpen={setAddOpen}
           registerHead={headScroll.register}
           dirty={dirty}
         />
@@ -254,6 +688,9 @@ function PlanBody({
   nodes,
   buffers,
   endKinds,
+  targetEditors,
+  undo,
+  addOpen,
   projection,
   selected,
   expanded,
@@ -263,9 +700,18 @@ function PlanBody({
   onSelect,
   onToggle,
   onBuffer,
-  onClearBuffer,
   onPatchNode,
   onEndKindChange,
+  onTargetKindChange,
+  onTargetUnitChange,
+  onTargetModeChange,
+  onMove,
+  onRemove,
+  onAddRoot,
+  onAddChild,
+  onDissolve,
+  onUndo,
+  onAddOpen,
   registerHead,
   dirty,
 }: {
@@ -274,6 +720,9 @@ function PlanBody({
   nodes: PlanNode[];
   buffers: DraftFieldBuffers;
   endKinds: Record<string, "time" | "distance">;
+  targetEditors: Record<string, TargetEditor>;
+  undo: UndoSnapshot | null;
+  addOpen: boolean;
   projection: PlanDraftProjection | null;
   selected: string | null;
   expanded: string | null;
@@ -285,12 +734,26 @@ function PlanBody({
   onBuffer: (
     nodeId: string,
     fieldPath: string,
-    kind: "text" | "duration" | "distance",
+    kind: DraftFieldKind,
     raw: string,
+    options?: { targetKind?: TargetEditorKind; unit?: TargetEditorUnit },
   ) => void;
-  onClearBuffer: (nodeId: string, fieldPath: string) => void;
   onPatchNode: (nodeId: string, patch: Partial<PlanNode>) => void;
   onEndKindChange: (nodeId: string, kind: "time" | "distance") => void;
+  onTargetKindChange: (
+    nodeId: string,
+    kind: TargetEditorKind,
+    unit?: TargetEditorUnit,
+  ) => void;
+  onTargetUnitChange: (nodeId: string, unit: TargetEditorUnit) => void;
+  onTargetModeChange: (nodeId: string, mode: "value" | "range") => void;
+  onMove: (nodeId: string, delta: -1 | 1) => void;
+  onRemove: (nodeId: string) => void;
+  onAddRoot: (kind: "step" | "repeat") => void;
+  onAddChild: (groupId: string) => void;
+  onDissolve: (groupId: string) => void;
+  onUndo: () => void;
+  onAddOpen: (open: boolean) => void;
   registerHead: (nodeId: string, element: HTMLButtonElement | null) => void;
   dirty: boolean;
 }) {
@@ -370,7 +833,19 @@ function PlanBody({
       <section className="sheet-sec plan-structure" aria-label="Aufbau der Planung">
         <h2>Aufbau</h2>
         {nodes.length === 0 && (
-          <p className="plan-note">Für diese Planung liegt kein Aufbau vor.</p>
+          <p className="plan-note">
+            {editing
+              ? "Der Aufbau ist leer. Du kannst einen Einzelabschnitt oder einen Wiederholungsblock hinzufügen; Speichern bleibt gesperrt."
+              : "Für diese Planung liegt kein Aufbau vor."}
+          </p>
+        )}
+        {undo && (
+          <div className="plan-undo" role="status">
+            <span>{undo.message}</span>
+            <button type="button" className="btn btn--ghost" onClick={onUndo}>
+              Rückgängig
+            </button>
+          </div>
         )}
         {editing ? (
           <PlanEditor
@@ -379,17 +854,64 @@ function PlanBody({
             nodes={nodes}
             buffers={buffers}
             endKinds={endKinds}
+            targetEditors={targetEditors}
             selectedNodeId={selected}
             expandedNodeId={expanded}
             onToggle={onToggle}
             onBuffer={onBuffer}
-            onClearBuffer={onClearBuffer}
             onPatchNode={onPatchNode}
             onEndKindChange={onEndKindChange}
+            onTargetKindChange={onTargetKindChange}
+            onTargetUnitChange={onTargetUnitChange}
+            onTargetModeChange={onTargetModeChange}
+            onMove={onMove}
+            onRemove={onRemove}
+            onAddChild={onAddChild}
+            onDissolve={onDissolve}
             registerHead={registerHead}
           />
         ) : (
           <PlanNodeList nodes={nodes} selected={selected} onSelect={onSelect} />
+        )}
+        {editing && (
+          <div className="plan-add">
+            {!addOpen ? (
+              <button
+                type="button"
+                className="plan-add__trigger"
+                aria-expanded={false}
+                onClick={() => onAddOpen(true)}
+              >
+                <span aria-hidden="true">+</span> Baustein hinzufügen
+              </button>
+            ) : (
+              <div className="plan-add__choices" role="group" aria-label="Baustein hinzufügen">
+                <button
+                  type="button"
+                  className="plan-add__choice"
+                  onClick={() => onAddRoot("step")}
+                >
+                  <strong>Einzelabschnitt</strong>
+                  <span>Ein eigener Schritt am Ende des Aufbaus.</span>
+                </button>
+                <button
+                  type="button"
+                  className="plan-add__choice"
+                  onClick={() => onAddRoot("repeat")}
+                >
+                  <strong>Wiederholungsblock</strong>
+                  <span>Mehrere Schritte mit einer gemeinsamen Wiederholungszahl.</span>
+                </button>
+                <button
+                  type="button"
+                  className="plan-add__cancel"
+                  onClick={() => onAddOpen(false)}
+                >
+                  Abbrechen
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </section>
 
@@ -426,6 +948,7 @@ function PlanBody({
           projection={projection}
           buffers={buffers}
           dirty={dirty}
+          nodes={nodes}
           onDiscard={onDiscard}
         />
       )}
