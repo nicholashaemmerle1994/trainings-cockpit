@@ -341,6 +341,33 @@ export interface PlannerWeekResponse {
   generated_at: string;
 }
 
+/** Eine Kandidatenplanung im Blatt der erledigten Einheit. */
+export interface UnitPlanLinkCandidate extends PlannerEntry {
+  /** Der Athlet hat genau dieses Paar bereits getrennt. */
+  separated: boolean;
+}
+
+export interface UnitPlanLinkInfo {
+  plan_id: number | null;
+  name: string;
+  date: string;
+  sport: string | null;
+  sport_label: string;
+  source: "auto" | "manual";
+}
+
+export interface UnitPlanLinkContext {
+  activity_row_id: number;
+  week: string;
+  date: string;
+  linked: UnitPlanLinkInfo | null;
+  candidates: UnitPlanLinkCandidate[];
+  plans_state: PlannerSourceState;
+  plans_error: string | null;
+  account_id: string;
+  athlete_id: string;
+}
+
 export interface PlanGraphValue {
   kind: "value" | "range";
   value?: number;

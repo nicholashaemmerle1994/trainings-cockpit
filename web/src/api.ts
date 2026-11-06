@@ -10,6 +10,7 @@ import type {
   SessionDetail,
   SyncResult,
   UnitDetail,
+  UnitPlanLinkContext,
 } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -81,6 +82,19 @@ export const api = {
       body: JSON.stringify(body),
     }),
   unit: (rowId: number) => request<UnitDetail>(`/api/unit/${rowId}`),
+  unitPlanLink: (rowId: number) =>
+    request<UnitPlanLinkContext>(`/api/unit/${rowId}/plan-link`),
+  linkUnitPlan: (rowId: number, planId: number) =>
+    request<UnitPlanLinkContext>(`/api/unit/${rowId}/plan-link`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ plan_id: planId }),
+    }),
+  unlinkUnitPlan: (rowId: number, planId: number) =>
+    request<UnitPlanLinkContext>(
+      `/api/unit/${rowId}/plan-link?plan_id=${encodeURIComponent(String(planId))}`,
+      { method: "DELETE" },
+    ),
   fuel: (params: {
     minutes: number;
     mode: string;

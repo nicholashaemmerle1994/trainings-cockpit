@@ -2026,6 +2026,10 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   color: var(--text-3);
 }
 
+.train-meta-plan::before {
+  content: " · ";
+}
+
 .train-state {
   font-size: var(--text-micro);
   color: var(--text-3);
@@ -2047,6 +2051,21 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   font-size: 16px;
   line-height: 1;
   color: var(--text-muted);
+}
+
+@media (max-width: 520px) {
+  /* Der Planbezug steht unter den Ist-Werten, einzeilig gekürzt. So bleiben
+     die Messwerte lesbar und die Zeile wächst nur um eine Zeile. */
+  .train-meta-plan {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .train-meta-plan::before {
+    content: none;
+  }
 }
 
 @media (max-width: 360px) {
@@ -3694,6 +3713,107 @@ button.plan-node:hover {
 button.plan-node:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Planung im Einheiten-Blatt — zuordnen, trennen, wieder verbinden. */
+.unit-link__text {
+  margin: 0;
+  font-size: var(--text-label);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.unit-link__text strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.unit-link__hint {
+  margin: 4px 0 0;
+  font-size: var(--text-micro);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.unit-link__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.unit-link__actions .btn {
+  min-height: 44px;
+}
+
+.unit-link__list {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.unit-link__option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.unit-link__list li:first-child .unit-link__option {
+  border-top: 0;
+}
+
+.unit-link__option:hover:not(:disabled) {
+  background: var(--bg-surface-raised);
+}
+
+.unit-link__option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.unit-link__option:disabled {
+  cursor: default;
+}
+
+.unit-link__option-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.unit-link__option-name {
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 13.5px;
+}
+
+.unit-link__option-meta {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.unit-link__option-action {
+  color: var(--accent-hover);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.unit-link__option:disabled .unit-link__option-action {
+  color: var(--text-muted);
 }
 
 @media (max-width: 520px) {

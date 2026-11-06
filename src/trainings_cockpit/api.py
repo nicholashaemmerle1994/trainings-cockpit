@@ -35,6 +35,14 @@ from .planner.drafts import (
     build_new_draft,
     build_new_draft_projection,
 )
+from .planner.links import (
+    LINKED,
+    LinkError,
+    LinkNotFound,
+    link_unit,
+    resolve_relationships,
+    separate_unit,
+)
 from .planner.operations import (
     SqliteOperationStore,
     plan_to_json,
@@ -235,6 +243,16 @@ def _planner_week(conn: sqlite3.Connection, parameter: str | None) -> dict[str, 
     )
 
     speeds = plan.speeds(conn, today=date.fromisoformat(today))
+    saved_links = db.plan_links(
+        conn, account_id=account_id, athlete_id=athlete_id
+    )
+    relationships, link_issues = resolve_relationships(
+        plans_rows,
+        activity_rows,
+        saved_links,
+        account_id=account_id,
+        athlete_id=athlete_id,
+    )
     payload = build_planner_week(
         period,
         plans_rows,
@@ -250,7 +268,12 @@ def _planner_week(conn: sqlite3.Connection, parameter: str | None) -> dict[str, 
         plans_coverage=plans_coverage,
         activities_coverage=activities_coverage,
         speeds_kmh=speeds,
+        relationships=relationships,
     )
+    payload["relationship_issues"] = [
+        *payload.get("relationship_issues", []),
+        *link_issues,
+    ]
     payload["account_id"] = account_id
     payload["athlete_id"] = athlete_id
     payload["generated_at"] = datetime.now().astimezone().isoformat(
@@ -281,6 +304,171 @@ def planner_week(
     """Alias für Verlinkungen, die den Wochenvertrag ausdrücklich nennen."""
     with connection() as conn:
         return _planner_week(conn, _week_parameter(week, woche, von, bis))
+
+
+def _entry_activity_row_ids(entry: dict[str, Any]) -> set[int]:
+    """Alle Aufzeichnungszeilen eines Listeneintrags, auch bei mehreren."""
+    views = entry.get("activities") or []
+    if not views and entry.get("activity"):
+        views = [entry]
+    row_ids: set[int] = set()
+    for view in views:
+        if not isinstance(view, dict):
+            continue
+        row_id = view.get("activity_row_id")
+        if row_id is None and isinstance(view.get("activity"), dict):
+            row_id = view["activity"].get("row_id")
+        if row_id is not None:
+            row_ids.add(int(row_id))
+    return row_ids
+
+
+def _unit_plan_link_context(
+    conn: sqlite3.Connection, row_id: int
+) -> dict[str, Any]:
+    """Bestätigte Zuordnung und offene Kandidaten für eine Aufzeichnung.
+
+    Der Kontext ist eine Leseansicht derselben Wochenprojektion. Kandidaten
+    sind ausschließlich Planungen am selben lokalen Tag; damit bleibt die
+    Auswahl bei dem Fall, in dem doppelte Karten entstehen.
+    """
+    settings = get_settings()
+    activity = db.activity_by_row_id(conn, row_id)
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Einheit nicht gefunden")
+    account_id, athlete_id = account_context(conn)
+    day = str(activity.get("date") or "")[:10]
+    week = start_of_planner_week(day, settings.time_zone)
+    payload = _planner_week(conn, week)
+    saved_links = db.plan_links(
+        conn, account_id=account_id, athlete_id=athlete_id
+    )
+
+    linked: dict[str, Any] | None = None
+    for entry in payload["entries"]:
+        if entry.get("kind") != "linked":
+            continue
+        if row_id not in _entry_activity_row_ids(entry):
+            continue
+        plan = entry.get("plan") or {}
+        plan_id = entry.get("plan_id")
+        source = "auto"
+        if plan_id is not None:
+            for link in saved_links:
+                if (
+                    int(link["event_id"]) == int(plan_id)
+                    and int(link["activity_id"]) == row_id
+                    and link["state"] == LINKED
+                ):
+                    source = str(link.get("source") or "manual")
+                    break
+        linked = {
+            "plan_id": plan_id,
+            "name": plan.get("name") or entry.get("name") or "",
+            "date": plan.get("date") or entry.get("date"),
+            "sport": plan.get("sport") or entry.get("sport"),
+            "sport_label": plan.get("sport_label") or entry.get("sport_label") or "",
+            "source": source,
+        }
+        break
+
+    candidates: list[dict[str, Any]] = []
+    if linked is None:
+        separated = {
+            int(link["event_id"])
+            for link in saved_links
+            if link["state"] == "separated" and int(link["activity_id"]) == row_id
+        }
+        for entry in payload["entries"]:
+            if entry.get("kind") != "planned":
+                continue
+            if str(entry.get("date") or "")[:10] != day:
+                continue
+            candidate = dict(entry)
+            candidate["separated"] = int(entry.get("plan_id") or 0) in separated
+            candidates.append(candidate)
+        candidates.sort(
+            key=lambda entry: (
+                0 if entry.get("sport") == activity.get("sport") else 1,
+                str(entry.get("start") or ""),
+                int(entry.get("plan_id") or 0),
+            )
+        )
+
+    return {
+        "activity_row_id": row_id,
+        "week": week,
+        "date": day,
+        "linked": linked,
+        "candidates": candidates,
+        "plans_state": payload["sources"]["plans"]["state"],
+        "plans_error": payload["sources"]["plans"].get("error"),
+        "account_id": account_id,
+        "athlete_id": athlete_id,
+    }
+
+
+@app.get("/api/unit/{row_id}/plan-link")
+def unit_plan_link(row_id: int) -> dict[str, Any]:
+    """Wie eine Aufzeichnung gerade verknüpft ist und was sich anbietet."""
+    with connection() as conn:
+        return _unit_plan_link_context(conn, row_id)
+
+
+@app.post("/api/unit/{row_id}/plan-link")
+def link_unit_plan(row_id: int, body: dict[str, Any]) -> dict[str, Any]:
+    """Eine Aufzeichnung ausdrücklich mit einer Planung verbinden."""
+    settings = get_settings()
+    raw = body.get("plan_id")
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        raise HTTPException(status_code=400, detail="plan_id fehlt oder ist keine Zahl.")
+    try:
+        plan_id = int(raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail="plan_id fehlt oder ist keine Zahl."
+        ) from exc
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            link_unit(
+                conn,
+                row_id,
+                plan_id,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                time_zone=settings.time_zone,
+            )
+        except LinkNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except LinkError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _unit_plan_link_context(conn, row_id)
+
+
+@app.delete("/api/unit/{row_id}/plan-link")
+def separate_unit_plan(
+    row_id: int,
+    plan_id: int = Query(..., ge=1, description="Event-ID der Planung"),
+) -> dict[str, Any]:
+    """Eine Verknüpfung trennen; die Trennung bleibt gespeichert."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            separate_unit(
+                conn,
+                row_id,
+                plan_id,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                time_zone=settings.time_zone,
+            )
+        except LinkNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except LinkError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _unit_plan_link_context(conn, row_id)
 
 
 @app.post("/api/planner/draft/new")
