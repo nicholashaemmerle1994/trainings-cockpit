@@ -19,6 +19,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from . import db, fuel
+from .planner.summaries import recorded_seconds
 
 #: Sportarten, die sich dieselbe Geschwindigkeit teilen.
 SPORT_FAMILY = {
@@ -483,12 +484,12 @@ def matches(conn: Any, event: dict[str, Any]) -> dict[str, Any] | None:
         return None
     target = (event.get("duration_s") or 0) / 60
     if target:
-        rows.sort(key=lambda row: abs(((row.get("moving_s") or row.get("duration_s") or 0) / 60) - target))
+        rows.sort(key=lambda row: abs((recorded_seconds(row) / 60) - target))
     return rows[0]
 
 
 def done_payload(row: dict[str, Any]) -> dict[str, Any]:
-    moving = row.get("moving_s") or row.get("duration_s") or 0
+    moving = recorded_seconds(row)
     return {
         "row_id": row.get("id"),
         "activity_id": row.get("source_id"),
@@ -522,7 +523,7 @@ def unplanned(conn: Any, day: date) -> list[dict[str, Any]]:
 
 def done_row(row: dict[str, Any]) -> dict[str, Any]:
     """Kurzfassung einer erledigten Einheit für die Tageskarte."""
-    moving = row.get("moving_s") or row.get("duration_s") or 0
+    moving = recorded_seconds(row)
     return {
         "row_id": row["id"],
         "sport": row.get("sport"),

@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from . import db, fuel, metrics, plan, streams
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings
+from .planner.summaries import recorded_seconds
 
 DIST = Path(os.getenv("TC_WEB_DIST") or (PROJECT_ROOT / "web" / "dist"))
 
@@ -109,7 +110,7 @@ def week() -> dict[str, Any]:
         today = date.today()
         start = today - timedelta(days=6)
         rows = db.training_between(conn, start, today)
-    seconds = sum((row.get("moving_s") or row.get("duration_s") or 0) for row in rows)
+    seconds = sum(recorded_seconds(row) for row in rows)
     return {
         "from": start.isoformat(),
         "to": today.isoformat(),

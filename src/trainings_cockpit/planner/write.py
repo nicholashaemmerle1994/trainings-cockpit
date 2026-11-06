@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
 from .model import Editability, PlannedWorkout, WorkoutDraft
+from .validation import validate_draft
 
 
 class WriteBoundaryError(TypeError):
@@ -41,6 +42,10 @@ def require_planned_draft(candidate: object) -> WorkoutDraft:
         )
     if draft.current.remote_id is None and draft.base is not None:
         raise WriteBoundaryError("Eine Remote-Basis ohne Remote-ID ist kein gültiger Schreibfall.")
+    validation = validate_draft(draft)
+    if not validation.valid:
+        details = "; ".join(issue.message for issue in validation.issues)
+        raise WriteBoundaryError(f"Der Entwurf ist nicht speicherbar: {details}")
     return draft
 
 

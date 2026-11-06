@@ -1,7 +1,10 @@
-"""Fachmodell, Identitäten und Schreibgrenze des Trainingsplaners.
+"""Fachmodell, Remote-Leser, Validierung und Summen des Trainingsplaners.
 
-P02 stellt nur das Modell bereit: keinen Remote-Adapter, keine UI und keinen
-Netzwerkaufruf. Die Remote-Abbildung folgt in P04, die Validierung in P05.
+Das Paket bleibt UI-unabhängig. P02 liefert Modell, Identitäten und die
+Schreibgrenze; P03 lokale Kalenderwochen; P04 den lesenden Event-Adapter samt
+Erhaltungsregeln; P05 die gemeinsamen Parser, die Ausführungsfolge, bekannte
+Mengen und die getrennten Ist-/Plan-Summen. Es gibt hier keinen Netzwerkaufruf
+und keinen Produkt-Schreibpfad.
 """
 
 from .dates import (
@@ -92,6 +95,52 @@ from .remote import (
     read_remote_event,
     recorded_entry_from_record,
     sport_label,
+)
+from .summaries import (
+    OpenPlanTotals,
+    PlanRecord,
+    RecordedActivity,
+    RecordedTotals,
+    WeekProjection,
+    WeekSummary,
+    build_week_projection,
+    build_week_summary,
+    open_plan_totals,
+    plan_record,
+    recorded_activity_from_record,
+    recorded_activity_from_row,
+    recorded_load,
+    recorded_seconds,
+    recorded_totals,
+    relationship_actuals,
+)
+from .validation import (
+    Execution,
+    ExecutionCompression,
+    ExecutionSequence,
+    FieldKind,
+    KnownTotals,
+    ValidationCode,
+    ValidationIssue,
+    ValidationMode,
+    WorkoutValidation,
+    calculate_known_totals,
+    derive_execution_sequence,
+    execution_count,
+    format_distance,
+    format_duration,
+    format_pace,
+    format_target,
+    format_totals,
+    parse_decimal,
+    parse_distance,
+    parse_duration,
+    parse_field_input,
+    parse_pace,
+    parse_pace_range,
+    parse_value_range,
+    validate_draft,
+    validate_workout,
 )
 from .write import (
     PlannedWorkoutWriter,
@@ -186,4 +235,46 @@ __all__ = [
     "field_buffer_key",
     "iter_nodes",
     "list_entry_key",
+    "Execution",
+    "ExecutionCompression",
+    "ExecutionSequence",
+    "FieldKind",
+    "KnownTotals",
+    "OpenPlanTotals",
+    "PlanRecord",
+    "RecordedActivity",
+    "RecordedTotals",
+    "ValidationCode",
+    "ValidationIssue",
+    "ValidationMode",
+    "WeekProjection",
+    "WeekSummary",
+    "WorkoutValidation",
+    "build_week_projection",
+    "build_week_summary",
+    "calculate_known_totals",
+    "derive_execution_sequence",
+    "execution_count",
+    "format_distance",
+    "format_duration",
+    "format_pace",
+    "format_target",
+    "format_totals",
+    "open_plan_totals",
+    "parse_decimal",
+    "parse_distance",
+    "parse_duration",
+    "parse_field_input",
+    "parse_pace",
+    "parse_pace_range",
+    "parse_value_range",
+    "plan_record",
+    "recorded_activity_from_record",
+    "recorded_activity_from_row",
+    "recorded_load",
+    "recorded_seconds",
+    "recorded_totals",
+    "relationship_actuals",
+    "validate_draft",
+    "validate_workout",
 ]

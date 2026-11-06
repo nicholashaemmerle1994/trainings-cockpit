@@ -663,3 +663,210 @@ Speicherverweigerung selbst gehört zu P05/P17 und ist hier nicht vorweggenommen
 **P03 — Wochen- und Datumsfunktionen absichern.** Sieben lokale Tage,
 Monats-/Jahreswechsel, beide Zeitumstellungen und die Trennung von
 rollierendem Dashboard-Zeitraum und Kalenderwoche.
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P03
+
+**Stand:** 06.11.2026
+**Paket:** P03 — Wochen- und Datumsfunktionen absichern
+**Basis:** Branch `feature/trainingsplaner`, HEAD `7ba7fcc`
+**Umfang:** Neues UI-unabhängiges Datumsmodul `trainings_cockpit.planner.dates`.
+Keine Datenbankmigration, kein API-Endpunkt, keine UI-Änderung.
+
+## 1. Ergebnis
+
+- Eine Woche ist ein lokales Montagsdatum plus sechs Kalendertage. Der Sonntag
+  bleibt in seiner Woche; Monats- und Jahreswechsel sowie beide
+  Europe/Vienna-Zeitumstellungen erzeugen weiterhin genau sieben Tage.
+- `rolling_dashboard_range()` (heute plus sechs Tage) und
+  `planner_week_range()` (Montag bis Sonntag) sind getrennte
+  `TrainingRange`-Verträge. Die Dashboard-Zahl wird nicht aus der Planerwoche
+  abgeleitet.
+- `parse_week_parameter()` validiert einen lokalen API-Wert und normalisiert
+  ihn auf Montag; ein leerer Parameter kommt aus der Laufzeit, ein gesetzter
+  Wert niemals aus einem festen Demotag.
+- `PlannedWorkout.reschedule()` und `reschedule_plan()` ändern nur das lokale
+  Datum. Lokale Uhrzeit, Zeitzone, Remote-ID und Knoten-IDs bleiben erhalten.
+- Die Zeitzone ist explizit (`DEFAULT_TIME_ZONE`, `Settings.time_zone`,
+  `TC_TIME_ZONE`); die Prozesszeitzone entscheidet nicht still mit (D-70).
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/dates.py` — Wochen, Tage, Zeiträume,
+  Wochenparameter, Beschriftung, Verschieben.
+- `src/trainings_cockpit/planner/model.py` — `reschedule()`.
+- `src/trainings_cockpit/config.py`, `.env.example` — explizite Zeitzone.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `tests/test_planner_dates.py` — Sonntag, Monats-/Jahreswechsel, beide
+  Zeitumstellungen, F08/F11/F13-Zeiträume, Verschieben.
+- `docs/ENTSCHEIDUNGEN.md` — D-70.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_dates.py -q` | **10 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner tests/test_planner_dates.py src/trainings_cockpit/config.py` | ohne Befund |
+
+## 4. Offene Punkte
+
+- P03 liefert die Zeitraumfunktionen, noch keine Wochen-API. Die Anbindung der
+  Abfrage und der Ladezustände bleibt P06; Tab und Route bleiben P07.
+- Die UI-Form der Wochenbeschriftung wird erst in P07 sichtbar geprüft.
+
+## 5. Nächstes Paket
+
+**P04 — Remote-Leseadapter und Erhaltungsregeln.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P04
+
+**Stand:** 06.11.2026
+**Paket:** P04 — Remote-Leseadapter und Erhaltungsregeln
+**Basis:** Branch `feature/trainingsplaner`, HEAD `3d21107`
+**Umfang:** Neues Lesemodul `trainings_cockpit.planner.remote`, Ergänzung der
+Beziehungsprojektion. Kein Netzwerkaufruf, kein Schreibpfad, keine UI.
+
+## 1. Ergebnis
+
+- `read_remote_event()` liest Event-ID, Name, Sport, lokalen Termin, Aufbau und
+  Notizen aus dem vorhandenen Event-Rohdatenpfad und legt das vollständige
+  Event-Dict unverändert in `SourceSnapshot.raw` ab.
+- Distanz plus berechnete Dauer bleibt ein Distanzabschnitt, wenn die Quelle
+  die Dauer als Schätzung kennzeichnet (`duration_source=estimated`, F04).
+  Ohne eindeutige Quellenangabe wird der Schritt als unbekannt erhalten, statt
+  die Ende-Bedingung zu raten.
+- Rampen, Lap-Tasten, Trittfrequenz, Zusatzanweisungen und mehrere Ziele werden
+  als `UnsupportedNode` mit Quellreferenz erhalten. Sie begrenzen die
+  Editierbarkeit auf `metadataOnly`; der Rohinhalt bleibt vollständig.
+- Fehlende Remote-Schreibrechte (`writable=False`, `read_only`) ergeben
+  `readOnly`. Unbekannte Sportarten bleiben mit ihrem Rohcode erhalten und
+  erhalten ein neutrales Label, statt den Tag abzubrechen. Fehlgeleitete
+  Zonenwerte werden ebenfalls als unbekannter Knoten erhalten, statt den
+  ganzen Import abzubrechen.
+- Aufzeichnungen werden ausschließlich über
+  `activity_reference_from_record()` / `recorded_entry_from_record()` auf den
+  vorhandenen Aktivitätspfad verwiesen. `NotAPlannedWorkout` weist
+  Nicht-WORKOUT-Events ab; eine Aktivität wird nie als `PlannedWorkout`
+  dekodiert.
+- `relationship_entries()` übernimmt nur bestätigte Beziehungen in die
+  Anzeigeprojektion. Mehrere Aktivitäten bleiben tagesgetrennt; eine
+  `completionReference` entsteht nur am abweichenden Plantermin ohne eigene
+  Ist-Werte. Offene/teilweise Beziehungen erzeugen keinen Erledigt-Eintrag.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/remote.py` — Eventleser, Erhaltungsregeln,
+  Aktivitätsbrücke, neutrales Sportlabel.
+- `src/trainings_cockpit/planner/projections.py` — `relationship_entries()`,
+  `RelationshipProjectionError`.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `tests/test_planner_remote.py` — F01/F02/F04/F07, unbekannte Sportart,
+  Schreibrecht, Aktivitätspfad, F12/F13-Beziehungen.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_remote.py -q` | **12 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner/remote.py src/trainings_cockpit/planner/projections.py tests/test_planner_remote.py` | ohne Befund |
+
+## 4. Offene Punkte
+
+- Der Adapter liest nur. Ein Serializer, ein gezieltes Event-Update und die
+  Konflikterkennung bleiben P17/P18; die Fähigkeitsmatrix bleibt für
+  Schreibfähigkeiten deshalb offen.
+- Absolute bpm- und Prozent-HF-Ziele ohne belegte Zonenreferenz werden bewusst
+  nicht in eine scheinbar sichere Struktur übersetzt.
+- Die F12-Variante mit mehreren Quellabbildern derselben kanonischen Aktivität
+  bleibt eine Fixture-Erwartung; der Bestand hat keine dauerhafte
+  Mehrquellen-Zuordnung.
+
+## 5. Nächstes Paket
+
+**P05 — Gemeinsame Validierung, Ausführungsfolge und Summen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P05
+
+**Stand:** 06.11.2026
+**Paket:** P05 — Gemeinsame Validierung, Ausführungsfolge und Summen
+**Basis:** Branch `feature/trainingsplaner`, HEAD `3d21107`
+**Umfang:** Neues Modul `planner/validation.py`, neues Modul
+`planner/summaries.py`, gemeinsame Ist-Dauer in `metrics.py`, `api.py` und
+`plan.py`. Keine UI-Änderung, keine neue Trainingslast.
+
+## 1. Ergebnis
+
+- Gemeinsame Parser für Dauer, Distanz, Dezimalzahlen, Pace, Pacebereiche und
+  Wertebereiche. Leer ist `incomplete`, unlesbar `invalid`; `0` bleibt ein
+  gültiger Wert, `0 W` ist nicht „Ohne Ziel“.
+- Feldvalidierung (`parse_field_input`) und Workoutvalidierung
+  (`validate_workout`/`validate_draft`) sind getrennt. Struktur- und
+  Metadatenmodus unterscheiden unbekannte Inhalte von einer sicheren
+  Namensänderung.
+- Die Ausführungsfolge trägt Knoten-ID, Gruppen-ID, Wiederholungsindex,
+  Wiederholungspfad und Position. `skip_final_recovery` wirkt genau einmal in
+  der letzten Wiederholung. Große Wiederholungszahlen werden für Summen
+  algebraisch gerechnet und für die Darstellung mit einer ausdrücklichen
+  `ExecutionCompression` begrenzt.
+- F01–F06 liefern 45/36/65/28+4/800 m+4 min/0 Ausführungen. F06 wird in allen
+  drei Formen von der Workoutvalidierung und der Schreibgrenze abgewiesen.
+- `KnownTotals` mischt keine Schätzung unter. Die Formatierung rundet erst an
+  der Anzeigegrenze; F04 bleibt `28 min + 4 km`, F05 `800 m + 4 min`.
+- Die bestehende Ist-Dauer (`moving_s`, sonst `duration_s`) liegt jetzt zentral
+  in `recorded_seconds()` und wird von Dashboard, `/api/week`, Tageskarte und
+  den neuen Summen verwendet. Eindeutige Aktivitäten zählen nach ihrem
+  tatsächlichen Datum einmal; offene Planung ist eine getrennte Ableitung.
+- F12: `relationship_actuals()` ergibt 42 Minuten / Last 40 / eine Aktivität;
+  `open_plan_totals()` ergibt separat 30 Minuten. F13 zählt die Aufzeichnung
+  nur in der Woche 09.–15.11., der Plan bleibt am 08.11. mit
+  „Erledigt am 9. November“ erreichbar.
+- Die zusätzliche Aufzeichnung A2 aus der F12-Fixture bleibt als eigene
+  Aktivität sichtbar (und zählt bei vollständiger Wochensumme mit); die
+  F12-Abnahme „42 Minuten“ ist die Summe der bestätigten Beziehung, nicht eine
+  stillschweigend gelöschte ungeplante Aufzeichnung.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/validation.py` — Parser, Validierung,
+  Ausführungsfolge, bekannte Mengen, Formatierung.
+- `src/trainings_cockpit/planner/summaries.py` — Ist-Summen, offene Planung,
+  Wochenzusammenfassung und gemeinsame Listenprojektion.
+- `src/trainings_cockpit/planner/write.py` — Workoutvalidierung an der
+  Schreibgrenze.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `src/trainings_cockpit/metrics.py`, `api.py`, `plan.py` — gemeinsame
+  Ist-Dauerdefinition statt vier lokaler Formeln.
+- `tests/test_planner_validation.py` — Parser, F01–F07, F11–F13,
+  Großwiederholung, Präzision, leere Woche.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_validation.py -q` | **20 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **237 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner tests/test_planner_validation.py` | ohne Befund |
+| `npm run build --prefix web` | keine UI-Änderung; Build bleibt unberührt |
+
+## 4. Offene Punkte
+
+- Die Wochenabfrage mit echten P06-Daten, Lade-/Fehlerzuständen und
+  Cache-Schlüsseln fehlt weiterhin. `summaries.py` ist die reine Fachlogik
+  dafür, keine Datenbank- oder HTTP-Schicht.
+- `open_plan_totals()` kennzeichnet unbekannte Aufbauinhalte; fehlende
+  Quellenabdeckung einer ganzen Woche wird erst in P06 als Ladezustand
+  ausgewiesen.
+- Die F12-Aufzeichnung A2 bleibt zusätzlich sichtbar; die Beziehungssumme und
+  die vollständige Wochensumme sind bewusst zwei getrennte Aussagen.
+- Der Graph selbst (`buildWorkoutProfileData`) und die Inline-Editor-Anbindung
+  folgen in P08/P09; P05 liefert die gemeinsame Ausführungsfolge und
+  Formatierung.
+
+## 5. Nächstes Paket
+
+**P06 — Wochenabfrage und Cache an die vorhandene Datenstrecke anbinden.**
