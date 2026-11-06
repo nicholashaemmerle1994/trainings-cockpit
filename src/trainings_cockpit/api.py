@@ -32,6 +32,13 @@ from .planner.drafts import (
     build_draft_projection,
     build_new_draft_projection,
 )
+from .planner.operations import (
+    SqliteOperationStore,
+    plan_to_json,
+    retention_cutoff,
+)
+from .planner.save import SaveCoordinator, SaveState
+from .planner.service import event_write_service
 from .planner.summaries import recorded_seconds
 from .planner.week import (
     SOURCE_COMPLETE,
@@ -264,6 +271,79 @@ def plan_new_draft(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+
+
+def _operation_payload(stored: Any) -> dict[str, Any]:
+    snapshot = stored.snapshot
+    return {
+        "operation_id": str(snapshot.operation_id),
+        "local_id": str(snapshot.local_id),
+        "draft_id": str(snapshot.draft_id),
+        "remote_id": str(snapshot.remote_id) if snapshot.remote_id is not None else None,
+        "external_id": snapshot.external_id,
+        "mode": snapshot.mode,
+        "kind": snapshot.kind,
+        "state": "unknown"
+        if stored.state is SaveState.SAVING
+        else stored.state.value,
+        "created_at": snapshot.created_at,
+        "reconciliation_required": True,
+    }
+
+
+@app.get("/api/planner/operations")
+def planner_operations(open_only: bool = Query(True)) -> dict[str, Any]:
+    """Offene Vorgänge des aktuellen Accounts, ohne vollständige Payloads."""
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        store = SqliteOperationStore(conn)
+        store.purge_completed(now=retention_cutoff(now))
+        records = store.records(
+            account_id=account_id,
+            athlete_id=athlete_id,
+            open_only=open_only,
+        )
+        return {
+            "account_id": account_id,
+            "athlete_id": athlete_id,
+            "items": [_operation_payload(item) for item in records],
+        }
+
+
+@app.post("/api/planner/operations/{operation_id}/reconcile")
+def planner_reconcile(operation_id: str) -> dict[str, Any]:
+    """Setzt einen offenen Vorgang lesend fort; wiederholt keinen Write."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        store = SqliteOperationStore(conn)
+        stored = store.record(operation_id)
+        if stored is None or (
+            stored.snapshot.account_id != account_id
+            or stored.snapshot.athlete_id != athlete_id
+        ):
+            raise HTTPException(status_code=404, detail="Offener Vorgang nicht gefunden")
+        try:
+            with event_write_service(settings) as service:
+                coordinator = SaveCoordinator(service, recorder=store)
+                coordinator.restore_open(
+                    account_id=account_id, athlete_id=athlete_id
+                )
+                outcome = coordinator.reconcile(operation_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Vorgang ist nicht offen") from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+        confirmed = (
+            plan_to_json(outcome.confirmed)
+            if outcome.confirmed is not None
+            else None
+        )
+        return {
+            "status": outcome.status.as_dict(),
+            "confirmed": confirmed,
+        }
 
 
 @app.get("/api/planner/plan/{event_id}")

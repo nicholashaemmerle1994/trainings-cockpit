@@ -102,6 +102,14 @@ from .model import (
     field_buffer_key,
     iter_nodes,
 )
+from .operations import (
+    SqliteOperationStore,
+    plan_from_json,
+    plan_to_json,
+    retention_cutoff,
+    snapshot_from_json,
+    snapshot_to_json,
+)
 from .primitives import LocalDate
 from .profile import build_workout_profile_data
 from .projections import (
@@ -302,6 +310,12 @@ __all__ = [
     "SaveOutcome",
     "SaveRunner",
     "SaveSnapshot",
+    "SqliteOperationStore",
+    "plan_from_json",
+    "plan_to_json",
+    "retention_cutoff",
+    "snapshot_from_json",
+    "snapshot_to_json",
     "SaveState",
     "SaveStatus",
     "WriteResult",

@@ -2068,3 +2068,82 @@ Es gab keinen Netzwerkaufruf gegen intervals.icu und keinen Produktiv-Write.
 ## 5. Nächstes Paket
 
 **P22 — Unklare Ergebnisse und dauerhafte Vorgangszuordnung.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P22
+
+**Stand:** 06.11.2026  
+**Paket:** P22 — Unklare Ergebnisse und dauerhafte Vorgangszuordnung  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `f9cd190`
+
+## 1. Ergebnis
+
+- Die vorhandene SQLite-Persistenz hat die Tabelle `planner_operation`. Sie
+  hält Vorgangs-ID, Account/Athlet, lokale Plan-/Entwurfs-ID, Remote-ID,
+  externe Identität, Modus, Zustand, eingefrorenen Payload und vollständigen
+  Snapshot zusammen.
+- Der Koordinator sichert den `saving`-Eintrag vor dem Adapteraufruf. Scheitert
+  diese Speicherung, wird nichts gesendet. Nach dem Aufruf wird derselbe
+  Eintrag mit Ergebnis, tatsächlicher Remote-ID und externer Identität
+  aktualisiert; ein Fehler dabei löst keinen zweiten Remote-Write aus.
+- `unknown` und `savedUnverified` bleiben getrennt. Ein abgestürzter
+  `saving`-Zustand wird beim Wiederöffnen zu `unknown`. `savedUnverified` behält
+  seine Remote-ID.
+- `restore_open()` findet offene Vorgänge nach Reload/Neustart über Account und
+  Athlet. `reconcile()` setzt sie lesend fort: Update über dieselbe Remote-ID,
+  Create über externe Identität und geplanten Tag. Kein Treffer bleibt offen,
+  mehrere Treffer werden Konflikt, es gibt keinen automatischen Retry.
+- Endgültig abgeschlossene Vorgänge werden nach sieben Tagen bereinigt; offene
+  und unbestätigte Vorgänge bleiben erhalten.
+- `EditorShapeMetadata` wird optional als `prepared` mitgesichert und erst nach
+  bestätigtem Rundlauf `confirmed`. Der aktuelle Leseadapter braucht sie für
+  die unterstützten Formen nicht.
+- F09: Timeout erzeugt genau eine Remote-Einheit; nach Reload findet der
+  Abgleich dieselbe externe Identität, übernimmt die Remote-ID und legt nichts
+  zweites an. Bestätigtes Create mit fehlgeschlagenem Read behält die Remote-ID.
+- Neue API: `GET /api/planner/operations` und
+  `POST /api/planner/operations/{operation_id}/reconcile`, beide auf den
+  aktuellen Account/Athleten begrenzt.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/db.py` — Tabelle und Abfragen für Planer-Vorgänge.
+- `src/trainings_cockpit/planner/operations.py` — Plan-/Snapshot-JSON,
+  `SqliteOperationStore`, Aufbewahrung und Editorform-Status.
+- `src/trainings_cockpit/planner/save.py` — Recorder-Grenze, Persistenz vor
+  Dispatch, Wiederaufnahme, Remote-ID im Vorgang.
+- `src/trainings_cockpit/planner/service.py` — Produktbrücke zum vorhandenen
+  `IntervalsClient`.
+- `src/trainings_cockpit/api.py` — offene Vorgänge und lesender Abgleich.
+- `src/trainings_cockpit/planner/__init__.py` — Exporte.
+- `tests/test_planner_operations.py` — Roundtrip, Dispatch-Sicherung, F09,
+  `savedUnverified`, Persistenzfehler, Aufbewahrung, Accounttrennung,
+  Editorform.
+- `tests/test_planner_operations_api.py` — Reload/Abgleich über die API,
+  fremder Account.
+- `docs/trainingsplaner/VORGAENGE.md` — Speichervertrag und Aufbewahrung.
+- `docs/trainingsplaner/FAEHIGKEITSMATRIX.md` — Schreibstatus nachgezogen.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_operations.py -q` | **8 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_operations_api.py -q` | **2 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest -q` | **363 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check …` (P22-Dateien) | ohne Befund |
+
+Es gab keinen Netzwerkaufruf gegen intervals.icu und keinen Produktiv-Write.
+
+## 4. Offene Punkte
+
+- Der Produkt-Endpunkt zum Speichern eines Entwurfs und die sichtbare
+  Speicheraktion folgen in P23. P22 liefert die Persistenz und den lesenden
+  Abgleich.
+- `EditorShapeMetadata` hat noch keinen schreibenden Konsumenten, weil der
+  aktuelle Leseadapter die unterstützten Formen nativ rekonstruiert.
+
+## 5. Nächstes Paket
+
+**P23 — Bidirektionalen Sync und alle betroffenen Ansichten verbinden.**

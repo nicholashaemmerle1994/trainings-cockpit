@@ -92,6 +92,7 @@ class SaveStatus:
     retryable: bool = False
     reconciliation_required: bool = False
     conflict: Any | None = None
+    persistence_error: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, SaveState):
@@ -104,6 +105,12 @@ class SaveStatus:
             value = getattr(self, name)
             if value is not None:
                 object.__setattr__(self, name, require_text(value, name))
+        if self.persistence_error is not None:
+            object.__setattr__(
+                self,
+                "persistence_error",
+                require_text(self.persistence_error, "persistence_error"),
+            )
 
     @property
     def locked(self) -> bool:
@@ -122,6 +129,7 @@ class SaveStatus:
             "reconciliation_required": self.reconciliation_required,
             "locked": self.locked,
             "conflict": conflict() if callable(conflict) else None,
+            "persistence_error": self.persistence_error,
         }
 
 
@@ -153,6 +161,7 @@ class SaveSnapshot:
     base: PlannedWorkout | None
     base_notes: str | None
     created_at: str
+    editor_shape: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.operation_id, OperationId):
@@ -169,6 +178,10 @@ class SaveSnapshot:
             raise TypeError("base muss ein PlannedWorkout oder None sein.")
         if self.base_notes is not None:
             object.__setattr__(self, "base_notes", require_text(self.base_notes, "base_notes"))
+        if self.editor_shape is not None and not isinstance(self.editor_shape, Mapping):
+            raise TypeError("editor_shape muss ein Mapping oder None sein.")
+        if self.editor_shape is not None:
+            object.__setattr__(self, "editor_shape", dict(self.editor_shape))
         for name in ("account_id", "athlete_id"):
             object.__setattr__(self, name, require_text(getattr(self, name), name))
         if not isinstance(self.writable, bool):
@@ -263,6 +276,26 @@ class SaveRunner(Protocol):
     def reconcile(self, snapshot: SaveSnapshot) -> WriteResult: ...
 
 
+class OperationRecorder(Protocol):
+    """Dauerhafte Vorgangszuordnung; implementiert in ``operations``."""
+
+    def save(self, snapshot: SaveSnapshot, state: SaveState) -> None: ...
+
+    def update(
+        self,
+        snapshot: SaveSnapshot,
+        state: SaveState,
+        *,
+        confirmed: bool = False,
+        remote_id: str | None = None,
+        external_id: str | None = None,
+    ) -> None: ...
+
+    def open_operations(
+        self, *, account_id: str, athlete_id: str
+    ) -> list[Any]: ...
+
+
 def plan_key(*, account_id: str, athlete_id: str, local_id: PlanId | str) -> str:
     """Ein Schlüssel pro Account, Athlet und geplanter Einheit."""
     return (
@@ -352,10 +385,16 @@ def classify_exception(exc: BaseException) -> WriteResult:
 class SaveCoordinator:
     """Genau eine aktive Operation pro geplanter Einheit."""
 
-    def __init__(self, runner: SaveRunner) -> None:
+    def __init__(
+        self,
+        runner: SaveRunner,
+        *,
+        recorder: OperationRecorder | None = None,
+    ) -> None:
         if not callable(getattr(runner, "execute", None)):
             raise TypeError("runner muss ein SaveRunner mit execute() sein.")
         self._runner = runner
+        self._recorder = recorder
         self._lock = threading.RLock()
         self._active: dict[str, SaveOperation] = {}
         self._status: dict[str, SaveStatus] = {}
@@ -575,6 +614,21 @@ class SaveCoordinator:
             return SaveOutcome(status, snapshot)
 
         key = plan_key(account_id=account, athlete_id=athlete, local_id=snapshot.local_id)
+        persistence_error = self._record(snapshot, SaveState.SAVING)
+        if persistence_error is not None:
+            return SaveOutcome(
+                SaveStatus(
+                    SaveState.FAILED,
+                    "Der Vorgang konnte vor dem Senden nicht gesichert werden. "
+                    "Es wurde nichts an die Remote-Quelle gesendet.",
+                    operation_id=snapshot.operation_id,
+                    remote_id=snapshot.remote_id.value if snapshot.remote_id else None,
+                    external_id=snapshot.external_id,
+                    error=SaveErrorKind.RECONCILIATION,
+                    persistence_error=persistence_error,
+                ),
+                snapshot,
+            )
         with self._lock:
             active = self._active.get(key)
             if active is not None:
@@ -606,11 +660,50 @@ class SaveCoordinator:
 
         return self._finish(operation, result)
 
+    def _record(
+        self,
+        snapshot: SaveSnapshot,
+        state: SaveState,
+        *,
+        confirmed: bool = False,
+        remote_id: str | None = None,
+        external_id: str | None = None,
+    ) -> str | None:
+        """Schreibt den Vorgang; ein Persistenzfehler ersetzt kein Remote-Ergebnis."""
+        if self._recorder is None:
+            return None
+        try:
+            if state is SaveState.SAVING:
+                self._recorder.save(snapshot, state)
+            else:
+                self._recorder.update(
+                    snapshot,
+                    state,
+                    confirmed=confirmed,
+                    remote_id=remote_id,
+                    external_id=external_id,
+                )
+        except Exception as exc:  # noqa: BLE001 - Persistenz darf den Write nicht wiederholen
+            return f"Der lokale Vorgangsnachweis konnte nicht gespeichert werden: {exc}"
+        return None
+
     def _finish(self, operation: SaveOperation, result: WriteResult) -> SaveOutcome:
         snapshot = operation.snapshot
+        persistence_error = self._record(
+            snapshot,
+            result.state,
+            confirmed=result.state is SaveState.SAVED,
+            remote_id=result.remote_id or (
+                str(snapshot.remote_id) if snapshot.remote_id is not None else None
+            ),
+            external_id=result.external_id or snapshot.external_id,
+        )
+        message = result.message
+        if persistence_error is not None:
+            message = f"{message} {persistence_error}"
         status = SaveStatus(
             result.state,
-            result.message,
+            message,
             operation_id=snapshot.operation_id,
             remote_id=result.remote_id,
             external_id=result.external_id or snapshot.external_id,
@@ -618,6 +711,7 @@ class SaveCoordinator:
             retryable=result.retryable,
             reconciliation_required=result.reconciliation_required,
             conflict=result.conflict,
+            persistence_error=persistence_error,
         )
         with self._lock:
             self._status[operation.key] = status
@@ -633,6 +727,63 @@ class SaveCoordinator:
                 # SAVING/UNKNOWN bleiben aktiv und damit gesperrt.
                 pass
         return SaveOutcome(status, snapshot, result.confirmed)
+
+    # ------------------------------------------------------------ Wiederaufnahme
+    def restore_open(self, *, account_id: str, athlete_id: str) -> list[SaveOutcome]:
+        """Findet offene Vorgänge nach Reload/Neustart wieder.
+
+        Ein beim Absturz zurückgelassener ``saving``-Zustand beweist keinen
+        Fehlschlag; er wird zu ``unknown`` und bleibt bis zum lesenden Abgleich
+        gesperrt. ``savedUnverified`` behält seine Remote-ID.
+        """
+        if self._recorder is None:
+            return []
+        outcomes: list[SaveOutcome] = []
+        for stored in self._recorder.open_operations(
+            account_id=account_id, athlete_id=athlete_id
+        ):
+            snapshot = stored.snapshot
+            key = plan_key(
+                account_id=snapshot.account_id,
+                athlete_id=snapshot.athlete_id,
+                local_id=snapshot.local_id,
+            )
+            state = SaveState(stored.state)
+            if state is SaveState.SAVING:
+                state = SaveState.UNKNOWN
+                message = (
+                    "Der Vorgang wurde beim letzten Lauf unterbrochen. "
+                    "Der Speicherstatus wird lesend geprüft; es wird nichts blind wiederholt."
+                )
+                error = SaveErrorKind.TIMEOUT
+            elif state is SaveState.SAVED_UNVERIFIED:
+                message = (
+                    "Der Write wurde bestätigt, die Darstellung ist aber noch nicht "
+                    "nachgeprüft. Die Remote-ID bleibt erhalten; es wird nicht erneut angelegt."
+                )
+                error = SaveErrorKind.ROUNDTRIP
+            else:
+                message = "Der Speicherstatus ist unklar. Der Vorgang wird lesend abgeglichen."
+                error = SaveErrorKind.RECONCILIATION
+            status = SaveStatus(
+                state,
+                message,
+                operation_id=snapshot.operation_id,
+                remote_id=str(snapshot.remote_id) if snapshot.remote_id is not None else None,
+                external_id=snapshot.external_id,
+                error=error,
+                reconciliation_required=True,
+                persistence_error=None,
+            )
+            with self._lock:
+                self._active[key] = SaveOperation(
+                    snapshot=snapshot,
+                    key=key,
+                    started_at=snapshot.created_at,
+                )
+                self._status[key] = status
+            outcomes.append(SaveOutcome(status, snapshot))
+        return outcomes
 
     # ------------------------------------------------------------ Reconciliation
     def reconcile(self, operation_id: OperationId | str) -> SaveOutcome:
@@ -684,6 +835,7 @@ class SaveCoordinator:
 
 __all__ = [
     "InputLocked",
+    "OperationRecorder",
     "LOCKED_STATES",
     "SaveCoordinator",
     "SaveErrorKind",
