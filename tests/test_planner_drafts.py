@@ -534,6 +534,77 @@ def test_p13_leistungszonen_bleiben_hinter_der_faehigkeitsmatrix(
     assert detail["capabilities"]["targets"]["powerPercentFtp"]["editable"] is True
 
 
+def test_p14_entfernen_hinzufuegen_und_verschieben_bleiben_lokal(
+    client: TestClient,
+) -> None:
+    event = _event_for("F02")
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    group = _find_node(detail["nodes"], kind="repeat")
+    assert group is not None
+    body = {
+        "name": detail["name"],
+        "nodes": [node for node in detail["nodes"] if node["node_id"] != group["node_id"]],
+        "field_buffers": {},
+    }
+
+    removed = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert removed.status_code == 200
+    removed_draft = removed.json()
+    assert removed_draft["known"]["seconds"] == 1200
+    assert removed_draft["known"]["executions"] == 2
+    assert removed_draft["draft"]["valid"] is True
+    assert [node["node_id"] for node in removed_draft["nodes"]] == [
+        node["node_id"] for node in detail["nodes"] if node["node_id"] != group["node_id"]
+    ]
+
+    new_id = "node:draft:p14-new"
+    body["nodes"] = [
+        *removed_draft["nodes"],
+        {
+            "kind": "step",
+            "node_id": new_id,
+            "name": "Neuer Abschnitt",
+            "role": "steady",
+            "end": {"kind": "open", "text": "Ende offen"},
+            "target": {"kind": "none", "text": "Ohne Ziel"},
+        },
+    ]
+    added = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert added.status_code == 200
+    added_draft = added.json()
+    assert added_draft["nodes"][-1]["node_id"] == new_id
+    assert "open_end" in {issue["code"] for issue in added_draft["draft"]["issues"]}
+    assert added_draft["draft"]["valid"] is False
+
+    body["nodes"] = []
+    empty = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+    assert empty.status_code == 200
+    empty_draft = empty.json()
+    assert empty_draft["nodes"] == []
+    assert empty_draft["draft"]["valid"] is False
+    assert "empty_workout" in {issue["code"] for issue in empty_draft["draft"]["issues"]}
+
+
+def test_p14_verschieben_behaelt_alle_knoten_ids(client: TestClient) -> None:
+    event = _event_for("F02")
+    _store(client, event)
+    detail = _detail(client, event["id"])
+    reversed_ids = [node["node_id"] for node in reversed(detail["nodes"])]
+    body = {
+        "name": detail["name"],
+        "nodes": list(reversed(detail["nodes"])),
+        "field_buffers": {},
+    }
+
+    response = client.post(f"/api/planner/plan/{event['id']}/draft", json=body)
+
+    assert response.status_code == 200
+    draft = response.json()
+    assert [node["node_id"] for node in draft["nodes"]] == reversed_ids
+    assert draft["known"]["seconds"] == 2160
+
+
 def test_p13_importierte_zusatzziele_bleiben_erhalten(client: TestClient) -> None:
     event = _event_for("F07")
     _store(client, event)
