@@ -36,7 +36,9 @@ from .planner.drafts import (
     build_new_draft_projection,
 )
 from .planner.links import (
+    AUTO,
     LINKED,
+    MANUAL,
     LinkError,
     LinkNotFound,
     link_unit,
@@ -352,7 +354,7 @@ def _unit_plan_link_context(
             continue
         plan = entry.get("plan") or {}
         plan_id = entry.get("plan_id")
-        source = "auto"
+        source = AUTO
         if plan_id is not None:
             for link in saved_links:
                 if (
@@ -360,7 +362,7 @@ def _unit_plan_link_context(
                     and int(link["activity_id"]) == row_id
                     and link["state"] == LINKED
                 ):
-                    source = str(link.get("source") or "manual")
+                    source = MANUAL
                     break
         linked = {
             "plan_id": plan_id,

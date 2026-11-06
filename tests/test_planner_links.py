@@ -5,7 +5,6 @@ import pytest
 from trainings_cockpit import db
 from trainings_cockpit.planner.links import (
     LINKED,
-    MANUAL,
     SEPARATED,
     LinkError,
     link_unit,
@@ -22,12 +21,11 @@ def _activity(row_id: int, day: str, sport: str = "Run") -> dict:
     return {"id": row_id, "date": day, "sport": sport, "name": f"Einheit {row_id}"}
 
 
-def _link(event_id: int, activity_id: int, state: str = LINKED, source: str = MANUAL) -> dict:
+def _link(event_id: int, activity_id: int, state: str = LINKED) -> dict:
     return {
         "event_id": event_id,
         "activity_id": activity_id,
         "state": state,
-        "source": source,
     }
 
 
@@ -120,6 +118,38 @@ def test_verschiedene_sportfamilien_werden_nicht_gepaart() -> None:
     assert relationships == []
 
 
+def test_varianten_derselben_sportart_werden_gepaart() -> None:
+    relationships, _ = resolve_relationships(
+        [_plan(1, "2026-11-04", "Ride")],
+        [_activity(11, "2026-11-04", "VirtualRide")],
+        [],
+    )
+
+    assert len(relationships) == 1
+    assert relationships[0].relationship_id.value == "auto:1:11"
+
+
+def test_sportarten_ausserhalb_der_familientabelle_werden_bei_1_1_verbunden() -> None:
+    relationships, _ = resolve_relationships(
+        [_plan(1, "2026-11-04", "WeightTraining")],
+        [_activity(11, "2026-11-04", "WeightTraining")],
+        [],
+    )
+
+    assert len(relationships) == 1
+    assert relationships[0].relationship_id.value == "auto:1:11"
+
+
+def test_unterschiedliche_sportarten_ausserhalb_der_familientabelle_bleiben_getrennt() -> None:
+    relationships, _ = resolve_relationships(
+        [_plan(1, "2026-11-04", "Walk")],
+        [_activity(11, "2026-11-04", "Hike")],
+        [],
+    )
+
+    assert relationships == []
+
+
 def test_persistente_verknuepfung_gewinnt_auch_bei_mehreren_kandidaten() -> None:
     relationships, _ = resolve_relationships(
         [_plan(1, "2026-11-04")],
@@ -168,7 +198,6 @@ def test_neue_verknuepfung_loest_die_alte_derselben_einheit(tmp_path) -> None:
             athlete_id="default",
             event_id=1,
             activity_id=first,
-            source=MANUAL,
         )
         db.set_plan_link(
             conn,
@@ -176,7 +205,6 @@ def test_neue_verknuepfung_loest_die_alte_derselben_einheit(tmp_path) -> None:
             athlete_id="default",
             event_id=1,
             activity_id=second,
-            source=MANUAL,
         )
         links = db.plan_links(conn, account_id="default", athlete_id="default")
         assert len(links) == 1
@@ -200,7 +228,6 @@ def test_fremdschluessel_entfernt_die_verknuepfung_mit_der_aufzeichnung(
             athlete_id="default",
             event_id=1,
             activity_id=row,
-            source=MANUAL,
         )
         conn.execute("DELETE FROM activity WHERE id = ?", (row,))
         conn.commit()
@@ -224,7 +251,7 @@ def test_domaene_verknuepft_und_trennt(tmp_path) -> None:
             time_zone="Europe/Vienna",
         )
         links = db.plan_links(conn, account_id="default", athlete_id="default")
-        assert [(link["state"], link["source"]) for link in links] == [(LINKED, MANUAL)]
+        assert [link["state"] for link in links] == [LINKED]
 
         separate_unit(
             conn,
@@ -235,9 +262,7 @@ def test_domaene_verknuepft_und_trennt(tmp_path) -> None:
             time_zone="Europe/Vienna",
         )
         links = db.plan_links(conn, account_id="default", athlete_id="default")
-        assert [(link["state"], link["source"]) for link in links] == [
-            (SEPARATED, MANUAL)
-        ]
+        assert [link["state"] for link in links] == [SEPARATED]
     finally:
         conn.close()
 

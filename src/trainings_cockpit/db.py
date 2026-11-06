@@ -115,7 +115,6 @@ CREATE TABLE IF NOT EXISTS plan_link (
     event_id    INTEGER NOT NULL REFERENCES event(id) ON DELETE CASCADE,
     activity_id INTEGER NOT NULL REFERENCES activity(id) ON DELETE CASCADE,
     state       TEXT NOT NULL,
-    source      TEXT NOT NULL,
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
     PRIMARY KEY (account_id, athlete_id, event_id, activity_id)
@@ -396,12 +395,13 @@ def plan_links(
     account_id: str,
     athlete_id: str,
 ) -> list[dict[str, Any]]:
-    """Verknüpfungen eines Accounts, bestätigte und getrennte.
+    """Ausdrückliche Verknüpfungen eines Accounts, bestätigt oder getrennt.
 
-    Die Zeilen tragen ihre eigene Aussage: ``linked`` heißt „diese Planung
-    gehört zu dieser Aufzeichnung“, ``separated`` heißt „diese beiden nicht“.
-    Ohne die getrennte Zeile würde eine eindeutige Paarung nach dem Trennen
-    beim nächsten Lesen sofort wieder entstehen.
+    Gespeichert wird nur, was der Athlet entschieden hat. ``linked`` heißt
+    „diese Planung gehört zu dieser Aufzeichnung“, ``separated`` heißt „diese
+    beiden nicht“. Automatische 1:1-Paarungen entstehen beim Lesen und haben
+    keine Zeile. Ohne die getrennte Zeile würde eine eindeutige Paarung nach
+    dem Trennen beim nächsten Lesen sofort wieder entstehen.
     """
     rows = conn.execute(
         "SELECT * FROM plan_link WHERE account_id = ? AND athlete_id = ? "
@@ -418,7 +418,6 @@ def set_plan_link(
     athlete_id: str,
     event_id: int,
     activity_id: int,
-    source: str,
 ) -> None:
     """Eine manuelle Verknüpfung setzen.
 
@@ -435,12 +434,12 @@ def set_plan_link(
     conn.execute(
         """
         INSERT INTO plan_link (account_id, athlete_id, event_id, activity_id,
-            state, source, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'linked', ?, ?, ?)
+            state, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'linked', ?, ?)
         ON CONFLICT(account_id, athlete_id, event_id, activity_id) DO UPDATE SET
-            state = 'linked', source = excluded.source, updated_at = excluded.updated_at
+            state = 'linked', updated_at = excluded.updated_at
         """,
-        (account_id, athlete_id, event_id, activity_id, source, stamp, stamp),
+        (account_id, athlete_id, event_id, activity_id, stamp, stamp),
     )
     conn.commit()
 
@@ -468,10 +467,10 @@ def separate_plan_link(
     conn.execute(
         """
         INSERT INTO plan_link (account_id, athlete_id, event_id, activity_id,
-            state, source, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'separated', 'manual', ?, ?)
+            state, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'separated', ?, ?)
         ON CONFLICT(account_id, athlete_id, event_id, activity_id) DO UPDATE SET
-            state = 'separated', source = 'manual', updated_at = excluded.updated_at
+            state = 'separated', updated_at = excluded.updated_at
         """,
         (account_id, athlete_id, event_id, activity_id, stamp, stamp),
     )

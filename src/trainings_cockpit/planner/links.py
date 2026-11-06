@@ -43,10 +43,21 @@ class LinkNotFound(LinkError):
     """Planung oder Aufzeichnung existiert nicht mehr."""
 
 
-def _sport_family(sport: str | None) -> str | None:
+def _link_sport_key(sport: str | None) -> str | None:
+    """Vergleichsschlüssel für die 1:1-Paarung.
+
+    Bekannte Varianten derselben Sportart (Ride/VirtualRide, Run/TrailRun,
+    Swim/OpenWaterSwim) teilen einen Schlüssel. Alles andere vergleicht sich
+    mit sich selbst — ``plan.sport_family`` ist dafür bewusst nicht die
+    Grundlage, denn dort geht es um gemeinsame Geschwindigkeiten, nicht um
+    Identität.
+    """
     from ..plan import sport_family
 
-    return sport_family(sport)
+    text = (sport or "").strip()
+    if not text:
+        return None
+    return sport_family(text) or text
 
 
 def _day(row: Mapping[str, Any]) -> str:
@@ -104,8 +115,9 @@ def resolve_relationships(
     ``links`` sind die gespeicherten Aussagen. Eine ``linked``-Zeile gewinnt
     immer; eine eindeutige Paarung entsteht nur, wenn nach Abzug der
     gespeicherten Links genau eine Planung und eine Aufzeichnung derselben
-    Sportartfamilie am selben lokalen Tag übrig bleiben. Die Regel ist bewusst
-    eng: Name, Dauer und Ähnlichkeit entscheiden nicht.
+    Sportart (bekannte Varianten zusammengefasst) am selben lokalen Tag übrig
+    bleiben. Die Regel ist bewusst eng: Name, Dauer und Ähnlichkeit
+    entscheiden nicht.
     """
     plans = {int(row["id"]): row for row in plan_rows}
     activities = {int(row["id"]): row for row in activity_rows}
@@ -157,21 +169,21 @@ def resolve_relationships(
     for event_id, row in plans.items():
         if event_id in used_event_ids:
             continue
-        family = _sport_family(row.get("sport"))
+        sport_key = _link_sport_key(row.get("sport"))
         day = _day(row)
-        if family is None or not day:
+        if sport_key is None or not day:
             continue
-        groups.setdefault((day, family), {"plans": [], "activities": []})["plans"].append(
-            event_id
-        )
+        groups.setdefault((day, sport_key), {"plans": [], "activities": []})[
+            "plans"
+        ].append(event_id)
     for activity_id, row in activities.items():
         if activity_id in used_activity_ids:
             continue
-        family = _sport_family(row.get("sport"))
+        sport_key = _link_sport_key(row.get("sport"))
         day = _day(row)
-        if family is None or not day:
+        if sport_key is None or not day:
             continue
-        groups.setdefault((day, family), {"plans": [], "activities": []})[
+        groups.setdefault((day, sport_key), {"plans": [], "activities": []})[
             "activities"
         ].append(activity_id)
 
@@ -263,7 +275,6 @@ def link_unit(
         athlete_id=athlete_id,
         event_id=event_id,
         activity_id=row_id,
-        source=MANUAL,
     )
 
 
