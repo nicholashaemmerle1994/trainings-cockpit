@@ -75,6 +75,7 @@ from .model import (
     iter_nodes,
 )
 from .primitives import LocalDate
+from .profile import build_workout_profile_data
 from .projections import (
     CompletionReferenceListEntry,
     LinkedListEntry,
@@ -254,6 +255,7 @@ __all__ = [
     "build_plan_detail",
     "build_week_projection",
     "build_week_summary",
+    "build_workout_profile_data",
     "calculate_known_totals",
     "derive_execution_sequence",
     "execution_count",

@@ -1085,7 +1085,7 @@ Beziehungen, Rückwege über Woche und Planbezug. Kein Schreibpfad.
   eine Aktivitäts-ID wird nie als Event-ID verwendet.
 - `GET /api/planner/plan/{event_id}` (Alias `GET /api/plan/{event_id}`)
   liefert die Leseansicht: Name, Sport, Datum, Uhrzeit, vorhandene Notiz,
-  sichere bekannte Umfänge, Berechtigungen und Aufbau. Der
+  sichere bekannte Umfänge, Berechtigungen, Aufbau und Graphdaten. Der
   Endpunkt liest ausschließlich; Öffnen und Auswahl erzeugen keinen Write.
 - Die Planungsdetails zeigen `Quelle erlaubt Bearbeitung`, `Quelle erlaubt
   Metadaten` oder `Nur lesbar` samt Grund und Erhaltungsgrenzen. Es gibt
@@ -1115,7 +1115,7 @@ Beziehungen, Rückwege über Woche und Planbezug. Kein Schreibpfad.
 ## 2. Geänderte Dateien
 
 - `src/trainings_cockpit/planner/details.py` — lesende Detailprojektion,
-  Rechte, Notizen und Knoten.
+  Rechte, Notizen, Knoten und Graph.
 - `src/trainings_cockpit/api.py` — `GET /api/planner/plan/{id}` und
   `GET /api/plan/{id}`.
 - `src/trainings_cockpit/planner/__init__.py` — Exporte.
@@ -1137,8 +1137,8 @@ Beziehungen, Rückwege über Woche und Planbezug. Kein Schreibpfad.
 
 | Befehl | Ergebnis |
 |---|---|
-| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_details.py -q` | **3 passed** |
-| `UV_CACHE_DIR=.uv-cache uv run pytest` | **250 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_details.py -q` | **8 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **255 passed**, 1 bestehende Starlette-Warnung |
 | `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/plan.py src/trainings_cockpit/api.py src/trainings_cockpit/planner tests/test_planner_details.py` | ohne Befund |
 | `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
 
@@ -1147,10 +1147,9 @@ Beziehungen, Rückwege über Woche und Planbezug. Kein Schreibpfad.
 390 × 844 und 1440 × 900:
 
 - F02 „Gemischte HF- und Pace-Intervalle“ als Planung geöffnet: Name, Sport,
-  Datum, 36 min, vier Wiederholungen, Aufbau, Planungsnotiz und Berechtigung
-  sichtbar;
-- F04 „Bahnintervalle mit Distanz“ zeigt die sichere Teilmenge
-  `28 min + 4 km` und vier Wiederholungen;
+  Datum, 36 min, vier Wiederholungen, getrennte HF-/Pace-Spuren, Aufbau,
+  Planungsnotiz und Berechtigung sichtbar;
+- F04 „Bahnintervalle mit Distanz“ als schematische Detailansicht;
 - F07 als Import mit unbekannten Inhalten: konkrete Erklärung und
   `metadataOnly`, kein stilles Weglassen;
 - bestehende Aufzeichnung „Lockerer Dauerlauf“: dieselbe Aktivitätsansicht mit
@@ -1161,8 +1160,8 @@ Beziehungen, Rückwege über Woche und Planbezug. Kein Schreibpfad.
 
 Screenshots liegen lokal unter `data/screens/` (`p08-plan-detail-390.png`,
 `p08-plan-detail-1440.png`, `p08-plan-notes-390.png`,
-`p08-plan-notes-1440.png`, `p08-activity-detail-1440.png`) und sind keine
-Produktivdaten. P09 ergänzt den Graph in derselben Detailansicht.
+`p08-plan-notes-1440.png`, `p08-activity-detail-1440.png`,
+`p08-plan-group-selected-1440.png`) und sind keine Produktivdaten.
 
 ## 4. Offene Punkte
 
@@ -1182,3 +1181,97 @@ Produktivdaten. P09 ergänzt den Graph in derselben Detailansicht.
 **P09 — Trainingsverlauf als reine Darstellung integrieren.**
 
 ---
+
+# Trainingsplaner — Arbeitsnachweis P09
+
+**Stand:** 06.11.2026
+**Paket:** P09 — Trainingsverlauf als reine Darstellung integrieren
+**Basis:** Branch `feature/trainingsplaner`, HEAD `0176c6a`
+**Umfang:** Graphdaten aus der zentralen Ausführungsfolge, Zeit-/Distanz-/
+schematische Achse, getrennte Zielspuren, Auswahl über Knoten-IDs,
+responsive Breite, Textalternative und ausdrückliche Kompression.
+
+## 1. Ergebnis
+
+- `src/trainings_cockpit/planner/profile.py` erzeugt die Graphdaten als reine
+  Funktion aus `derive_execution_sequence()` und
+  `calculate_known_totals()`. Es gibt keine zweite Wiederholungs- oder
+  Summenlogik im Frontend.
+- Achsen: alle Zeitabschnitte → proportionale Zeitachse; alle Distanzen →
+  proportionale Distanzachse; gemischte oder offene Enden → gleich breite
+  schematische Abschnitte. Eine Distanz wird nicht über eine erfundene Pace
+  in Zeit umgerechnet.
+- Spuren werden je Zielmetrik und Einheit getrennt: HF-Zonen, HF-bpm,
+  Pace min/km, Pace /100 m, Leistung W, Leistung % FTP und „Ohne Ziel“.
+  Numerische Spuren haben eine eigene, nur für diese Einheit gültige Skala.
+  HF und Watt werden nie auf eine gemeinsame unbeschriftete Achse gelegt.
+- Pace ist umgedreht: schnellere Vorgaben liegen höher; die Oberfläche nennt
+  „Schneller“ und „Langsamer“ über die Achsenrichtung. Bereiche werden als
+  Band dargestellt, Einzelwerte als schmale Marke. `0 W` bleibt ein gültiger
+  Wert und wird nicht zu „Ziel fehlt“.
+- Jeder Graphabschnitt trägt die Knoten-ID der Ausführung. Die Aufbauliste
+  verwendet dieselbe ID. Auswahl einer Gruppe hebt alle Ausführungen ihrer
+  Kinder hervor; Auswahl eines Kindes hebt alle Wiederholungen dieses Kindes
+  hervor. Die Aufbauliste bleibt die vollständige, tastaturbedienbare
+  Alternative zu schmalen Graphsegmenten.
+- Die Breite wird per `ResizeObserver` gemessen. Die SVG wird nicht als feste
+  breite Grafik herunterskaliert; Achsen, Spurlabels und Einheiten bleiben bei
+  320 und 390 px lesbar. Eine Textalternative beschreibt Summe, Ausführungen
+  und Spuren.
+- Große Wiederholungsmengen werden ab einem Darstellungsbudget von 160
+  Ausführungen als eigener Block „+N“ zusammengefasst. Die Gesamtsummen
+  stammen weiterhin aus der algebraischen Berechnung und bleiben unverändert;
+  die Oberfläche nennt die Zahl der zusammengefassten Ausführungen.
+- Der neue Graph hängt ausschließlich an geplanten Vorgaben. Die bestehende
+  gemessene Aktivitätskurve (`WorkoutChart`) und ihre Legende werden weder
+  ersetzt noch als Planvorgabe gedeutet.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/profile.py` — Achsen, Segmente, Spuren,
+  Zonenauflösung, Pace-Richtung, Kompression und Textalternative.
+- `src/trainings_cockpit/planner/details.py` — Graph an die Detailantwort,
+  Darstellungsbudget 160 Ausführungen.
+- `web/src/components/PlanSheet.tsx` — `WorkoutProfile`, Achsen, Spuren,
+  Auswahl, Textalternative und komprimierter Block.
+- `web/src/styles.css` — Planungsdetail-, Aufbau- und Graphgestaltung mit
+  bestehenden Tokens; keine neuen Farb- oder Abstandssysteme.
+- `tests/test_planner_details.py` — F01–F05, F07, `0 W`, ein Abschnitt ohne
+  Ziel, Kompression ohne Summenänderung und getrennte Spuren.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_details.py -q` | **8 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **255 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner tests/test_planner_details.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+
+**Sichtprüfung:** F02 (HF + Pace, Zeitachse), F04 (Zeit + Distanz,
+schematisch), F05 (Schwimmen, 800 m + 4 min) und eine 300-fache Serie
+(160 gezeichnete Blöcke, 440 komprimiert, Summe 5 h) bei 390 × 844 und
+1440 × 900 geöffnet. Kein horizontaler Überlauf (`scrollWidth` = Viewport),
+keine abgeschnittenen Labels, keine Browser-Fehler. Die bestehende
+Aktivitätsansicht zeigt weiterhin ihre gemessene Kurve.
+
+Screenshots liegen lokal unter `data/screens/`:
+`p09-distance-graph-390.png`, `p09-distance-graph-1440.png`,
+`p09-swim-390.png`, `p09-swim-1440.png`,
+`p09-compressed-390.png`, `p09-compressed-1440.png`; für P08 zusätzlich
+`p08-plan-detail-*` und `p08-plan-notes-*`.
+
+## 4. Offene Punkte
+
+- Der Graph ist eine Leseansicht. Die Bearbeitung, Feldpuffer und
+  Vorschau-Aktualisierung während der Eingabe folgen in P10–P16; die
+  Graphdaten sind dafür bereits die gemeinsame Ableitung.
+- Die Plan-/Ist-Überlagerung ist nicht Teil dieses Pakets. Die gemessene Kurve
+  bleibt in der Aktivitätsansicht; „Plan ansehen“ öffnet die Vorgaben separat.
+- Zonen werden als eigene ordinale Spur dargestellt. Eine physiologische
+  Rangfolge aus benutzerdefinierten Zonennamen wird nicht erfunden; ohne
+  belegte Zonenreferenz bleibt die Vorgabe lesbar und die Spur neutral.
+
+## 5. Nächstes Paket
+
+**P10 — Lokalen Entwurf und Feldpuffer einführen.**

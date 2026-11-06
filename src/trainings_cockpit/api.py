@@ -257,6 +257,7 @@ def plan_detail(event_id: int) -> dict[str, Any]:
                 time_zone=settings.time_zone,
                 account_id=account_id,
                 athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc

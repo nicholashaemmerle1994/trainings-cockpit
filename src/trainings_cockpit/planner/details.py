@@ -31,6 +31,7 @@ from .model import (
     WorkoutNode,
     ZoneTarget,
 )
+from .profile import build_workout_profile_data
 from .remote import read_remote_event
 from .validation import (
     calculate_known_totals,
@@ -216,6 +217,7 @@ def build_plan_detail(
     time_zone: str,
     account_id: str = "default",
     athlete_id: str = "default",
+    zone_profiles: Mapping[str, Any] | None = None,
     now: str | None = None,
 ) -> dict[str, Any]:
     """Eine planungsseitige Detailantwort ohne Schreibzugriff."""
@@ -229,6 +231,11 @@ def build_plan_detail(
         athlete_id=athlete_id,
     )
     plan = remote.plan
+    graph = build_workout_profile_data(
+        plan,
+        zone_profiles=zone_profiles,
+        max_executions=160,
+    )
     reference = PlanReference(
         PlanId(plan.local_id),
         account_id,
@@ -250,6 +257,7 @@ def build_plan_detail(
         "rights": _rights(plan),
         "known": _known_summary(plan),
         "nodes": [_node_data(node) for node in plan.nodes],
+        "graph": graph,
         "source": {
             "name": "intervals.icu",
             "remote_id": str(plan.remote_id) if plan.remote_id is not None else None,

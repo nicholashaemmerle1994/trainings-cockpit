@@ -336,21 +336,121 @@ export interface PlannerWeekResponse {
   generated_at: string;
 }
 
+export interface PlanGraphValue {
+  kind: "value" | "range";
+  value?: number;
+  min: number;
+  max: number;
+}
+
+export interface PlanGraphTarget {
+  kind: "none" | "missing" | "zone" | "heartRate" | "power" | "pace";
+  metric?: "heartRate" | "power" | "pace";
+  unit?: string;
+  text: string;
+  values?: PlanGraphValue | null;
+  zone_id?: string;
+  zone_set_id?: string | null;
+  zone_level?: number | null;
+  absolute_low?: number | null;
+  absolute_high?: number | null;
+}
+
+export interface PlanGraphSegment {
+  kind: "execution" | "compression";
+  position: number;
+  node_id: string;
+  group_id: string | null;
+  repeat_group_ids: string[];
+  repetition_index: number | null;
+  repetition_path: number[];
+  name: string;
+  role: string;
+  end_kind: "time" | "distance" | null;
+  seconds: number | null;
+  metres: number | null;
+  extent_text: string;
+  target_key: string | null;
+  target_text: string;
+  target: PlanGraphTarget | null;
+  omitted_executions: number;
+  omitted_repetitions: number;
+  reason: string | null;
+  start: number;
+  end: number;
+  start_fraction: number;
+  width_fraction: number;
+}
+
+export interface PlanGraphZone {
+  zone_id: string;
+  label: string;
+  level: number;
+  absolute_low: number | null;
+  absolute_high: number | null;
+}
+
+export interface PlanGraphTrack {
+  key: string;
+  metric: "heartRate" | "power" | "pace" | "none";
+  unit: string;
+  label: string;
+  short: string;
+  kind: "numeric" | "zone" | "none";
+  segments: PlanGraphSegment[];
+  domain?: { min: number; max: number; direction?: string } | null;
+  ticks?: { at: number; value?: number; label: string }[];
+  direction?: "faster-up" | "higher-up";
+  zones?: PlanGraphZone[];
+}
+
+export interface PlanGraphAxis {
+  mode: "time" | "distance" | "schematic";
+  label: string;
+  unit: string;
+  total: number;
+  total_text: string;
+  ticks: { at: number; label: string }[];
+}
+
+export interface PlanGraphTotals {
+  seconds: number;
+  metres: number;
+  executions: number;
+  total_executions: number;
+  has_unknown: boolean;
+  first_end: string | null;
+  text: string;
+  compressed_executions: number;
+}
+
+export interface PlanGraph {
+  axis: PlanGraphAxis;
+  segments: PlanGraphSegment[];
+  tracks: PlanGraphTrack[];
+  totals: PlanGraphTotals;
+  repetition_groups: {
+    node_id: string;
+    name: string;
+    repetitions: number;
+    skip_final_recovery: boolean;
+  }[];
+  compressions: {
+    node_id: string;
+    parent_group_id: string | null;
+    first_position: number;
+    omitted_executions: number;
+    omitted_repetitions: number;
+    reason: string;
+  }[];
+  text_alternative: string;
+}
+
 export interface PlanNodeEnd {
   kind: "time" | "distance";
   seconds?: number;
   metres?: number;
   text: string;
-}
-
-export interface PlanNodeTarget {
-  kind: string;
-  text: string;
-  metric?: string;
-  unit?: string;
-  zone_id?: string;
-  zone_set_id?: string | null;
-  values?: { kind: string; value?: number; min?: number; max?: number } | null;
 }
 
 export interface PlanNode {
@@ -360,7 +460,7 @@ export interface PlanNode {
   label?: string;
   role?: string;
   end?: PlanNodeEnd;
-  target?: PlanNodeTarget;
+  target?: PlanGraphTarget;
   notes?: string | null;
   source_ref?: string | null;
   repetitions?: number;
@@ -405,6 +505,7 @@ export interface PlanDetail {
     text: string;
   };
   nodes: PlanNode[];
+  graph: PlanGraph;
   source: { name: string; remote_id: string | null; read_only: boolean };
   fetched_at: string;
 }
