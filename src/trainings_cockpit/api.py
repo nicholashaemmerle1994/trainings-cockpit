@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,22 @@ from fastapi.staticfiles import StaticFiles
 from . import db, fuel, metrics, plan, streams
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings
+from .planner.dates import (
+    local_today,
+    parse_week_parameter,
+    planner_week_range,
+    rolling_dashboard_range,
+)
 from .planner.summaries import recorded_seconds
+from .planner.week import (
+    SOURCE_COMPLETE,
+    SOURCE_EMPTY,
+    SOURCE_ERROR,
+    SOURCE_UNAVAILABLE,
+    account_context,
+    build_planner_week,
+    coverage_for_period,
+)
 
 DIST = Path(os.getenv("TC_WEB_DIST") or (PROJECT_ROOT / "web" / "dist"))
 
@@ -54,14 +70,17 @@ def connection() -> Iterator[sqlite3.Connection]:
 
 @app.get("/api/overview")
 def overview(days: int = Query(90, ge=7, le=365)) -> dict[str, Any]:
+    settings = get_settings()
+    today = date.fromisoformat(local_today(settings.time_zone))
     with connection() as conn:
-        data = metrics.build_overview(conn, days=days)
-    data["goals"] = _goals(get_settings())
+        data = metrics.build_overview(conn, today=today, days=days)
+    data["goals"] = _goals(settings, today)
+    data["time_zone"] = settings.time_zone
     return data
 
 
-def _goals(settings: Settings) -> list[dict[str, Any]]:
-    today = date.today()
+def _goals(settings: Settings, today: date | None = None) -> list[dict[str, Any]]:
+    today = today or date.today()
     items: list[dict[str, Any]] = []
     for goal in settings.goals:
         try:
@@ -80,6 +99,145 @@ def _goals(settings: Settings) -> list[dict[str, Any]]:
             }
         )
     return sorted(items, key=lambda item: item["date"])
+
+
+def _sync_range(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Der zuletzt tatsächlich gelesene Bereich, sofern der Sync ihn hinterließ."""
+    raw = db.get_setting(conn, "synced_range")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _source_state(
+    rows: list[dict[str, Any]],
+    *,
+    coverage: str,
+    error: str | None,
+) -> str:
+    if error:
+        return SOURCE_ERROR
+    if rows:
+        return SOURCE_COMPLETE
+    # Eine Woche außerhalb des nachweislich gelesenen Bereichs ist nicht
+    # „bestätigt leer“. Ohne Sync-Marke bleibt der lokale Bestand maßgeblich.
+    if coverage == "uncovered":
+        return SOURCE_UNAVAILABLE
+    return SOURCE_EMPTY
+
+
+def _week_parameter(
+    week: str | None,
+    woche: str | None = None,
+    von: str | None = None,
+    bis: str | None = None,
+) -> str | None:
+    """Deutsche und englische Parameter auf einen Wochenanker abbilden."""
+    if week and woche and week != woche:
+        raise HTTPException(status_code=400, detail="week und woche widersprechen sich.")
+    if week or woche:
+        return week or woche
+    # Ein Bereich wird nach Abschnitt 5.7 über sein Enddatum verankert.
+    return bis or von
+
+
+def _planner_week(conn: sqlite3.Connection, parameter: str | None) -> dict[str, Any]:
+    settings = get_settings()
+    time_zone = settings.time_zone
+    today = local_today(time_zone)
+    try:
+        monday = parse_week_parameter(parameter, time_zone)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Woche als lokales Datum JJJJ-MM-TT angeben.",
+        ) from exc
+    period = planner_week_range(monday, time_zone)
+    account_id, athlete_id = account_context(conn)
+    sync_range = _sync_range(conn)
+
+    plans_error: str | None = None
+    plans_rows: list[dict[str, Any]] = []
+    try:
+        plans_rows = db.events_between(
+            conn,
+            date.fromisoformat(period.start_date),
+            date.fromisoformat(period.end_date),
+        )
+    except Exception as exc:  # noqa: BLE001 - Quellenfehler getrennt melden
+        plans_error = str(exc)[:300]
+
+    activities_error: str | None = None
+    activity_rows: list[dict[str, Any]] = []
+    try:
+        activity_rows = db.training_between(
+            conn,
+            date.fromisoformat(period.start_date),
+            date.fromisoformat(period.end_date),
+        )
+    except Exception as exc:  # noqa: BLE001 - die andere Quelle bleibt nutzbar
+        activities_error = str(exc)[:300]
+
+    plans_coverage = coverage_for_period(period, sync_range, to_field="events_to")
+    activities_coverage = coverage_for_period(
+        period, sync_range, to_field="activities_to"
+    )
+    plans_state = _source_state(
+        plans_rows, coverage=plans_coverage, error=plans_error
+    )
+    activities_state = _source_state(
+        activity_rows, coverage=activities_coverage, error=activities_error
+    )
+
+    speeds = plan.speeds(conn, today=date.fromisoformat(today))
+    payload = build_planner_week(
+        period,
+        plans_rows,
+        activity_rows,
+        today=today,
+        time_zone=time_zone,
+        account_id=account_id,
+        athlete_id=athlete_id,
+        plans_state=plans_state,
+        activities_state=activities_state,
+        plans_error=plans_error,
+        activities_error=activities_error,
+        plans_coverage=plans_coverage,
+        activities_coverage=activities_coverage,
+        speeds_kmh=speeds,
+    )
+    payload["generated_at"] = datetime.now().astimezone().isoformat(
+        timespec="seconds"
+    )
+    return payload
+
+
+@app.get("/api/planner")
+def planner(
+    week: str | None = Query(None, description="Montag oder Tag der Woche, JJJJ-MM-TT"),
+    woche: str | None = Query(None, description="Deutscher Alias für week"),
+    von: str | None = Query(None, description="Bereichsbeginn, JJJJ-MM-TT"),
+    bis: str | None = Query(None, description="Bereichsende, JJJJ-MM-TT"),
+) -> dict[str, Any]:
+    """Eine Kalenderwoche mit getrennten Quellenzuständen."""
+    with connection() as conn:
+        return _planner_week(conn, _week_parameter(week, woche, von, bis))
+
+
+@app.get("/api/planner/week")
+def planner_week(
+    week: str | None = Query(None, description="Montag oder Tag der Woche, JJJJ-MM-TT"),
+    woche: str | None = Query(None, description="Deutscher Alias für week"),
+    von: str | None = Query(None, description="Bereichsbeginn, JJJJ-MM-TT"),
+    bis: str | None = Query(None, description="Bereichsende, JJJJ-MM-TT"),
+) -> dict[str, Any]:
+    """Alias für Verlinkungen, die den Wochenvertrag ausdrücklich nennen."""
+    with connection() as conn:
+        return _planner_week(conn, _week_parameter(week, woche, von, bis))
 
 
 @app.get("/api/session/{event_id}")
@@ -104,16 +262,52 @@ def _add_series(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
 
 
 @app.get("/api/week")
-def week() -> dict[str, Any]:
-    """Die Einheiten der letzten sieben Tage — dieselbe Summe wie auf der Karte."""
+def week(
+    week: str | None = Query(None, description="Wochenanker, JJJJ-MM-TT"),
+    from_date: str | None = Query(None, alias="from", description="Beginn, JJJJ-MM-TT"),
+    to_date: str | None = Query(None, alias="to", description="Ende, JJJJ-MM-TT"),
+) -> dict[str, Any]:
+    """Zeitraum der Aufzeichnungen.
+
+    Ohne Parameter bleibt die bisherige rollierende Sieben-Tage-Antwort
+    unverändert. Mit ``week`` oder expliziten Grenzen liefert dieselbe route
+    einen gezielten Zeitraum; der Planer selbst nutzt ``/api/planner``.
+    """
+    settings = get_settings()
+    today = date.fromisoformat(local_today(settings.time_zone))
+    try:
+        if week:
+            monday = parse_week_parameter(week, settings.time_zone)
+            period = planner_week_range(monday, settings.time_zone)
+            start = date.fromisoformat(period.start_date)
+            end = date.fromisoformat(period.end_date)
+        elif from_date or to_date:
+            if from_date and to_date:
+                start = date.fromisoformat(from_date)
+                end = date.fromisoformat(to_date)
+            elif from_date:
+                start = date.fromisoformat(from_date)
+                end = start + timedelta(days=6)
+            else:
+                end = date.fromisoformat(str(to_date))
+                start = end - timedelta(days=6)
+        else:
+            period = rolling_dashboard_range(today.isoformat(), 7, settings.time_zone)
+            start = date.fromisoformat(period.start_date)
+            end = date.fromisoformat(period.end_date)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Zeitraum als lokales Datum JJJJ-MM-TT angeben.",
+        ) from exc
+    if end < start:
+        raise HTTPException(status_code=400, detail="Das Ende liegt vor dem Beginn.")
     with connection() as conn:
-        today = date.today()
-        start = today - timedelta(days=6)
-        rows = db.training_between(conn, start, today)
+        rows = db.training_between(conn, start, end)
     seconds = sum(recorded_seconds(row) for row in rows)
     return {
         "from": start.isoformat(),
-        "to": today.isoformat(),
+        "to": end.isoformat(),
         "seconds": int(seconds),
         "load": round(sum(row.get("load") or 0 for row in rows)),
         "units": [metrics.activity_payload(row) for row in rows],

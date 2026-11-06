@@ -870,3 +870,87 @@ Beziehungsprojektion. Kein Netzwerkaufruf, kein Schreibpfad, keine UI.
 ## 5. Nächstes Paket
 
 **P06 — Wochenabfrage und Cache an die vorhandene Datenstrecke anbinden.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P06
+
+**Stand:** 06.11.2026
+**Paket:** P06 — Wochenabfrage und Cache an die vorhandene Datenstrecke anbinden
+**Basis:** Branch `feature/trainingsplaner`, HEAD `1bcf35a`
+**Umfang:** Neue Wochenabfrage `GET /api/planner` und Zeitraumparameter am
+bestehenden `GET /api/week`, getrennte Quellenzustände in
+`planner/week.py`, Sync-Bereichsmarke. Keine UI-Änderung in diesem Paket.
+
+## 1. Ergebnis
+
+- `GET /api/planner?week=JJJJ-MM-TT` liefert genau sieben lokale Tage
+  Montag–Sonntag, den vollständigen Wochenzeitraum, Kalenderwoche und die
+  gemeinsame Anzeigeprojektion. `GET /api/planner/week` ist derselbe Vertrag
+  für ausdrückliche Verlinkungen.
+- `/api/week` bleibt ohne Parameter die bisherige rollierende
+  Sieben-Tage-Antwort. Mit `week`, `from`/`to` liefert derselbe Leseweg einen
+  gezielten Zeitraum. Damit ist die in P00 gefundene feste
+  `today - 6`-Grenze parametrisiert; die Datenbankabfrage selbst war nie auf
+  sieben Tage begrenzt.
+- Planungen (`db.events_between`) und Aufzeichnungen
+  (`db.training_between`) werden getrennt gelesen und getrennt gemeldet.
+  Zustände: `complete`, `empty`, `partial`, `error`, `unavailable`; die UI
+  ergänzt `loading`. Ein Fehler der einen Quelle liefert die andere weiter.
+- Eine Woche außerhalb der zuletzt vom Sync nachweislich gelesenen Grenzen
+  wird nicht als bestätigt leer ausgegeben (`synced_range` mit getrennten
+  Grenzen für Aktivitäten und Events). Ohne Marke bleibt der lokale Bestand
+  maßgeblich; das ist kein erfundener Historienanspruch.
+- Cache-/Query-Schlüssel enthalten Objekttyp/Quelle, Account/Athlet,
+  Zeitzone und Zeitraumgrenzen. Die Wochenprojektion
+  (`planner:...:projection:week`) ist vom rollierenden Dashboard-Schlüssel
+  (`dashboard:...:projection:rolling`) getrennt.
+- Die Anzeigeprojektion nutzt `TrainingListEntry` und die bestätigte
+  Beziehung aus P05. Beziehungen werden nur aus dem ausdrücklich übergebenen
+  Vertrag gebildet, nie aus gleichem Tag, Namen oder gleicher Dauer. Für den
+  aktuellen Bestand existiert keine persistierte explizite Beziehung; die
+  Wochenansicht zeigt deshalb Plan und Aufzeichnung getrennt.
+- Offene Planung und Ist-Summe bleiben getrennt. Bekannte Dauern und
+  Distanzen kommen aus dem P04/P05-Modell; geschätzte Hälften zählen nicht in
+  die Summe. `has_unknown` kennzeichnet fehlende Vorgaben.
+- Die weiterhin benötigte Dashboard-Aggregation liest unverändert
+  `metrics.build_overview()` mit ihrem eigenen rollierenden Fenster. Sie ist
+  nicht an die gewählte Planerwoche gekoppelt.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/week.py` — Wochenprojektion, Quellenzustände,
+  Query-Schlüssel, bekannte Planmengen, Beziehungs-Serialisierung.
+- `src/trainings_cockpit/api.py` — `/api/planner`, `/api/planner/week`,
+  Zeitraumparameter an `/api/week`, Athletenzeitzone für Overview und Woche.
+- `src/trainings_cockpit/sync.py` — `synced_range` als Abdeckungsmarke nach
+  erfolgreichem Lesen.
+- `tests/test_planner_week_api.py` — F11-Zeitraum, getrennte Quellenausfälle,
+  nicht gesyncte Woche, vollständig leere Woche, gezielter `/api/week`-Zeitraum.
+- `tests/test_planner_week_projection.py` — F12/F13-Projektion einer bestätigten
+  Beziehung ohne Doppelzählung und Abschlussreferenz außerhalb der Planwoche.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **247 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check ...` (P06-Dateien) | ohne Befund |
+| `curl /api/planner?week=2026-11-06` | 7 Tage, 2.–8.11.2026, getrennte Quellen |
+
+## 4. Offene Punkte
+
+- Es gibt weiterhin keine persistierte explizite Plan-/Aktivitätsbeziehung im
+  Bestand. Die Projektion kann bestätigte Beziehungen darstellen, der
+  Produktpfad liefert derzeit eine leere Beziehungsliste. Die Heuristik
+  `plan.matches()` bleibt aus der Wochenprojektion ausgeschlossen.
+- Die lokale Datenbank hat keine Pagination. Die vorhandene Pagination der
+  Garmin-Quelle bleibt im Sync-Pfad; `/api/planner` liest den bereits
+  gespeicherten Bestand und erfindet keine Historienabdeckung.
+- Die Ladezustände `loading` und veraltete Antworten entstehen in der
+  Oberfläche (P07); der Server liefert nur bestätigte bzw. fehlerhafte
+  Quellenzustände.
+
+## 5. Nächstes Paket
+
+**P07 — Bestehende Liste zum Trainingsplaner umbauen und Dashboard-Links bereinigen.**

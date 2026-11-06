@@ -98,6 +98,20 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         db.set_setting(conn, "athlete_name", _pretty_name(athlete.get("name")))
         db.set_setting(conn, "athlete_id", str(athlete.get("id") or ""))
         db.set_setting(conn, "last_sync", datetime.now().isoformat(timespec="seconds"))
+        # Der Planer darf eine Woche außerhalb dieses nachweislich gelesenen
+        # Bereichs nicht als bestätigt leer ausgeben (P06/F14).
+        db.set_setting(
+            conn,
+            "synced_range",
+            json.dumps(
+                {
+                    "from": oldest.isoformat(),
+                    "to": today.isoformat(),
+                    "activities_to": today.isoformat(),
+                    "events_to": events_until.isoformat(),
+                }
+            ),
+        )
         db.log_sync(
             conn,
             "intervals",
