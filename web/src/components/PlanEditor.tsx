@@ -54,6 +54,27 @@ function fieldId(nodeId: string, field: string): string {
   return `field-${nodeId.replace(/[^a-zA-Z0-9_-]/g, "-")}-${field}`;
 }
 
+export function planHeadingElementId(nodeId: string): string {
+  return headingId(nodeId);
+}
+
+/** DOM-Anker eines Feldes; die Fehlerzusammenfassung springt genau dorthin. */
+export function planFieldElementId(
+  nodeId: string,
+  fieldPath: string,
+  nodeKind: PlanNode["kind"],
+): string {
+  if (fieldPath === "name") {
+    return fieldId(nodeId, nodeKind === "repeat" ? "group-name" : "name");
+  }
+  if (fieldPath === "repetitions") return fieldId(nodeId, "repetitions");
+  if (fieldPath === "end.value") return fieldId(nodeId, "end");
+  if (fieldPath === "target.value") return fieldId(nodeId, "target-value");
+  if (fieldPath === "target.min") return fieldId(nodeId, "target-min");
+  if (fieldPath === "target.max") return fieldId(nodeId, "target-max");
+  return fieldId(nodeId, "name");
+}
+
 function targetFieldKind(editor: TargetEditor): DraftFieldKind {
   return editor.kind === "pace" ? "pace" : "decimal";
 }
@@ -295,7 +316,6 @@ function PlanNodeBranch({
     projection?.draft.issues.some(
       (issue) => issue.node_id === node.node_id && issue.code === "open_end",
     );
-
   return (
     <li
       className={[
@@ -306,30 +326,30 @@ function PlanNodeBranch({
         .join(" ")}
     >
       <button
-        type="button"
-        id={headingId(node.node_id)}
-        ref={(element) => registerHead(node.node_id, element)}
-        className={`plan-node${selected ? " plan-node--selected" : ""}${
-          open ? " plan-node--open" : ""
-        }`}
-        aria-expanded={open}
-        aria-controls={region}
-        aria-label={`${nodeTitle(node)} ${open ? "schließen" : "bearbeiten"}`}
-        onClick={() => onToggle(node.node_id)}
-      >
-        <span className="plan-node__index" aria-hidden="true">
-          {node.kind === "repeat" ? `↻${node.repetitions ?? 1}` : index}
-        </span>
-        <span className="plan-node__main">
-          <span className="plan-node__name">
-            {nodeTitle(node)}
-            {incomplete && <span className="plan-node__incomplete">unvollständig</span>}
+          type="button"
+          id={headingId(node.node_id)}
+          ref={(element) => registerHead(node.node_id, element)}
+          className={`plan-node${selected ? " plan-node--selected" : ""}${
+            open ? " plan-node--open" : ""
+          }`}
+          aria-expanded={open}
+          aria-controls={region}
+          aria-label={`${nodeTitle(node)} ${open ? "schließen" : "bearbeiten"}`}
+          onClick={() => onToggle(node.node_id)}
+        >
+          <span className="plan-node__index" aria-hidden="true">
+            {node.kind === "repeat" ? `↻${node.repetitions ?? 1}` : index}
           </span>
-          <span className="plan-node__meta">{nodeMeta(node)}</span>
-        </span>
-        <span className="plan-node__caret" aria-hidden="true">
-          {open ? "⌃" : "›"}
-        </span>
+          <span className="plan-node__main">
+            <span className="plan-node__name">
+              {nodeTitle(node)}
+              {incomplete && <span className="plan-node__incomplete">unvollständig</span>}
+            </span>
+            <span className="plan-node__meta">{nodeMeta(node)}</span>
+          </span>
+          <span className="plan-node__caret" aria-hidden="true">
+            {open ? "⌃" : "›"}
+          </span>
       </button>
 
       {open &&
@@ -1208,6 +1228,7 @@ export function DraftStatus({
   canSave = false,
   saveMessage = null,
   saveError = null,
+  saveLocked = false,
   onSave,
 }: {
   projection: PlanDraftProjection | null;
@@ -1219,6 +1240,7 @@ export function DraftStatus({
   canSave?: boolean;
   saveMessage?: string | null;
   saveError?: string | null;
+  saveLocked?: boolean;
   onSave?: () => void;
 }): ReactNode {
   const fieldCount = Object.keys(buffers).length;
@@ -1257,17 +1279,28 @@ export function DraftStatus({
               ? "plan-savebar__state plan-savebar__state--dirty"
               : "plan-savebar__state"
           }
+          role={saveMessage || saveError ? "status" : undefined}
+          aria-live={saveMessage || saveError ? "polite" : undefined}
         >
           {status}
         </span>
         <span className="plan-savebar__hint">
           {saving
             ? "Ein Schreibvorgang zur Zeit."
-            : "Speichert in intervals.icu · Rückleseprüfung inklusive"}
+            : saveError?.startsWith("Offline")
+              ? "Der Entwurf bleibt lokal; es wird nichts remote gespeichert."
+              : saveLocked
+                ? "Der offene Vorgang bleibt bestehen; Verwerfen entfernt nur den lokalen Entwurf."
+                : "Speichert in intervals.icu · Rückleseprüfung inklusive"}
         </span>
       </div>
       <div className="plan-savebar__actions">
-        <button type="button" className="btn btn--ghost" onClick={onDiscard}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={onDiscard}
+          disabled={saving}
+        >
           Verwerfen
         </button>
         <button

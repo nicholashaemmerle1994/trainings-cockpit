@@ -11,8 +11,18 @@ export interface RouteState {
   legacy: boolean;
 }
 
-const PLANNER_PATHS = new Set(["/planer", "/planner", "/woche", "/week", "/planner/week"]);
+const PLANNER_PATHS = new Set([
+  "/planer",
+  "/planner",
+  "/trainingsplaner",
+  "/woche",
+  "/week",
+  "/planner/week",
+  "/planer/week",
+]);
 const FUEL_PATHS = new Set(["/verpflegung", "/fuel"]);
+const ACTIVITY_PATH = /^\/(?:aktivitaet|activity|einheit|unit)\/(\d+)$/;
+const PLANNER_DATE_PATH = /^\/(?:planer|planner|woche|week)\/(\d{4}-\d{2}-\d{2})$/;
 
 function normalisePath(path: string): string {
   if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1);
@@ -130,19 +140,51 @@ export function readRoute(location: Location = window.location): RouteState {
   const tabParam = (params.get("tab") ?? params.get("bereich") ?? "").toLowerCase();
   const plannerTab = ["woche", "week", "planer", "planner"].includes(tabParam);
   const fuelTab = ["fuel", "verpflegung"].includes(tabParam);
-
-  if (PLANNER_PATHS.has(path) || plannerTab) {
+  const directActivity = ACTIVITY_PATH.exec(path);
+  const datedPlanner = PLANNER_DATE_PATH.exec(path);
+  const datedDate = datedPlanner ? validLocalDate(datedPlanner[1]) : null;
+  const datedWeek = datedDate ? mondayOf(datedDate) : undefined;
+  const detail = detailFromParams(params);
+  // Ein direkter Aktivitätslink behält sein Detailziel. Der Pfad wird als
+  // Altform in den Planer-Kontext überführt, damit Woche und Rücksprung
+  // nachvollziehbar bleiben.
+  if (directActivity || (detail.unit != null && !PLANNER_PATHS.has(path))) {
     return {
       tab: "planner",
       week: plannerWeekFromParams(params),
-      ...detailFromParams(params),
-      legacy: path === "/woche" || path === "/week" || plannerTab,
+      unit: positiveId(directActivity?.[1]) ?? detail.unit,
+      legacy: true,
+    };
+  }
+  if (PLANNER_PATHS.has(path) || datedPlanner || plannerTab) {
+    return {
+      tab: "planner",
+      week: plannerWeekFromParams(params) ?? datedWeek,
+      ...detail,
+      legacy:
+        path === "/woche" ||
+        path === "/week" ||
+        path === "/planner/week" ||
+        path === "/planer/week" ||
+        datedPlanner != null ||
+        plannerTab,
     };
   }
   if (FUEL_PATHS.has(path) || fuelTab) {
     return { tab: "fuel", legacy: false };
   }
   return { tab: "today", legacy: false };
+}
+
+/** Die kanonische URL eines bereits gelesenen Zustands. */
+export function routeUrl(route: RouteState): string {
+  if (route.tab === "planner") {
+    return routePath("planner", route.week, {
+      plan: route.plan,
+      unit: route.unit,
+    });
+  }
+  return routePath(route.tab);
 }
 
 export function routePath(

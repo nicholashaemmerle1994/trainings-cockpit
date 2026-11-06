@@ -88,6 +88,13 @@ export interface Overview {
     date: string;
     as_of: string | null;
     vendor: number | null;
+    /** Getrennter Zustand des heutigen Planungsanteils. */
+    plan_source: {
+      state: PlannerSourceState;
+      complete: boolean;
+      count: number;
+      coverage: "covered" | "uncovered" | "unknown";
+    };
     recovery: Recovery;
     sleep: { hours: number | null; score: number | null; debt_7d: number; baseline_hours: number };
     load: {

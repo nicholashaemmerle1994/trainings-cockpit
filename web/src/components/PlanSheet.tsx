@@ -13,6 +13,7 @@ import {
   insertChild,
   moveNodeInLevel,
   nodeById,
+  nodeTitle,
   normalizeSkipFinalRecovery,
   removeNode,
   semanticallyDirty,
@@ -39,9 +40,22 @@ import type {
 import {
   DraftStatus,
   PlanEditor,
+  planFieldElementId,
+  planHeadingElementId,
   useHeadScroll,
 } from "./PlanEditor";
 import type { NewPlanConfig } from "./AddWorkoutSheet";
+import {
+  registerNavigationGuard,
+  unregisterNavigationGuard,
+} from "../navigationGuard";
+import {
+  clearPlannerDraft,
+  loadPlannerDraft,
+  plannerDraftScope,
+  savePlannerDraft,
+  type StoredPlannerDraft,
+} from "../plannerDraftStore";
 import { Sheet } from "./Sheet";
 import { StatusBadge } from "./ui";
 
@@ -117,6 +131,9 @@ function subtreeNodeIds(nodes: PlanNode[], nodeId: string): Set<string> {
 export function PlanSheet({
   eventId,
   newPlan,
+  accountId,
+  athleteId,
+  online,
   onClose,
   onSaved,
   onPending,
@@ -124,6 +141,9 @@ export function PlanSheet({
 }: {
   eventId?: number;
   newPlan?: NewPlanConfig | null;
+  accountId: string;
+  athleteId: string;
+  online: boolean;
   onClose: () => void;
   onSaved?: (result: PlannerSaveResponse) => void;
   onPending?: () => void;
@@ -150,11 +170,18 @@ export function PlanSheet({
   const [saveLocked, setSaveLocked] = useState(false);
   const [conflict, setConflict] = useState<PlannerConflict | null>(null);
   const [remoteOpen, setRemoteOpen] = useState(false);
+  const [recovery, setRecovery] = useState<StoredPlannerDraft | null>(null);
   const draftActive = useRef(false);
   const requestSeq = useRef(0);
   const saveSeq = useRef(0);
+  const dirtyRef = useRef(false);
+  const savingRef = useRef(false);
+  const editingRef = useRef(false);
+  const resetDraftRef = useRef<() => void>(() => {});
+  const mountedRef = useRef(true);
   const headScroll = useHeadScroll();
   const isNew = newPlan != null;
+  const scope = plannerDraftScope(eventId, newPlan?.draftId);
 
   const applyNewProjection = (next: PlanDraftProjection) => {
     setData(next);
@@ -168,6 +195,13 @@ export function PlanSheet({
     setSelected(first?.node_id ?? null);
     setExpanded(first?.node_id ?? null);
   };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -194,6 +228,8 @@ export function PlanSheet({
     setSaveLocked(false);
     setConflict(null);
     setRemoteOpen(false);
+    setRecovery(null);
+    editingRef.current = false;
 
     if (newPlan) {
       // „Weiter“ legt nur einen lokalen Entwurf an. Dieser Request ist kein
@@ -209,7 +245,19 @@ export function PlanSheet({
           }),
         )
         .then((next) => {
-          if (alive) applyNewProjection(next);
+          if (!alive) return;
+          applyNewProjection(next);
+          const stored = loadPlannerDraft(
+            accountId,
+            athleteId,
+            plannerDraftScope(null, newPlan.draftId),
+          );
+          if (stored) {
+            // Erst entscheiden, dann bearbeiten: Der gespeicherte Entwurf wird
+            // nicht ungefragt über die neue Projektion gelegt.
+            setEditing(false);
+            setRecovery(stored);
+          }
         })
         .catch((cause: unknown) => {
           if (alive) {
@@ -241,6 +289,7 @@ export function PlanSheet({
           setPlanName(next.name);
           setPlanDate(next.date);
           setNodes(next.nodes);
+          setRecovery(loadPlannerDraft(accountId, athleteId, plannerDraftScope(eventId)));
         }
       })
       .catch((cause: unknown) => {
@@ -249,7 +298,7 @@ export function PlanSheet({
     return () => {
       alive = false;
     };
-  }, [eventId, newPlan]);
+  }, [eventId, newPlan, accountId, athleteId]);
 
   useEffect(() => {
     if (revision === 0 || editing || isNew || eventId == null || draftActive.current) return;
@@ -324,6 +373,11 @@ export function PlanSheet({
     ? current != null
     : current != null &&
       semanticallyDirty(data ?? current, planName, nodes, planDate);
+  const hasFieldInput = Object.keys(buffers).length > 0;
+  const guardDirty = editing && (dirty || hasFieldInput);
+  dirtyRef.current = guardDirty;
+  savingRef.current = saving || saveLocked;
+  editingRef.current = editing;
   const structuralBlock = projection?.draft.issues.some((issue) =>
     ["empty_workout", "empty_repeat", "no_executed_steps", "open_end"].includes(
       issue.code,
@@ -347,12 +401,23 @@ export function PlanSheet({
     !invalidField &&
     nodes.length > 0;
 
+  const clearLocalDraft = () => {
+    clearPlannerDraft(accountId, athleteId, scope);
+    setRecovery(null);
+  };
+
   const startEdit = () => {
     if (!data || !data.rights.can_edit_structure) return;
+    clearLocalDraft();
     draftActive.current = true;
     setEditing(true);
     setProjection(null);
     setDraftError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+    setConflict(null);
+    setRemoteOpen(false);
+    setSaveLocked(false);
     setPlanName(data.name);
     setPlanDate(data.date);
     setNodes(data.nodes);
@@ -364,18 +429,28 @@ export function PlanSheet({
     const first = firstEditableNode(data.nodes);
     setSelected(first?.node_id ?? null);
     setExpanded(first?.node_id ?? null);
+    if (first) {
+      window.requestAnimationFrame(() =>
+        document.getElementById(planHeadingElementId(first.node_id))?.focus(),
+      );
+    }
   };
 
-  const discard = () => {
-    if (isNew) {
-      // Abbrechen vor dem ersten Speichern hinterlässt kein Remote-Event.
-      onClose();
-      return;
-    }
+  /** Nur den lokalen Zustand zurücksetzen; Navigation erledigt der Aufrufer. */
+  const resetDraft = () => {
+    clearLocalDraft();
     draftActive.current = false;
+    editingRef.current = false;
+    dirtyRef.current = false;
+    savingRef.current = false;
     setEditing(false);
     setProjection(null);
     setDraftError(null);
+    setSaveError(null);
+    setSaveMessage(null);
+    setConflict(null);
+    setRemoteOpen(false);
+    setSaveLocked(false);
     setPlanName(data?.name ?? "");
     setPlanDate(data?.date ?? "");
     setNodes(data?.nodes ?? []);
@@ -387,9 +462,154 @@ export function PlanSheet({
     setSelected(null);
     setExpanded(null);
   };
+  resetDraftRef.current = resetDraft;
+
+  const discard = () => {
+    if (isNew) {
+      // Abbrechen vor dem ersten Speichern hinterlässt kein Remote-Event.
+      resetDraft();
+      onClose();
+      return;
+    }
+    resetDraft();
+  };
+
+  const restoreRecovery = () => {
+    if (!recovery) return;
+    draftActive.current = true;
+    setEditing(true);
+    setProjection(null);
+    setPlanName(recovery.name);
+    setPlanDate(recovery.date);
+    setNodes(recovery.nodes);
+    setBuffers(recovery.buffers);
+    setEndKinds(recovery.end_kinds);
+    setTargetEditors(recovery.target_editors);
+    setUndo(null);
+    setAddOpen(false);
+    setSelected(recovery.selected);
+    setExpanded(recovery.expanded);
+    const currentHash = data?.source_snapshot?.relevant_content_hash ?? null;
+    setDraftError(
+      recovery.base_source_hash &&
+        currentHash &&
+        recovery.base_source_hash !== currentHash
+        ? "Der gespeicherte Entwurf beruht auf einer älteren Remoteversion. Bitte vor dem Speichern prüfen; es wird nichts automatisch geschrieben."
+        : null,
+    );
+    setRecovery(null);
+  };
+
+  const discardRecovery = () => {
+    clearLocalDraft();
+  };
+
+  const focusIssue = (nodeId: string | null, fieldPath: string | null) => {
+    if (nodeId == null) {
+      document.getElementById("plan-add-trigger")?.focus();
+      return;
+    }
+    const node = nodeById(nodes, nodeId);
+    setSelected(nodeId);
+    setExpanded(nodeId);
+    window.requestAnimationFrame(() => {
+      const id =
+        fieldPath && node
+          ? planFieldElementId(nodeId, fieldPath, node.kind)
+          : planHeadingElementId(nodeId);
+      const element = document.getElementById(id) as HTMLElement | null;
+      if (!element) return;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      element.scrollIntoView({
+        block: "center",
+        behavior: reduce ? "auto" : "smooth",
+      });
+      element.focus({ preventScroll: true });
+    });
+  };
+
+  useEffect(() => {
+    const guard = {
+      isDirty: () => dirtyRef.current,
+      isSaving: () => savingRef.current,
+      discard: () => resetDraftRef.current(),
+    };
+    registerNavigationGuard(guard);
+    return () => unregisterNavigationGuard(guard);
+  }, []);
+
+  // Kurz entprellt sichern; ein Absturz oder Reload verliert den Entwurf
+  // damit nicht. Wiederhergestellt wird nur nach ausdrücklicher Entscheidung.
+  useEffect(() => {
+    if (!editing) return;
+    const timer = window.setTimeout(() => {
+      if (!editingRef.current) return;
+      if (!guardDirty) {
+        clearPlannerDraft(accountId, athleteId, scope);
+        return;
+      }
+      savePlannerDraft({
+        version: 1,
+        account_id: accountId,
+        athlete_id: athleteId,
+        scope,
+        kind: isNew ? "new" : "existing",
+        event_id: eventId ?? null,
+        draft_id: newPlan?.draftId ?? null,
+        new_plan: newPlan
+          ? {
+              draftId: newPlan.draftId,
+              sport: newPlan.sport,
+              date: newPlan.date,
+              name: newPlan.name,
+              template: newPlan.template,
+            }
+          : null,
+        saved_at: new Date().toISOString(),
+        name: planName,
+        date: planDate,
+        nodes,
+        buffers,
+        end_kinds: endKinds,
+        target_editors: targetEditors,
+        selected,
+        expanded,
+        base_source_hash: data?.source_snapshot?.relevant_content_hash ?? null,
+      });
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [
+    editing,
+    guardDirty,
+    accountId,
+    athleteId,
+    scope,
+    isNew,
+    eventId,
+    newPlan,
+    planName,
+    planDate,
+    nodes,
+    buffers,
+    endKinds,
+    targetEditors,
+    selected,
+    expanded,
+    data?.source_snapshot?.relevant_content_hash,
+  ]);
 
   const save = async () => {
     if (!canSave || saving) return;
+    if (
+      !online ||
+      (typeof navigator !== "undefined" && !navigator.onLine)
+    ) {
+      setSaveMessage(null);
+      setSaveError(
+        "Offline – es wurde nichts remote gespeichert. Der lokale Entwurf bleibt erhalten.",
+      );
+      return;
+    }
     const seq = ++saveSeq.current;
     setSaving(true);
     setSaveError(null);
@@ -414,10 +634,16 @@ export function PlanSheet({
       const result = newPlan
         ? await api.saveNewPlan(body)
         : await api.savePlan(data!.id!, body);
-      // Eine verspätete Antwort eines älteren Speicherversuchs darf den
-      // neueren Zustand nicht überschreiben.
-      if (seq !== saveSeq.current) return;
+      // Eine verspätete Antwort eines älteren Speicherversuchs oder eines
+      // bereits verlassenen Blattes darf den neueren Zustand nicht überschreiben.
+      if (seq !== saveSeq.current || !mountedRef.current) return;
       if (result.status.state === "saved" || result.status.state === "clean") {
+        clearLocalDraft();
+        draftActive.current = false;
+        dirtyRef.current = false;
+        editingRef.current = false;
+        setEditing(false);
+        setProjection(null);
         setSaveMessage(result.status.message);
         onSaved?.(result);
         return;
@@ -434,7 +660,11 @@ export function PlanSheet({
     } catch (cause: unknown) {
       if (seq !== saveSeq.current) return;
       setSaveError(
-        cause instanceof Error ? cause.message : "Speichern fehlgeschlagen.",
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? "Offline – es wurde nichts remote gespeichert. Der lokale Entwurf bleibt erhalten."
+          : cause instanceof Error
+            ? cause.message
+            : "Speichern fehlgeschlagen.",
       );
     } finally {
       if (seq === saveSeq.current) setSaving(false);
@@ -446,6 +676,9 @@ export function PlanSheet({
     setRemoteOpen(false);
     setSaveError(null);
     setSaveMessage(null);
+    clearLocalDraft();
+    editingRef.current = false;
+    dirtyRef.current = false;
     if (isNew || eventId == null) {
       onClose();
       return;
@@ -935,10 +1168,15 @@ export function PlanSheet({
           dirty={dirty}
           saving={saving}
           canSave={canSave}
+          saveLocked={saveLocked}
           saveMessage={saveMessage}
           saveError={saveError}
           conflict={conflict}
           remoteOpen={remoteOpen}
+          recovery={recovery}
+          onRestoreRecovery={restoreRecovery}
+          onDiscardRecovery={discardRecovery}
+          onFocusIssue={focusIssue}
           onSave={() => void save()}
           onViewRemote={() => setRemoteOpen(true)}
           onReturnToDraft={() => {
@@ -991,10 +1229,15 @@ function PlanBody({
   dirty,
   saving,
   canSave,
+  saveLocked,
   saveMessage,
   saveError,
   conflict,
   remoteOpen,
+  recovery,
+  onRestoreRecovery,
+  onDiscardRecovery,
+  onFocusIssue,
   onSave,
   onViewRemote,
   onReturnToDraft,
@@ -1048,10 +1291,15 @@ function PlanBody({
   dirty: boolean;
   saving: boolean;
   canSave: boolean;
+  saveLocked: boolean;
   saveMessage: string | null;
   saveError: string | null;
   conflict: PlannerConflict | null;
   remoteOpen: boolean;
+  recovery: StoredPlannerDraft | null;
+  onRestoreRecovery: () => void;
+  onDiscardRecovery: () => void;
+  onFocusIssue: (nodeId: string | null, fieldPath: string | null) => void;
   onSave: () => void;
   onViewRemote: () => void;
   onReturnToDraft: () => void;
@@ -1066,6 +1314,50 @@ function PlanBody({
   const incompleteCount = projection
     ? projection.draft.issues.filter((issue) => issue.code === "open_end").length
     : 0;
+  const fieldErrors = projection
+    ? Object.entries(projection.draft.field_states)
+        .filter(([, state]) => state.validity !== "valid")
+        .map(([key, state]) => {
+          const split = key.lastIndexOf(":");
+          const nodeId = key.slice(0, split);
+          const fieldPath = key.slice(split + 1);
+          const node = nodeById(nodes, nodeId);
+          return {
+            key,
+            nodeId,
+            fieldPath,
+            title: node ? nodeTitle(node) : "Abschnitt",
+            message: state.message || "Feld unvollständig.",
+          };
+        })
+    : [];
+  const structuralErrors = projection
+    ? projection.draft.issues
+        .filter(
+          (issue) =>
+            !["incomplete_field", "invalid_field"].includes(issue.code) &&
+            issue.code !== "open_end",
+        )
+        .map((issue, index) => ({
+          key: `issue-${issue.code}-${issue.node_id ?? index}`,
+          nodeId: issue.node_id,
+          fieldPath:
+            issue.code === "empty_repeat"
+              ? "repetitions"
+              : issue.code === "no_executed_steps"
+                ? "end.value"
+                : issue.field,
+          title: issue.node_id
+            ? nodeTitle(nodeById(nodes, issue.node_id) ?? {
+                kind: "step",
+                node_id: issue.node_id,
+                name: "",
+              })
+            : "Aufbau",
+          message: issue.message,
+        }))
+    : [];
+  const errorEntries = [...fieldErrors, ...structuralErrors];
 
   return (
     <>
@@ -1085,7 +1377,37 @@ function PlanBody({
         {editing && <span className="plan-draft-badge">Entwurf lokal</span>}
       </div>
 
-      {!editing && data.rights.can_edit_structure && (
+      {recovery && !editing && (
+        <section
+          className="plan-recovery"
+          aria-labelledby="plan-recovery-title"
+          aria-describedby="plan-recovery-text"
+        >
+          <h2 id="plan-recovery-title">Lokaler Entwurf gefunden</h2>
+          <p id="plan-recovery-text">
+            Für diese Einheit liegt ein nicht gespeicherter Entwurf vom{" "}
+            {new Date(recovery.saved_at).toLocaleString("de-AT")}. Es wird nichts
+            automatisch übernommen oder geschrieben.
+          </p>
+          {recovery.name !== data.name || recovery.date !== data.date ? (
+            <p className="plan-recovery__diff">
+              Gespeicherter Stand: {data.name || "ohne Namen"} ·{" "}
+              {fmtDateLong(data.date)}. Entwurf: {recovery.name || "ohne Namen"} ·{" "}
+              {fmtDateLong(recovery.date)}.
+            </p>
+          ) : null}
+          <div className="plan-recovery__actions">
+            <button type="button" className="btn btn--primary" onClick={onRestoreRecovery}>
+              Entwurf wiederherstellen
+            </button>
+            <button type="button" className="btn btn--ghost" onClick={onDiscardRecovery}>
+              Aktuellen Stand verwenden
+            </button>
+          </div>
+        </section>
+      )}
+
+      {!editing && !recovery && data.rights.can_edit_structure && (
         <div className="plan-editbar">
           <button type="button" className="btn btn--primary" onClick={onEdit}>
             Bearbeiten
@@ -1126,6 +1448,34 @@ function PlanBody({
             : `${incompleteCount} Abschnitte haben noch kein gültiges Ende.`}{" "}
           Die Summe zeigt nur den bekannten Teil.
         </p>
+      )}
+
+      {editing && errorEntries.length > 0 && (
+        <section className="plan-errors" aria-labelledby="plan-errors-title">
+          <h2 id="plan-errors-title">
+            {errorEntries.length === 1
+              ? "Eine Eingabe braucht Aufmerksamkeit"
+              : `${errorEntries.length} Eingaben brauchen Aufmerksamkeit`}
+          </h2>
+          <p className="plan-errors__hint">
+            Öffnet den betroffenen Block und setzt den Fokus auf das erste
+            relevante Feld. Speichern bleibt bis zur Korrektur gesperrt.
+          </p>
+          <ol className="plan-errors__list">
+            {errorEntries.map((entry) => (
+              <li key={entry.key}>
+                <button
+                  type="button"
+                  className="plan-errors__item"
+                  onClick={() => onFocusIssue(entry.nodeId, entry.fieldPath)}
+                >
+                  <strong>{entry.title}</strong>
+                  <span>{entry.message}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
 
       <WorkoutProfile graph={data.graph} selected={selected} onSelect={onSelect} />
@@ -1178,6 +1528,7 @@ function PlanBody({
             {!addOpen ? (
               <button
                 type="button"
+                id="plan-add-trigger"
                 className="plan-add__trigger"
                 aria-expanded={false}
                 onClick={() => onAddOpen(true)}
@@ -1348,6 +1699,7 @@ function PlanBody({
           onDiscard={onDiscard}
           saving={saving}
           canSave={canSave}
+          saveLocked={saveLocked}
           saveMessage={saveMessage}
           saveError={saveError}
           onSave={onSave}

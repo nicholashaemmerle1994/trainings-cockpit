@@ -92,6 +92,21 @@ def overview(days: int = Query(90, ge=7, le=365)) -> dict[str, Any]:
     with connection() as conn:
         data = metrics.build_overview(conn, today=today, days=days)
         data["account_id"], data["athlete_id"] = account_context(conn)
+        # Die Tageskarte darf „Nichts geplant“ nur sagen, wenn der
+        # Planungsanteil tatsächlich gelesen wurde. Der Zustand kommt aus
+        # derselben Abdeckungslogik wie die Wochenprojektion.
+        plan_rows = db.events_on(conn, today)
+        period = planner_week_range(today.isoformat(), settings.time_zone)
+        coverage = coverage_for_period(
+            period, _sync_range(conn), to_field="events_to"
+        )
+        state = _source_state(plan_rows, coverage=coverage, error=None)
+        data["today"]["plan_source"] = {
+            "state": state,
+            "complete": state in {SOURCE_COMPLETE, SOURCE_EMPTY},
+            "count": len(plan_rows),
+            "coverage": coverage,
+        }
     data["goals"] = _goals(settings, today)
     data["time_zone"] = settings.time_zone
     return data

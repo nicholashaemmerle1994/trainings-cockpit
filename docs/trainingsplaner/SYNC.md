@@ -56,9 +56,12 @@ entfernt die andere nicht.
 Vorgänge sind in der Datenbank an `account_id`/`athlete_id` gebunden; die API
 listet und gleicht nur Vorgänge des aktuellen Accounts ab. Die Planer-Seite
 wird bei einem Wechsel der Account-Identität neu aufgebaut; der lokale
-Wochen-Cache wird bei einer Antwort eines anderen Accounts verworfen. Es gibt
-keine browserlokale Ablage offener Entwürfe, die einem anderen Konto angezeigt
-werden könnte.
+Wochen-Cache wird bei einer Antwort eines anderen Accounts verworfen.
+Formularentwürfe liegen seit P24 in einer browserlokalen Ablage, deren
+Schlüssel und Datensatz Account und Athlet enthalten. Beim Öffnen werden
+fremde Einträge ignoriert; wiederhergestellt wird nur nach ausdrücklicher
+Entscheidung. Ein Entwurf ist kein Remote-Vorgang und wird nie automatisch
+geschrieben.
 
 ## 6. Beziehungen
 

@@ -286,6 +286,7 @@ export function Today({ data }: { data: Overview }) {
         <TrainingCard
           sessions={data.sessions}
           unplanned={data.unplanned}
+          planSource={data.today.plan_source}
           onOpen={setOpenSession}
           onOpenUnit={setOpenUnit}
         />
@@ -320,11 +321,13 @@ function sessionMeta(session: SessionRow): string {
 function TrainingCard({
   sessions,
   unplanned,
+  planSource,
   onOpen,
   onOpenUnit,
 }: {
   sessions: SessionRow[];
   unplanned: UnplannedUnit[];
+  planSource: Overview["today"]["plan_source"];
   onOpen: (id: number) => void;
   onOpenUnit: (rowId: number) => void;
 }) {
@@ -334,10 +337,21 @@ function TrainingCard({
     today.reduce((sum, session) => sum + (session.minutes ?? 0), 0) +
     unplanned.reduce((sum, unit) => sum + (unit.minutes ?? 0), 0);
   const count = today.length + unplanned.length;
+  // „Nichts geplant“ ist eine Aussage über den Planungsanteil, nicht über
+  // eine fehlende oder noch nicht geladene Quelle.
+  const planKnownEmpty = planSource.complete && today.length === 0;
   const subtitle =
-    count === 0
-      ? "Nichts geplant"
-      : `${count} ${count === 1 ? "Einheit" : "Einheiten"} · ${fmtMinutes(totalMinutes)}`;
+    count > 0
+      ? `${count} ${count === 1 ? "Einheit" : "Einheiten"} · ${fmtMinutes(totalMinutes)}`
+      : planKnownEmpty
+        ? "Nichts geplant"
+        : planSource.state === "error"
+          ? "Planungen nicht verfügbar"
+          : planSource.state === "unavailable"
+            ? "Planungen für heute nicht verfügbar"
+            : planSource.state === "partial"
+              ? "Planungen nur teilweise geladen"
+              : "Planungen werden geladen";
 
   const sessionRow = (session: SessionRow) => (
     <WorkoutPreview
@@ -373,7 +387,13 @@ function TrainingCard({
   return (
     <DashboardCard as="article" className="train" title="Training" subtitle={subtitle}>
       {count > 0 && today.map(sessionRow)}
-      {count === 0 && <p className="train-empty">Für heute steht nichts im Plan.</p>}
+      {count === 0 && (
+        <p className="train-empty">
+          {planKnownEmpty
+            ? "Für heute steht nichts im Plan."
+            : "Der Planungsanteil für heute ist nicht vollständig bekannt."}
+        </p>
+      )}
       {unplanned.map(extraRow)}
 
       {tomorrow.length > 0 && (

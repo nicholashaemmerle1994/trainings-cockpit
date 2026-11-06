@@ -7,6 +7,12 @@ import { StatusBadge } from "../components/ui";
 import { UnitSheet } from "../components/UnitSheet";
 import { api } from "../api";
 import { WorkoutPreview } from "../components/WorkoutPreview";
+import {
+  clearPlannerDraft,
+  latestNewPlannerDraft,
+  plannerDraftScope,
+  type StoredPlannerDraft,
+} from "../plannerDraftStore";
 import { fmtDateLong, fmtKm, fmtMinutes, fmtNumber, fmtSpan } from "../format";
 import { usePlannerWeek, type PlannerSourceName } from "../plannerQuery";
 import { addDays, currentPlannerWeek } from "../routing";
@@ -104,6 +110,9 @@ function emptyDayText(data: PlannerWeekResponse): string {
 export function Planner({
   week,
   timeZone,
+  accountId,
+  athleteId,
+  online,
   onWeekChange,
   openPlan,
   openUnit,
@@ -111,11 +120,16 @@ export function Planner({
   onOpenUnit,
   onClosePlan,
   onCloseUnit,
+  onCloseDetails,
+  onGuardNavigation,
   revision = 0,
   onDataChanged,
 }: {
   week: string;
   timeZone: string;
+  accountId: string;
+  athleteId: string;
+  online: boolean;
   onWeekChange: (week: string) => void;
   openPlan: number | null;
   openUnit: number | null;
@@ -123,6 +137,8 @@ export function Planner({
   onOpenUnit: (rowId: number) => void;
   onClosePlan: () => void;
   onCloseUnit: () => void;
+  onCloseDetails: (week?: string) => void;
+  onGuardNavigation: (run: () => void) => boolean;
   revision?: number;
   onDataChanged?: () => void;
 }) {
@@ -132,6 +148,7 @@ export function Planner({
   const [newPlan, setNewPlan] = useState<NewPlanConfig | null>(null);
   const [operations, setOperations] = useState<PlannerOperation[]>([]);
   const [reconciling, setReconciling] = useState<string | null>(null);
+  const [recoverNew, setRecoverNew] = useState<StoredPlannerDraft | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -156,15 +173,15 @@ export function Planner({
         (item) => item.operation_id !== result.status.operation_id,
       ),
     );
-    if (result.week && result.week !== week) {
-      // Der Wochenwechsel schließt den Planbezug bereits; ein zusätzliches
-      // closePlan würde die alte Woche wieder in die Route schreiben.
-      onWeekChange(result.week);
-    } else if (openPlan != null) {
-      onClosePlan();
-    }
     setNewPlan(null);
+    // Nach bestätigtem Speichern die komplette Detailkette verlassen. Der
+    // abgeschlossene Entwurf bleibt nicht als Browser-Zurück-Ziel stehen.
+    onCloseDetails(result.week ?? week);
   };
+
+  useEffect(() => {
+    setRecoverNew(latestNewPlannerDraft(accountId, athleteId));
+  }, [accountId, athleteId, revision]);
 
   const reconcile = async (operation: PlannerOperation) => {
     setReconciling(operation.operation_id);
@@ -277,6 +294,62 @@ export function Planner({
             </p>
           )}
 
+          {!online && (
+            <p className="planner-offline" role="status">
+              Offline · bestätigter Stand vom{" "}
+              {new Date(resolved.generated_at).toLocaleString("de-AT", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}. Es wird nichts remote gespeichert.
+            </p>
+          )}
+
+          {recoverNew && openPlan == null && (
+            <section
+              className="planner-recover"
+              aria-labelledby="planner-recover-title"
+            >
+              <h2 id="planner-recover-title">Lokaler Neuentwurf gefunden</h2>
+              <p>
+                {recoverNew.new_plan?.name || "Neue Einheit"} ·{" "}
+                {recoverNew.new_plan
+                  ? fmtDateLong(recoverNew.new_plan.date)
+                  : recoverNew.date}{" "}
+                · gespeichert {new Date(recoverNew.saved_at).toLocaleString("de-AT")}
+              </p>
+              <div className="planner-recover__actions">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => {
+                    const config = recoverNew.new_plan;
+                    if (!config) return;
+                    setRecoverNew(null);
+                    setNewPlan(config);
+                  }}
+                >
+                  Entwurf öffnen
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => {
+                    clearPlannerDraft(
+                      accountId,
+                      athleteId,
+                      plannerDraftScope(null, recoverNew.new_plan?.draftId),
+                    );
+                    setRecoverNew(null);
+                  }}
+                >
+                  Verwerfen
+                </button>
+              </div>
+            </section>
+          )}
+
           <SourceNotice
             source={resolved.sources.plans}
             label="Planungen"
@@ -323,6 +396,9 @@ export function Planner({
       {openPlan != null && (
         <PlanSheet
           eventId={openPlan}
+          accountId={accountId}
+          athleteId={athleteId}
+          online={online}
           onClose={onClosePlan}
           onSaved={handleSaved}
           onPending={onDataChanged}
@@ -332,7 +408,10 @@ export function Planner({
       {newPlan != null && (
         <PlanSheet
           newPlan={newPlan}
-          onClose={() => setNewPlan(null)}
+          accountId={accountId}
+          athleteId={athleteId}
+          online={online}
+          onClose={() => onGuardNavigation(() => setNewPlan(null))}
           onSaved={handleSaved}
           onPending={onDataChanged}
           revision={revision}

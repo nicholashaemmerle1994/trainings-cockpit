@@ -3946,3 +3946,178 @@ button.plan-node:focus-visible {
   background: var(--raised);
   color: var(--text-3);
 }
+
+/* ------------------------------------------- Navigation, Entwurf, Fehler (P24) */
+
+.banner--offline {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--text-primary);
+}
+
+.banner--offline strong {
+  color: var(--warning);
+}
+
+.guard-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  background: var(--backdrop);
+}
+
+.guard-dialog {
+  width: min(440px, 100%);
+  padding: var(--space-6);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--bg-surface);
+}
+
+.guard-dialog h2 {
+  margin: 0;
+  font-size: var(--text-card);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.guard-dialog p {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-label);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.guard-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.guard-dialog__discard {
+  border-color: var(--negative);
+  color: var(--negative);
+}
+
+.plan-recovery,
+.planner-recover {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-inner);
+  background: var(--bg-surface-raised);
+}
+
+.plan-recovery h2,
+.planner-recover h2 {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.plan-recovery p,
+.planner-recover p {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-label);
+  line-height: 1.45;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.plan-recovery__diff {
+  color: var(--text-muted) !important;
+}
+
+.plan-recovery__actions,
+.planner-recover__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.plan-errors {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--negative);
+  border-radius: var(--radius-inner);
+  background: var(--negative-soft);
+}
+
+.plan-errors h2 {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.plan-errors__hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-micro);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.plan-errors__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-errors__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+}
+
+.plan-errors__item:hover {
+  background: var(--bg-surface-raised);
+}
+
+.plan-errors__item strong {
+  font-size: var(--text-label);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.plan-errors__item span {
+  font-size: var(--text-micro);
+  line-height: 1.45;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.plan-errors__item:focus-visible,
+.guard-dialog button:focus-visible,
+.planner-recover button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.planner-offline {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--warning);
+  color: var(--text-secondary);
+  font-size: var(--text-micro);
+  line-height: 1.45;
+}

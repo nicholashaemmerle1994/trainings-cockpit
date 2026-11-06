@@ -2273,3 +2273,109 @@ sind nicht committet.
 ## 5. Nächstes Paket
 
 **P24 — Navigation, Wiederherstellung und Fehlerzustände vervollständigen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P24
+
+**Stand:** 06.11.2026  
+**Paket:** P24 — Navigation, Wiederherstellung und Fehlerzustände  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `b44f149`
+
+## 1. Ergebnis
+
+- **Eine Dirty-Logik für alle Wege.** Ein `NavigationGuard` wird vom offenen
+  Planentwurf registriert. Seitenleiste, Tab-Leiste, Zurück-Pfeil, Escape,
+  Browser-Zurück und interne Detailnavigation fragen dieselbe Registrierung.
+  Browser-Zurück macht den Schritt zunächst unsichtbar rückgängig und zeigt
+  den Dialog; erst „Verwerfen und verlassen“ geht ihn erneut ohne Schutz.
+  Ohne Änderungen bleibt der Weg frei.
+- **Verwerfen ohne Reständerungen.** Der lokale Reset leert Knoten, Feldpuffer,
+  Zieleditoren, Endarten, Auswahl, Aufklappzustand, Undo, Konflikt- und
+  Speichermeldungen. Ein laufender oder unklarer Speichervorgang wird nicht als
+  rückgängig dargestellt; der Dialog sagt ausdrücklich, dass der Vorgang
+  erhalten bleibt.
+- **Lokale Wiederherstellung.** Entwürfe liegen unter einem Account-/Athlet-
+  Schlüssel im Browser. Gespeichert wird entprellt, wiederhergestellt nur nach
+  einer Entscheidung zwischen „Entwurf wiederherstellen“ und „Aktuellen Stand
+  verwenden“. Fremde Account-Datensätze werden ignoriert. Für eine Neuanlage
+  erscheint nach einem Reload zusätzlich ein Einstieg „Lokaler Neuentwurf
+  gefunden“; geöffnet wird derselbe lokale Entwurf, kein Remote-Event.
+- **Offline.** Der bestätigte Datenstand wird mit Zeitstempel als offline
+  gekennzeichnet. Ein Speicherversuch ohne Verbindung endet mit einer
+  konkreten Meldung, dass nichts remote gespeichert wurde; der lokale Entwurf
+  bleibt. Es wurde keine automatische Offline-Schreibwarteschlange eingeführt.
+- **Fehler und Fokus.** Feldbefunde bleiben am Feld (`aria-invalid`,
+  `aria-describedby`). Zusätzlich listet eine Fehlerzusammenfassung die
+  betroffenen Blöcke; ein Eintrag öffnet den richtigen Block, scrollt zum Feld
+  und setzt den Fokus. Strukturelle Befunde werden auf das passende Feld
+  abgebildet.
+- **Rücknavigation.** Wochenwechsel stapeln keine Verlaufseinträge. Nach einem
+  bestätigten Speichern wird die ganze Detailkette ersetzt; der abgeschlossene
+  Editor bleibt kein Zurück-Ziel. Aktivitätsdetails und Planungen merken sich
+  Woche und Scrollposition. Direkte Aktivitätslinks (`/aktivitaet/<id>`,
+  `/activity/<id>`, `/einheit/<id>`, `/unit/<id>`) werden in den Planer
+  überführt und bleiben direkt nutzbar. Altlisten-URLs (`/woche`, `/week`,
+  `/planer/week`, Datumspfade) werden per `replaceState` kanonisiert; Zurück
+  öffnet keine entfernte Liste und erzeugt keine Schleife.
+- **Quellenzustände.** „Nichts geplant“ auf der Tageskarte hängt jetzt am
+  getrennten `plan_source` der Übersicht. „Keine Einheiten“ bleibt der
+  vollständig bekannten leeren Woche vorbehalten. Nicht verfügbare ältere
+  Aktivitäten zeigen weiterhin „—“ in den Summen und einen konkreten Hinweis,
+  nicht eine bestätigte Null.
+
+## 2. Geänderte Dateien
+
+- `web/src/navigationGuard.ts` — gemeinsame Registrierung für Dirty/Saving.
+- `web/src/plannerDraftStore.ts` — accountgebundene lokale Entwurfsablage.
+- `web/src/App.tsx` — Guard, Browser-Zurück, Offline-Banner, Scrollposition,
+  Dialog und kanonische Routen.
+- `web/src/routing.ts` — Aktivitäts-Deep-Links, Datumspfade, `routeUrl`.
+- `web/src/components/PlanSheet.tsx` — Wiederherstellung, Reset, Offline-Save,
+  Fehlerzusammenfassung und Fokus.
+- `web/src/components/PlanEditor.tsx` — Feldanker, Savebar-Status, ehrlicher
+  Offline-Hinweis.
+- `web/src/pages/Planner.tsx` — Detailkette nach Save, Offline-Hinweis,
+  Neuentwurf-Wiederherstellung.
+- `web/src/pages/Today.tsx` — „Nichts geplant“ nur bei bekanntem Plananteil.
+- `web/src/types.ts`, `src/trainings_cockpit/api.py` — `today.plan_source`.
+- `tests/test_api.py` — bekannte Leere versus nicht abgedeckte Quelle.
+- `docs/trainingsplaner/SYNC.md` — browserlokale Entwürfe und Accounttrennung.
+
+## 3. Prüfung
+
+| Befehl / Prüfung | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest -q` | **374 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/api.py tests/test_api.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+| Browser 320/390/768/1440 | Kein horizontaler Überlauf in Heute, Planer, Verpflegung |
+| Browser-Zurück mit Änderungen | Dialog, „Weiterbearbeiten“ bleibt im Entwurf, „Verwerfen“ kehrt ohne Sheet zur Woche zurück |
+| Reload mit lokalem Entwurf | Dialog, Wiederherstellung mit erhaltenem Namen, kein automatischer Write |
+| Fremder Account | gespeicherter Entwurf wird weder angezeigt noch übernommen |
+| Offline-Speicherversuch | keine Erfolgsmeldung, konkreter Offline-Satz, Entwurf bleibt erhalten |
+| Fehlerzusammenfassung | Block geöffnet, erstes Feld fokussiert, `aria-invalid` am Feld |
+| Alte Liste und Deep-Link | `/woche?datum=…` → Planerwoche ohne Schleife; `/aktivitaet/2` öffnet dieselbe Aktivität im Detail |
+| Nicht abgedeckte Woche | Summen „—“ plus „Aufzeichnungen … nicht verfügbar“, kein „Keine Einheiten“ |
+| Erfolgreicher Save (Testadapter) | Detailkette geschlossen, Woche sichtbar, kein Editor im Zurück-Weg |
+
+Screenshots der Sichtprüfung liegen lokal unter `data/screens/` und sind nicht
+committet. Es gab keinen Netzwerkaufruf gegen intervals.icu oder Garmin und
+keinen Produktiv-Write.
+
+## 4. Offene Punkte
+
+- Der Produktpfad liefert weiterhin keine bestätigte Plan-/Aktivitätsbeziehung.
+  Die Kette Aktivität → „Plan ansehen“ → Aktivität ist im Routing umgesetzt und
+  wird durch die vorhandenen Routentests abgedeckt, konnte mit den
+  Vorschaudaten aber nicht mit einer echten Beziehung durchgeklickt werden.
+- Die Wiederherstellung nutzt `localStorage`. Bei vollem oder gesperrtem
+  Speicher bleibt der Editor nutzbar; dann existiert kein Wiederanlauf nach
+  einem harten Reload. Das ist eine bewusste Begrenzung, keine stille
+  Erfolgsbehauptung.
+- Ein echtes Notch-Gerät stand nicht zur Verfügung. Safe-Area-Regeln und
+  Tastaturverdeckung wurden im Browser mit 320 × 568 geprüft, nicht auf iOS.
+
+## 5. Nächstes Paket
+
+**P25 — Responsive Darstellung und Accessibility abnehmen.**
