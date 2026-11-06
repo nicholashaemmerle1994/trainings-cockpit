@@ -1,0 +1,59 @@
+{
+  "case": "F05",
+  "title": "Schwimmen mit Distanz und Zeitpause",
+  "kind": "planned-workout",
+  "remoteFixture": null,
+  "profileSport": "Swim",
+  "plan": {
+    "localId": "plan:f05",
+    "remoteId": "9105",
+    "externalId": "fixture:f05",
+    "name": "Achtmal 100 Meter",
+    "sport": "Swim",
+    "date": "2026-11-06",
+    "timeZone": "Europe/Vienna",
+    "editability": "full",
+    "nodes": [
+      {
+        "kind": "repeat",
+        "id": "node:f05:main",
+        "name": "Achtmal 100 m",
+        "repetitions": 8,
+        "skipFinalRecovery": false,
+        "children": [
+          {
+            "kind": "step",
+            "id": "node:f05:work",
+            "name": "100 m",
+            "role": "work",
+            "end": {"kind": "distance", "metres": 100},
+            "target": {
+              "kind": "pace",
+              "unit": "secondsPer100m",
+              "values": {"kind": "value", "value": 120}
+            }
+          },
+          {
+            "kind": "step",
+            "id": "node:f05:recovery",
+            "name": "Pause",
+            "role": "recovery",
+            "end": {"kind": "time", "seconds": 30},
+            "target": {"kind": "none"}
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "rootNodeKinds": ["repeat"],
+    "executedSteps": 16,
+    "knownDurationSeconds": 240,
+    "distanceMetres": 800,
+    "durationBasis": "mixed",
+    "paceUnit": "secondsPer100m",
+    "paceSeconds": 120,
+    "distanceStepMetres": 100,
+    "chartMode": "schematic"
+  }
+}

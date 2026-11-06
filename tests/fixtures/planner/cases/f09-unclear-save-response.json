@@ -1,0 +1,24 @@
+{
+  "case": "F09",
+  "title": "Unklare Speicherantwort",
+  "kind": "write-operation",
+  "operation": {
+    "operationId": "op:f09",
+    "draftId": "draft:f09",
+    "planLocalId": "plan:f09",
+    "externalId": "fixture:f09",
+    "intent": "create",
+    "requestReachedServer": true,
+    "responseReachedClient": false
+  },
+  "remoteBefore": [],
+  "remoteAfterCrash": [
+    {"remoteId": "9201", "externalId": "fixture:f09", "date": "2026-11-09", "sport": "Run", "name": "Neue Einheit"}
+  ],
+  "expected": {
+    "operationIdPersisted": true,
+    "resumeFindsExistingExternalId": true,
+    "remoteEventsForOperation": 1,
+    "noSecondCreate": true
+  }
+}

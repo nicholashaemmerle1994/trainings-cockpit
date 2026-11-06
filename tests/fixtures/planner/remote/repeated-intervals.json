@@ -1,0 +1,51 @@
+{
+  "fixtureVersion": 1,
+  "kind": "remote-event",
+  "case": "F02",
+  "note": "Anonymisiertes intervals.icu-Event mit einer einfachen Wiederholung. Die Schrittfolge enthält vier Belastungen und vier Erholungen.",
+  "event": {
+    "id": 9102,
+    "category": "WORKOUT",
+    "start_date_local": "2026-11-03T00:00:00",
+    "type": "Run",
+    "name": "Gemischte HF- und Pace-Intervalle",
+    "description": "- Einlaufen 10m Z2 HR\n\n4x\n- Belastung 2m 5:30-5:45/km Pace\n- Erholung 2m Z1 HR\n\n- Auslaufen 10m Z1 HR",
+    "moving_time": 2160,
+    "distance": null,
+    "icu_training_load": 55,
+    "icu_intensity": 72,
+    "external_id": "fixture:f02",
+    "workout_doc": {
+      "steps": [
+        {
+          "text": "Einlaufen",
+          "duration": 600,
+          "warmup": true,
+          "hr": {"units": "hr_zone", "value": 2}
+        },
+        {
+          "text": "Hauptteil 4x",
+          "reps": 4,
+          "steps": [
+            {
+              "text": "Belastung",
+              "duration": 120,
+              "pace": {"units": "min/km", "start": 5.5, "end": 5.75}
+            },
+            {
+              "text": "Erholung",
+              "duration": 120,
+              "hr": {"units": "hr_zone", "value": 1}
+            }
+          ]
+        },
+        {
+          "text": "Auslaufen",
+          "duration": 600,
+          "cooldown": true,
+          "hr": {"units": "hr_zone", "value": 1}
+        }
+      ]
+    }
+  }
+}

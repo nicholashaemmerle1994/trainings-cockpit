@@ -1,0 +1,44 @@
+{
+  "case": "F01",
+  "title": "Ein durchgehender Zone-2-Lauf",
+  "kind": "planned-workout",
+  "remoteFixture": "remote/simple-zone-run.json",
+  "profileSport": "Run",
+  "plan": {
+    "localId": "plan:f01",
+    "remoteId": "9101",
+    "externalId": "fixture:f01",
+    "name": "Ruhiger Dauerlauf",
+    "sport": "Run",
+    "date": "2026-11-02",
+    "timeZone": "Europe/Vienna",
+    "editability": "full",
+    "notes": "Fixture, keine Trainingsempfehlung.",
+    "nodes": [
+      {
+        "kind": "step",
+        "id": "node:f01:run",
+        "name": "Dauerlauf",
+        "role": "steady",
+        "end": {"kind": "time", "seconds": 2700},
+        "target": {
+          "kind": "zone",
+          "metric": "heartRate",
+          "zoneId": "run-hr-2",
+          "zoneSetId": "run-hr"
+        },
+        "sourceRef": "/workout_doc/steps/0"
+      }
+    ]
+  },
+  "expected": {
+    "rootNodeKinds": ["step"],
+    "executedSteps": 1,
+    "durationSeconds": 2700,
+    "distanceMetres": 0,
+    "repeatGroups": 0,
+    "targetKinds": ["zone"],
+    "zoneIds": ["run-hr-2"],
+    "unsupportedNodes": 0
+  }
+}

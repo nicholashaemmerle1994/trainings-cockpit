@@ -1,0 +1,89 @@
+{
+  "case": "F14",
+  "title": "Ältere Daten, Pagination und unvollständige Quellen",
+  "kind": "history-availability",
+  "timeZone": "Europe/Vienna",
+  "weeks": [
+    {
+      "from": "2026-08-03",
+      "to": "2026-08-09",
+      "name": "ältere Woche mit mehreren Seiten",
+      "activityPages": [
+        [
+          {"rowId": 11, "activityId": "old-1", "date": "2026-08-03", "sport": "Ride", "name": "Seite 1a"},
+          {"rowId": 12, "activityId": "old-2", "date": "2026-08-05", "sport": "Run", "name": "Seite 1b"}
+        ],
+        [
+          {"rowId": 13, "activityId": "old-3", "date": "2026-08-08", "sport": "Swim", "name": "Seite 2a"}
+        ]
+      ],
+      "activitySourceAvailable": true,
+      "activityFullyLoaded": true,
+      "planSourceAvailable": true,
+      "planFullyLoaded": true,
+      "expected": {"activityCount": 3, "state": "complete"}
+    },
+    {
+      "from": "2026-08-10",
+      "to": "2026-08-16",
+      "name": "vollständig geladene, leere Woche",
+      "activityPages": [[]],
+      "activitySourceAvailable": true,
+      "activityFullyLoaded": true,
+      "planSourceAvailable": true,
+      "planFullyLoaded": true,
+      "expected": {"activityCount": 0, "state": "empty", "allowedText": "Keine Aktivitäten"}
+    },
+    {
+      "from": "2026-08-17",
+      "to": "2026-08-23",
+      "name": "Quelle nicht verfügbar",
+      "activityPages": [],
+      "activitySourceAvailable": false,
+      "activityFullyLoaded": false,
+      "planSourceAvailable": false,
+      "planFullyLoaded": false,
+      "expected": {"activityCount": null, "state": "unavailable", "mustNotShowZero": true}
+    },
+    {
+      "from": "2026-08-24",
+      "to": "2026-08-30",
+      "name": "Pläne fehlgeschlagen, Aktivitäten erfolgreich",
+      "activityPages": [
+        [{"rowId": 14, "activityId": "partial-a", "date": "2026-08-25", "sport": "Ride", "name": "Erfolgreiche Aufzeichnung"}]
+      ],
+      "activitySourceAvailable": true,
+      "activityFullyLoaded": true,
+      "planSourceAvailable": false,
+      "planFullyLoaded": false,
+      "expected": {"activityCount": 1, "state": "partial", "planState": "failed"}
+    },
+    {
+      "from": "2026-08-31",
+      "to": "2026-09-06",
+      "name": "Aktivitäten fehlgeschlagen, Pläne erfolgreich",
+      "activityPages": [],
+      "activitySourceAvailable": false,
+      "activityFullyLoaded": false,
+      "planSourceAvailable": true,
+      "planFullyLoaded": true,
+      "plans": [
+        {"remoteId": "1401", "date": "2026-09-01", "sport": "Run", "name": "Plan sichtbar", "durationSeconds": 1800}
+      ],
+      "expected": {"activityCount": null, "state": "partial", "activityState": "failed", "planCount": 1}
+    }
+  ],
+  "staleResponse": {
+    "requestedWeek": "2026-08-03",
+    "switchedToWeek": "2026-08-10",
+    "lateResponseWeek": "2026-08-03",
+    "expected": {"currentWeekUnchanged": true, "lateResponseDiscardedOrKeyed": true}
+  },
+  "expected": {
+    "weekCount": 5,
+    "paginationCompleteWeekActivityCount": 3,
+    "emptyWeekState": "empty",
+    "unavailableWeekState": "unavailable",
+    "staleResponseKeepsCurrentWeek": true
+  }
+}

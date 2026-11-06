@@ -492,3 +492,78 @@ API-Fähigkeit.
 - [x] Alle acht PNGs und der Prototyp sind vorhanden und lesbar.
 - [x] Keine Produktcode-Änderung, keine Datenbankänderung, keine Zugangsdaten
   ausgegeben.
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P01
+
+**Stand:** 06.11.2026  
+**Paket:** P01 — Referenzfälle und Fähigkeitsmatrix anlegen  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `33e5457`  
+**Umfang:** Testdaten und Matrix. Keine Produktcode-Änderung, keine
+Datenbankänderung, kein Netzwerkaufruf.
+
+## 1. Ergebnis
+
+- F01–F15 liegen als fachliche JSON-Fixtures in
+  `tests/fixtures/planner/cases/`. Jeder Fall trägt seine Erwartung
+  ausdrücklich; die Tests summieren die Werte nicht aus zufälligen
+  Nutzertrainings.
+- Vier anonymisierte Remote-Beispiele liegen in
+  `tests/fixtures/planner/remote/`: einfache Zone-2-Einheit, Wiederholung,
+  Distanzabschnitt mit zusätzlicher geschätzter Dauer und ein Import mit
+  unbekanntem Inhalt (Rampe, Trittfrequenz, Lap-Taste, Zusatzfelder).
+- `tests/fixtures/planner/profiles.json` hält Lauf-, Rad- und Schwimmprofil
+  separat. HF-, Pace- und Leistungszonen haben explizite String-IDs,
+  Referenzwerte und Grenzen; `ride-power-sweetspot` ist bewusst nichtnumerisch.
+- `tests/fixtures/planner/capability-matrix.json` und
+  `docs/trainingsplaner/FAEHIGKEITSMATRIX.md` bilden Abschnitt 8.4 mit dem
+  tatsächlichen Adapterbefund ab. Jede offene Schreibfähigkeit nennt den
+  fehlenden Nachweis.
+- Historienfälle F11–F15 sind getrennt abgebildet: Dashboard-Zeitraum versus
+  Planerwoche, bestätigte und offene Beziehung mit gleicher numerischer ID,
+  Durchführung außerhalb der Planwoche, Pagination/Quellausfall sowie
+  Aktivitätsdetails mit Krafttraining und weiteren Sportarten.
+
+## 2. Geänderte Dateien
+
+- `tests/fixtures/planner/README.md` — Format, Anonymisierung und Grenzen.
+- `tests/fixtures/planner/profiles.json` — synthetische Sportprofile.
+- `tests/fixtures/planner/cases/f01…f15-*.json` — fachliche Fälle.
+- `tests/fixtures/planner/remote/*.json` — anonymisierte Remote-Beispiele.
+- `tests/fixtures/planner/capability-matrix.json` — Matrix, maschinenlesbar.
+- `docs/trainingsplaner/FAEHIGKEITSMATRIX.md` — Matrix mit Befund und
+  fehlenden Nachweisen.
+- `tests/planner_fixtures.py` — Loader, kein Produktivpfad.
+- `tests/test_planner_fixtures.py` — Vollständigkeit, Erwartungen,
+  Anonymisierung, Profile und Matrix.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_fixtures.py -q` | **28 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check tests/test_planner_fixtures.py tests/planner_fixtures.py` | ohne Befund |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **176 passed**, 1 bestehende Starlette-Warnung; keine P01-Regression |
+
+Die Matrix behauptet keine Fähigkeit, die nur aus der öffentlichen
+Dokumentation stammt. `PUT /events/{id}` ist ausdrücklich **offen**, weil der
+vorhandene Client sie nicht implementiert; absolute bpm, Leistungszonen und
+benutzerdefinierte Zonen bleiben ohne belegten Schreibvertrag gesperrt.
+
+## 4. Offene Punkte
+
+- Die F12-Variante „mehrere Quellabbilder, bereits kanonisch zugeordnet“ ist
+  im Bestand nicht belegbar; sie bleibt Fixture-Erwartung für P02/P06 und
+  keine Behauptung über die vorhandene Datenbank.
+- Ein Remote-Beispiel für F05 (Schwimmen) fehlt bewusst; der Fall ist
+  fachlich beschrieben, nicht als Adapterbeleg ausgegeben.
+- Ob intervals.icu `workout_doc` jemals als Schreibfeld akzeptiert, ist nicht
+  geprüft. Der Plan behandelt es als Lesemodell.
+
+## 5. Nächstes Paket
+
+**P02 — Fachmodell und Identitäten ergänzen.** Das Modell muss F01–F07 ohne
+UI und Netzwerk darstellen, unbekannte Knoten erhalten, Plan- und
+Aktivitätsidentitäten trennen und den Schreibkoordinator auf geplante
+Entwürfe begrenzen.

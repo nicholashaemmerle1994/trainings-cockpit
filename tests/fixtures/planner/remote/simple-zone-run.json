@@ -1,0 +1,28 @@
+{
+  "fixtureVersion": 1,
+  "kind": "remote-event",
+  "case": "F01",
+  "note": "Anonymisiertes intervals.icu-Event. IDs, Name und Werte sind erfunden.",
+  "event": {
+    "id": 9101,
+    "category": "WORKOUT",
+    "start_date_local": "2026-11-02T00:00:00",
+    "type": "Run",
+    "name": "Ruhiger Dauerlauf",
+    "description": "- Dauerlauf 45m Z2 HR",
+    "moving_time": 2700,
+    "distance": null,
+    "icu_training_load": 42,
+    "icu_intensity": 68,
+    "external_id": "fixture:f01",
+    "workout_doc": {
+      "steps": [
+        {
+          "text": "Dauerlauf",
+          "duration": 2700,
+          "hr": {"units": "hr_zone", "value": 2}
+        }
+      ]
+    }
+  }
+}

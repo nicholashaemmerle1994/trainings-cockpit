@@ -1,0 +1,83 @@
+{
+  "case": "F06",
+  "title": "Leerer und tatsächlich leer ausgeführter Aufbau",
+  "kind": "planned-workout-set",
+  "remoteFixture": null,
+  "profileSport": "Run",
+  "plans": [
+    {
+      "name": "keine Wurzelbausteine",
+      "plan": {
+        "localId": "plan:f06:empty",
+        "remoteId": "9106",
+        "externalId": "fixture:f06:empty",
+        "name": "Leerer Aufbau",
+        "sport": "Run",
+        "date": "2026-11-07",
+        "timeZone": "Europe/Vienna",
+        "editability": "full",
+        "nodes": []
+      }
+    },
+    {
+      "name": "Wiederholungsgruppe ohne Kinder",
+      "plan": {
+        "localId": "plan:f06:empty-repeat",
+        "remoteId": "9107",
+        "externalId": "fixture:f06:empty-repeat",
+        "name": "Leere Gruppe",
+        "sport": "Run",
+        "date": "2026-11-07",
+        "timeZone": "Europe/Vienna",
+        "editability": "full",
+        "nodes": [
+          {
+            "kind": "repeat",
+            "id": "node:f06:empty-repeat",
+            "name": "Leere Gruppe",
+            "repetitions": 3,
+            "skipFinalRecovery": false,
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "nur letzte Erholung, die ausgelassen wird",
+      "plan": {
+        "localId": "plan:f06:skipped-only",
+        "remoteId": "9108",
+        "externalId": "fixture:f06:skipped-only",
+        "name": "Nur ausgelassene Erholung",
+        "sport": "Run",
+        "date": "2026-11-07",
+        "timeZone": "Europe/Vienna",
+        "editability": "full",
+        "nodes": [
+          {
+            "kind": "repeat",
+            "id": "node:f06:skipped-only",
+            "name": "Nur Erholung",
+            "repetitions": 2,
+            "skipFinalRecovery": true,
+            "children": [
+              {
+                "kind": "step",
+                "id": "node:f06:recovery",
+                "name": "Erholung",
+                "role": "recovery",
+                "end": {"kind": "time", "seconds": 30},
+                "target": {"kind": "none"}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "expected": {
+    "executedStepsPerPlan": [0, 0, 0],
+    "structuralLeavesPerPlan": [0, 0, 1],
+    "savingMustBeRejectedPerPlan": [true, true, true]
+  }
+}

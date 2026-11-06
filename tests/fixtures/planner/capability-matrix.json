@@ -1,0 +1,172 @@
+{
+  "fixtureVersion": 1,
+  "kind": "capability-matrix",
+  "observedAt": "2026-11-06",
+  "statusValues": ["belegt", "offen", "nicht unterstützt"],
+  "adapterFindings": [
+    {
+      "id": "read-event",
+      "finding": "IntervalsClient.events() liest GET /athlete/{id}/events; der Sync schreibt das vollständige Roh-JSON in event.raw.",
+      "evidence": ["src/trainings_cockpit/sources/intervals.py:161-176", "src/trainings_cockpit/sync.py:44-45", "src/trainings_cockpit/db.py:168-181"],
+      "status": "belegt"
+    },
+    {
+      "id": "read-workout-doc",
+      "finding": "plan.parse_workout() liest workout_doc.steps, klappt Wiederholungen auf und liest je Schritt priorisiert Leistung, HF oder Pace. Es erhält nur ein Ziel, keine Ende-Bedingung als Typ und kappt Tiefe 4 sowie Wiederholungen bei 30.",
+      "evidence": ["src/trainings_cockpit/plan.py:173-261", "src/trainings_cockpit/plan.py:281-359"],
+      "status": "offen"
+    },
+    {
+      "id": "write-no-product-path",
+      "finding": "Es gibt keinen Produkt-Schreibweg für Planungen: keinen API-Mutationsendpunkt, keinen Serializer, kein gezieltes PUT-Update und keine Konflikterkennung. Der CLI-Test tc push-test schreibt über bulk upsert mit external_id, ist aber kein Planer-Speicherweg.",
+      "evidence": ["src/trainings_cockpit/sources/intervals.py:198-219", "src/trainings_cockpit/cli.py:404-448", "docs/training-planner-progress.md:75-100"],
+      "status": "offen"
+    },
+    {
+      "id": "write-targeted-update",
+      "finding": "PUT /athlete/{id}/events/{eventId} ist in der öffentlichen Dokumentation beschrieben, im vorhandenen Client aber nicht implementiert und nicht getestet.",
+      "evidence": ["src/trainings_cockpit/sources/intervals.py:176-219"],
+      "status": "offen"
+    },
+    {
+      "id": "relationship",
+      "finding": "Es gibt keine explizite Plan-/Aktivitätsbeziehung im Schema. plan.matches() ist eine Heuristik aus Tag, Sportfamilie und nächster Dauer; sie bestätigt keinen Abschluss und keine datumsübergreifende Durchführung.",
+      "evidence": ["src/trainings_cockpit/plan.py:467-521", "docs/training-planner-progress.md:255-300"],
+      "status": "offen"
+    },
+    {
+      "id": "canonical-activity",
+      "finding": "Dedupe entfernt die Verliererzeile; eine dauerhafte kanonische Zuordnung mehrerer Quell-IDs existiert nicht. Deshalb ist die F12-Variante mit zwei Quellabbildern im Bestand derzeit nicht belegbar.",
+      "evidence": ["src/trainings_cockpit/dedupe.py:27-163", "src/trainings_cockpit/sync.py:65-76"],
+      "status": "offen"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "time",
+      "label": "Zeitabschnitte",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Kein gezieltes Event-Update und kein Serializer-Rundlauf für Dauer bis in die Remote-Darstellung. Die vorhandene Anzeige summiert nur duration; P17 muss den Schreibpayload und das Rücklesen belegen."
+    },
+    {
+      "id": "distance",
+      "label": "Distanzabschnitte",
+      "read": "belegt",
+      "display": "offen",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Kein Beleg, dass eine Meterangabe als Distanz geschrieben und als Distanz zurückgelesen wird; die vorhandene Diagrammachse ist zeitbasiert. Meter/Minuten-Verwechslung ist nicht durch einen Vertragstest abgesichert."
+    },
+    {
+      "id": "simple-repeat",
+      "label": "Einfache Wiederholungen",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Kein Rundlauf, der nach dem Schreiben dieselbe Anzahl, Reihenfolge und Gruppensemantik bestätigt. Der vorhandene Parser klappt Wiederholungen nur lesend auf."
+    },
+    {
+      "id": "hr-standard-zone",
+      "label": "HF-Standardzonen",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Kein Schreibbeleg für eine Zonenreferenz mit Zonenmodell; der vorhandene Pfad übersetzt Zonen nur lesend in bpm."
+    },
+    {
+      "id": "absolute-pace",
+      "label": "Absolute Pace und Pacebereich",
+      "read": "belegt",
+      "display": "offen",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Keine explizite Einheit beim Schreiben (/km versus /100m) und keine Anzeige, die Sekunden pro 100 m von Sekunden pro Kilometer unterscheidet."
+    },
+    {
+      "id": "watts",
+      "label": "Watt und Wattbereich",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Kein Schreib- und Rücklesebeleg für einen Wattbereich, insbesondere nicht für die gültige Vorgabe 0 W."
+    },
+    {
+      "id": "percent-ftp",
+      "label": "% FTP",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Kein Beleg, dass die relative Semantik beim Schreiben erhalten bleibt; die vorhandene Anzeige löst sie nur optional in Watt auf."
+    },
+    {
+      "id": "power-zones",
+      "label": "Leistungszonen",
+      "read": "offen",
+      "display": "offen",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Der vorhandene Parser behandelt Leistung nur als start/end; ein Leistungszonen-Ziel mit String-ID und Zonenmodell ist nicht belegt. Freischaltung erst nach Profil- und Serializer-Nachweis."
+    },
+    {
+      "id": "absolute-bpm",
+      "label": "Absolute bpm-Werte",
+      "read": "offen",
+      "display": "offen",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Für absolute bpm-Ziele liegt kein ausreichend eindeutiger aktueller Schreibbeleg vor; der vorhandene Parser deutet hr.start/end ohne Zonenkennung als Prozent. Keine Textsyntax erfinden."
+    },
+    {
+      "id": "custom-zones",
+      "label": "Benutzerdefinierte Zonen",
+      "read": "offen",
+      "display": "offen",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Zonen werden im vorhandenen Parser als Ganzzahl gelesen; nichtnumerische String-IDs und das zugehörige Zonenmodell sind nicht abgebildet. Neue Eingabe erst nach vollständig geprüfter Unterstützung."
+    },
+    {
+      "id": "multiple-targets",
+      "label": "Mehrere Ziele in einem Schritt",
+      "read": "nicht unterstützt",
+      "display": "nicht unterstützt",
+      "edit": "offen",
+      "write": "nicht unterstützt",
+      "missingProof": "Der vorhandene Parser wählt genau ein Ziel in der Reihenfolge Leistung, HF, Pace. Import bleibt bis P04 nur im Rohsnapshot erhalten; Strukturbearbeitung muss gesperrt bleiben, solange kein sicherer Export belegt ist."
+    },
+    {
+      "id": "ramps-lap-special",
+      "label": "Rampen, Lap-Taste, Spezialschritte",
+      "read": "nicht unterstützt",
+      "display": "nicht unterstützt",
+      "edit": "offen",
+      "write": "nicht unterstützt",
+      "missingProof": "Der vorhandene Lesezugriff ignoriert Rampe, Lap-Taste und Spezialfelder. P04 muss sie als unbekannte Knoten mit Quellreferenz erhalten; keine verlustbehaftete Vereinfachung."
+    },
+    {
+      "id": "nested-repeats",
+      "label": "Verschachtelte Wiederholungen",
+      "read": "offen",
+      "display": "offen",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Der Parser rekursiert zwar, kappt aber Tiefe 4 und Wiederholungen bei 30 still. Ein Schreibbeleg für verschachtelte Gruppen fehlt; aus rekursiven Lesefeldern darf keine Textgrammatik abgeleitet werden."
+    },
+    {
+      "id": "global-target-priority",
+      "label": "Globale Zielpriorität",
+      "read": "offen",
+      "display": "offen",
+      "edit": "offen",
+      "write": "offen",
+      "missingProof": "Weder das Lesen noch das Schreiben eines Workout-weiten Ziel-/Prioritätsfelds ist im vorhandenen Code belegt. Der konkrete Auto-/Prioritätsvertrag muss vor gemischten Neuanlagen geprüft werden."
+    }
+  ]
+}

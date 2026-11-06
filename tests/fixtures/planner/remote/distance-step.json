@@ -1,0 +1,39 @@
+{
+  "fixtureVersion": 1,
+  "kind": "remote-event",
+  "case": "F04",
+  "note": "Anonymisiertes Distanz-Event. Die Quelle nennt zusätzlich eine berechnete Dauer; die Ende-Bedingung bleibt die Distanz.",
+  "event": {
+    "id": 9104,
+    "category": "WORKOUT",
+    "start_date_local": "2026-11-05T00:00:00",
+    "type": "Run",
+    "name": "Bahnintervalle mit Distanz",
+    "description": "- 10m Einlaufen\n\n4x\n- 1000mtr 5:30/km Pace\n- 2m Erholung\n\n- 10m Auslaufen",
+    "moving_time": 1680,
+    "distance": 4000,
+    "icu_training_load": 61,
+    "icu_intensity": 74,
+    "external_id": "fixture:f04",
+    "workout_doc": {
+      "steps": [
+        {"text": "Einlaufen", "duration": 600, "warmup": true},
+        {
+          "text": "Hauptteil 4x",
+          "reps": 4,
+          "steps": [
+            {
+              "text": "Belastung",
+              "distance": 1000,
+              "duration": 348,
+              "duration_source": "estimated",
+              "pace": {"units": "min/km", "start": 5.5, "end": 5.5}
+            },
+            {"text": "Erholung", "duration": 120}
+          ]
+        },
+        {"text": "Auslaufen", "duration": 600, "cooldown": true}
+      ]
+    }
+  }
+}
