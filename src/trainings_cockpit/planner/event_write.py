@@ -375,6 +375,22 @@ class EventWriteService:
             raw = self._gateway.read_event(remote_id)
         except BaseException as exc:  # noqa: BLE001
             classified = classify_exception(exc)
+            if (
+                classified.state is SaveState.FAILED
+                and classified.error is SaveErrorKind.NOT_FOUND
+            ):
+                # Die adressierte Einheit ist bei der Quelle verschwunden. Der
+                # Vorgang kann nie mehr bestätigt werden; ihn offen zu lassen
+                # würde die Liste der Speichervorgänge dauerhaft füllen.
+                return WriteResult(
+                    SaveState.FAILED,
+                    "Die Einheit existiert in intervals.icu nicht mehr. "
+                    "Der Vorgang ist damit erledigt; es wird nichts neu angelegt.",
+                    remote_id=remote_id,
+                    external_id=snapshot.external_id,
+                    error=SaveErrorKind.NOT_FOUND,
+                    conflict=classified.conflict,
+                )
             return WriteResult(
                 SaveState.UNKNOWN,
                 "Der offene Vorgang konnte noch nicht abgeglichen werden.",
@@ -520,6 +536,33 @@ class EventWriteService:
                 error=SaveErrorKind.RECONCILIATION,
                 reconciliation_required=True,
             )
+
+        # Kennt der Vorgang bereits eine Remote-ID aus der Create-Antwort, ist
+        # das der direkteste Leseanker. Fehlt das Event, ist die Neuanlage
+        # endgültig gescheitert; die externe Suche bleibt der zweite Weg.
+        attempted_id = str(snapshot.remote_id) if snapshot.remote_id is not None else None
+        attempted_raw: Mapping[str, Any] | None = None
+        attempted_missing = False
+        if attempted_id is not None:
+            try:
+                raw = self._gateway.read_event(attempted_id)
+            except BaseException as exc:  # noqa: BLE001
+                if getattr(exc, "status_code", None) == 404:
+                    attempted_missing = True
+                else:
+                    classified = classify_exception(exc)
+                    return WriteResult(
+                        SaveState.UNKNOWN,
+                        "Der offene Vorgang konnte noch nicht gelesen werden.",
+                        remote_id=attempted_id,
+                        external_id=external_id,
+                        error=classified.error or SaveErrorKind.RECONCILIATION,
+                        reconciliation_required=True,
+                    )
+            else:
+                if isinstance(raw, Mapping):
+                    attempted_raw = raw
+
         try:
             matches = list(find(external_id, str(snapshot.intended.date)))
         except BaseException as exc:  # noqa: BLE001
@@ -527,11 +570,35 @@ class EventWriteService:
             return WriteResult(
                 SaveState.UNKNOWN,
                 "Die lesende Zuordnung ist noch nicht möglich.",
+                remote_id=attempted_id,
                 external_id=external_id,
                 error=classified.error or SaveErrorKind.RECONCILIATION,
                 reconciliation_required=True,
             )
         if not matches:
+            if attempted_raw is not None:
+                # Die externe Suche findet nichts, die bekannte Remote-ID
+                # liefert aber ein Event: Es gehört zu dieser Anlage, nur
+                # trägt es (etwa aus einem älteren Fehler) keine passende
+                # externe Identität. Der direkte Read entscheidet.
+                return self._confirm(
+                    snapshot,
+                    attempted_raw,
+                    attempted_id,
+                    expected_external_id=None,
+                )
+            if attempted_missing:
+                # Die Anlage hat eine Remote-ID erhalten, das Event ist aber
+                # nicht mehr vorhanden. Es gibt nichts zu löschen und keinen
+                # Grund, den Vorgang dauerhaft offen zu halten.
+                return WriteResult(
+                    SaveState.FAILED,
+                    "Die Neuanlage ist in intervals.icu nicht vorhanden. "
+                    "Der Vorgang wird verworfen; es wird nichts neu angelegt.",
+                    remote_id=attempted_id,
+                    external_id=external_id,
+                    error=SaveErrorKind.NOT_FOUND,
+                )
             return WriteResult(
                 SaveState.UNKNOWN,
                 "Es wurde noch kein passendes Remote-Event gefunden. "

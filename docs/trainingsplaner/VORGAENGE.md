@@ -40,9 +40,13 @@ kein zweiter Write ausgelöst.
 Nach einem Reload findet `SaveCoordinator.restore_open()` die offenen Vorgänge
 über Account und Athlet wieder. `reconcile()` liest bei einem Update dieselbe
 Remote-ID, bei einer Neuanlage ausschließlich über die externe Identität und den
-geplanten Tag. Ein bestätigter Treffer übernimmt die Remote-ID; kein Treffer
-bleibt offen; mehrere Treffer werden Konflikt. Es gibt keinen automatischen
-Retry.
+geplanten Tag. Kennt die Neuanlage aus der Create-Antwort bereits eine
+Remote-ID, wird zusätzlich genau diese ID gelesen; ein 404 dieser ID ohne
+externen Treffer beendet den Vorgang als `failed` (`not_found`), weil die
+Anlage nachweislich nicht mehr existiert. Ein bestätigter Treffer übernimmt die
+Remote-ID; kein Treffer ohne bekannte Remote-ID bleibt offen; mehrere Treffer
+werden Konflikt. Ein Update auf eine verschwundene Remote-ID endet ebenfalls als
+`failed`. Es gibt keinen automatischen Retry.
 
 ## 3. Aufbewahrung
 

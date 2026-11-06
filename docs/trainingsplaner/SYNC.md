@@ -83,7 +83,8 @@ ohne die Aktivitätswoche umzuschreiben.
 - `GET /api/planner/plan/{event_id}/remote` — aktuelle Remoteversion lesen und
   als bestätigten Lese-Datenstand einsortieren (kein Event-Write).
 - `GET /api/planner/operations` / `POST …/reconcile` — offene Vorgänge und
-  lesender Abgleich (P22).
+  lesender Abgleich (P22). Ein 404 der bekannten Remote-ID beendet den Vorgang
+  als `failed`, statt ihn dauerhaft `unknown` zu lassen (D-86).
 
 Tests ersetzen die Client-Brücke durch kontrollierte Adapter; der Testlauf
 schreibt nicht gegen intervals.icu oder Garmin.

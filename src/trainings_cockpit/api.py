@@ -50,7 +50,7 @@ from .planner.operations import (
     plan_to_json,
     retention_cutoff,
 )
-from .planner.save import SaveCoordinator, SaveOutcome, SaveState
+from .planner.save import SaveCoordinator, SaveErrorKind, SaveOutcome, SaveState
 from .planner.service import (
     event_delete_service,
     event_read_service,
@@ -559,6 +559,7 @@ def planner_reconcile(operation_id: str) -> dict[str, Any]:
         # direkten Save in den vorhandenen lokalen Bestand. Sonst würde die
         # Planerwoche den gerade bestätigten Create nicht zeigen.
         _persist_confirmed(conn, outcome)
+        _remove_missing_event(conn, outcome)
         confirmed = (
             plan_to_json(outcome.confirmed)
             if outcome.confirmed is not None
@@ -617,6 +618,25 @@ def _persist_confirmed(conn: Any, outcome: SaveOutcome) -> None:
     if outcome.status.state is not SaveState.SAVED or outcome.remote_raw is None:
         return
     merge_confirmed_event(conn, outcome.remote_raw)
+
+
+def _remove_missing_event(conn: Any, outcome: SaveOutcome) -> None:
+    """Eine lokal übrig gebliebene Zeile zu einem verschwundenen Event räumen.
+
+    Meldet die Quelle 404, ist der lokale Eintrag nachweislich tot. Er darf
+    nicht als Karteileiche im Planer stehen bleiben, auch wenn der Vorgang
+    selbst als endgültig gescheitert abgeschlossen wird.
+    """
+    if outcome.status.error is not SaveErrorKind.NOT_FOUND:
+        return
+    snapshot = outcome.snapshot
+    if snapshot is None or snapshot.remote_id is None:
+        return
+    try:
+        event_id = int(str(snapshot.remote_id))
+    except (TypeError, ValueError):
+        return
+    db.delete_event(conn, event_id)
 
 
 @app.post("/api/planner/plan/{event_id}/save")
