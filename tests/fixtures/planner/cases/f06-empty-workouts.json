@@ -58,7 +58,7 @@
             "kind": "repeat",
             "id": "node:f06:skipped-only",
             "name": "Nur Erholung",
-            "repetitions": 2,
+            "repetitions": 1,
             "skipFinalRecovery": true,
             "children": [
               {

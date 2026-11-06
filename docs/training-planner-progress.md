@@ -567,3 +567,99 @@ benutzerdefinierte Zonen bleiben ohne belegten Schreibvertrag gesperrt.
 UI und Netzwerk darstellen, unbekannte Knoten erhalten, Plan- und
 Aktivitätsidentitäten trennen und den Schreibkoordinator auf geplante
 Entwürfe begrenzen.
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P02
+
+**Stand:** 06.11.2026  
+**Paket:** P02 — Fachmodell und Identitäten ergänzen  
+**Basis:** Branch `feature/trainingsplaner`, HEAD `d5c3c8c`  
+**Umfang:** Neues UI-unabhängiges Modellpaket `trainings_cockpit.planner`.
+Keine Datenbankmigration, kein API-Endpunkt, kein Netzwerkaufruf, keine
+Produktivdaten.
+
+## 1. Ergebnis
+
+- `identities.py` trennt `PlanId`, `RemoteEventId`, `ActivityId`, `DraftId`,
+  `OperationId`, `RelationshipId` und `NodeId` als eigene Typen. `PlanReference`
+  und `ActivityReference` tragen Account und Athlet; gleiche numerische IDs
+  erzeugen verschiedene Cache-/Listenschlüssel.
+- `model.py` bildet den Aufbau aus Abschnitt 4.2 ab: Zeit in Sekunden, Distanz
+  in Metern, Ziele mit expliziter Einheit, Zonen als String-ID samt Zonenmodell,
+  Rollen, Wiederholungen, unbekannte Knoten mit Quellreferenz. `0 W` bleibt
+  eine gültige Vorgabe, ein Distanzabschnitt bleibt `DistanceEnd`.
+- `Editability` kennt `full`, `metadataOnly`, `readOnly`; eingeschränkte
+  Planungen brauchen einen konkreten Grund. `RestrictionCode` benennt
+  unbekannten Inhalt, mehrere Ziele, Spezialschritte, fehlende Rechte.
+- `SourceSnapshot` erhält den vollständigen Remote-Inhalt und den
+  Workout-Text; `content_hash()` ist stabil. `WorkoutDraft` trennt Basis,
+  Basissnapshot, aktuellen Stand, Feldpuffer, Auswahl und lokale Revision.
+- `projections.py` ergänzt `TrainingRange` und die vier typisierten
+  Listeneinträge `planned`, `recorded`, `linked`, `completionReference`.
+  `completionReference` trägt keine Ist-Kennzahlen und keine Dauer.
+  `TrainingRelationship` trennt Beziehung und bestätigten Abschluss.
+- `write.py` zieht die Grenze im Typsystem (`WorkoutDraft`) **und** zur
+  Laufzeit (`require_planned_draft` / `WriteCoordinator`). Eine
+  `ActivityReference`, ein Dict oder ein blankes `PlannedWorkout` wird
+  abgewiesen, bevor ein Writer aufgerufen wird.
+- Das vorhandene Aktivitätsmodell in `db.py`/`metrics.py` bleibt unverändert.
+  Der F15-Test liest ein Krafttraining weiterhin über `db.training_between`
+  und `metrics.unit_payload`.
+
+## 2. Geänderte Dateien
+
+- `src/trainings_cockpit/planner/__init__.py` — öffentliche Exporte.
+- `src/trainings_cockpit/planner/primitives.py` — lokale Datums-, Zeit- und
+  Zeitzonenvalidierung.
+- `src/trainings_cockpit/planner/identities.py` — typisierte IDs und
+  Referenzen.
+- `src/trainings_cockpit/planner/model.py` — Planungsmodell, Snapshot,
+  Feldpuffer, Entwurf, Verschieben.
+- `src/trainings_cockpit/planner/projections.py` — `TrainingRange`,
+  Listeneinträge, Beziehung.
+- `src/trainings_cockpit/planner/write.py` — Schreibgrenze.
+- `tests/planner_fixtures.py` — baut P02-Modelle aus den P01-Fixtures.
+- `tests/test_planner_model.py` — F01–F07, F12/F13, Identitäten, Verschieben,
+  Feldpuffer und Schreibgrenze.
+- `tests/fixtures/planner/cases/f06-empty-workouts.json` — Wiederholung des
+  Nur-Erholungs-Falls auf 1 gesetzt, damit der Fall wie spezifiziert **null**
+  ausgeführte Abschnitte hat.
+- `docs/ENTSCHEIDUNGEN.md` — D-69.
+- `docs/training-planner-progress.md` — dieser Nachweis.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `UV_CACHE_DIR=.uv-cache uv run pytest tests/test_planner_model.py -q` | **19 passed** |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **195 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check src/trainings_cockpit/planner tests/planner_fixtures.py tests/test_planner_fixtures.py tests/test_planner_model.py` | ohne Befund |
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich; keine UI-Änderung |
+
+Die Modelltests brauchen weder UI noch Netzwerk. F01–F07 werden aus den
+P01-Fixtures gebaut; F12/F13 werden mit getrennten Plan- und
+Aktivitätsreferenzen geprüft. F06 wird nur **dargestellt**; die
+Speicherverweigerung selbst gehört zu P05/P17 und ist hier nicht vorweggenommen.
+
+## 4. Offene Punkte
+
+- Der Remote-Adapter fehlt weiterhin: P04 muss `workout_doc.steps` auf
+  `WorkoutNode` abbilden und die Ende-Bedingung aus dem Quellvertrag
+  feststellen.
+- Die gemeinsame Ausführungsfolge und Summenberechnung (inklusive
+  `skipFinalRecovery`) folgt in P05. Die Tests zählen F01–F06 nur lokal, um
+  die Modellvollständigkeit zu belegen.
+- Eine projektive Funktion, die aus realen P06-Daten `TrainingListEntry`s
+  erzeugt, folgt mit P06/P07. P02 liefert die Typen und die Identitätsgrenze.
+- `completionReference` wird derzeit durch den Aufrufer nur dann erzeugt, wenn
+  die Beziehung nachweislich abgeschlossen ist; die Projektionsfunktion in
+  P06 muss diese Bedingung zentral erzwingen.
+- Keine Frontend-Typen in P02: Die API-Form entsteht mit P06/P07, damit keine
+  zweite, unbenutzte Quelle der Wahrheit gepflegt wird.
+
+## 5. Nächstes Paket
+
+**P03 — Wochen- und Datumsfunktionen absichern.** Sieben lokale Tage,
+Monats-/Jahreswechsel, beide Zeitumstellungen und die Trennung von
+rollierendem Dashboard-Zeitraum und Kalenderwoche.
