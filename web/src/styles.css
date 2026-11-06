@@ -2077,14 +2077,25 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   justify-content: center;
   align-items: flex-start;
   background: var(--backdrop);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Der Rahmen steht still; nur das Blatt scrollt. Sonst lässt sich das
+     geöffnete Fenster mit der Seite schieben (TB-13). */
+  overflow: hidden;
+  overflow: clip;
+  overscroll-behavior: contain;
 }
 
 .sheet {
   width: 100%;
   max-width: 640px;
+  min-width: 0;
   min-height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
+  -webkit-overflow-scrolling: touch;
   padding: calc(10px + env(safe-area-inset-top)) var(--space-5) calc(28px + env(safe-area-inset-bottom));
   background: var(--bg);
   border-left: 1px solid var(--line);
