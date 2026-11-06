@@ -2,9 +2,10 @@
 
 Eine Verknüpfung ist eine eigene Aussage. Sie entsteht auf zwei Wegen:
 
-* **automatisch**, wenn an einem lokalen Tag in derselben Sportartfamilie
-  genau eine Planung und genau eine Aufzeichnung übrig sind. Dann ist die
-  Paarung eindeutig; alles andere bleibt getrennt.
+* **automatisch**, wenn an einem lokalen Tag dieselbe Sportart (bekannte
+  Varianten zusammengefasst) genau einmal als Planung und genau einmal als
+  Aufzeichnung vorliegt. Dann ist die Paarung eindeutig; alles andere bleibt
+  getrennt.
 * **ausdrücklich** durch den Athleten, auch wenn mehrere Kandidaten am selben
   Tag liegen oder die Sportart abweicht.
 
