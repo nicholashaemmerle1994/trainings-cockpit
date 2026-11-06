@@ -3,8 +3,18 @@ import { api } from "./api";
 import { BrandMark, DemoTag, PreviewTag } from "./components/Brand";
 import { Sidebar } from "./components/Sidebar";
 import { Fuel } from "./pages/Fuel";
+import { Planner } from "./pages/Planner";
 import { Today } from "./pages/Today";
 import { withDemoRecovery } from "./demo";
+import {
+  currentPlannerWeek,
+  mondayOf,
+  readRoute,
+  readStoredPlannerWeek,
+  routePath,
+  storePlannerWeek,
+  type RouteState,
+} from "./routing";
 import { TABS, type Tab } from "./tabs";
 import type { Overview } from "./types";
 import { isPreview } from "./variant";
@@ -16,14 +26,71 @@ function clockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
 }
 
+function canonicalRoute(route: RouteState, timeZone?: string): string | null {
+  if (route.tab === "planner") {
+    const week =
+      route.week ?? readStoredPlannerWeek() ?? currentPlannerWeek(new Date(), timeZone);
+    const monday = mondayOf(week);
+    if (route.legacy || route.week !== monday) return routePath("planner", monday);
+    return null;
+  }
+  if (route.legacy) return routePath(route.tab);
+  return null;
+}
+
 export default function App() {
-  const [tab, setTab] = useState<Tab>("today");
+  const [route, setRoute] = useState<RouteState>(() => readRoute());
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [popup, setPopup] = useState<string | null>(null);
   const [pull, setPull] = useState(0);
   const pullRef = useRef(0);
+
+  useEffect(() => {
+    const onPop = () => setRoute(readRoute());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // Altlisten-URLs werden ersetzt, nicht gestapelt: Zurück erzeugt keine
+  // Schleife und öffnet keine zweite Liste. Auch ein Tagesdatum in der Woche
+  // wird auf den Montag normalisiert.
+  useEffect(() => {
+    const target = canonicalRoute(route, data?.time_zone);
+    if (!target) return;
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current === target) return;
+    window.history.replaceState(null, "", target);
+    setRoute(readRoute());
+  }, [route, data?.time_zone]);
+
+  useEffect(() => {
+    if (route.tab === "planner" && route.week) storePlannerWeek(route.week);
+  }, [route.tab, route.week]);
+
+  const goTab = useCallback(
+    (tab: Tab) => {
+      if (tab === route.tab && tab !== "planner") return;
+      const week =
+        tab === "planner"
+          ? (route.week ??
+            readStoredPlannerWeek() ??
+            currentPlannerWeek(new Date(), data?.time_zone))
+          : undefined;
+      if (week) storePlannerWeek(week);
+      window.history.pushState(null, "", routePath(tab, week));
+      setRoute(readRoute());
+    },
+    [route.tab, route.week, data?.time_zone],
+  );
+
+  const changeWeek = useCallback((week: string) => {
+    storePlannerWeek(week);
+    // Wochenwechsel ersetzen denselben Eintrag; sie stapeln keine Zurück-Schritte.
+    window.history.replaceState(null, "", routePath("planner", week));
+    setRoute(readRoute());
+  }, []);
 
   const load = useCallback(async (): Promise<Overview | null> => {
     try {
@@ -113,12 +180,16 @@ export default function App() {
   }
 
   const pulling = pull > 0 && !syncing;
+  const plannerWeek =
+    route.week ??
+    readStoredPlannerWeek() ??
+    currentPlannerWeek(new Date(), data.time_zone);
 
   return (
     <div className="shell">
       <Sidebar
-        tab={tab}
-        onTab={setTab}
+        tab={route.tab}
+        onTab={goTab}
         athlete={data.athlete.name}
         lastSync={data.generated_at}
         onSync={() => void handleSync()}
@@ -135,8 +206,15 @@ export default function App() {
           </div>
         )}
         {error && <div className="banner">{error}</div>}
-        {tab === "today" && <Today data={data} />}
-        {tab === "fuel" && <Fuel />}
+        {route.tab === "today" && <Today data={data} />}
+        {route.tab === "planner" && (
+          <Planner
+            week={plannerWeek}
+            timeZone={data.time_zone}
+            onWeekChange={changeWeek}
+          />
+        )}
+        {route.tab === "fuel" && <Fuel />}
       </main>
 
       <nav className="tabbar">
@@ -144,9 +222,9 @@ export default function App() {
           <button
             key={key}
             type="button"
-            className={tab === key ? "active" : ""}
-            aria-current={tab === key ? "page" : undefined}
-            onClick={() => setTab(key)}
+            className={route.tab === key ? "active" : ""}
+            aria-current={route.tab === key ? "page" : undefined}
+            onClick={() => goTab(key)}
           >
             <Icon size={18} />
             <span>{label}</span>

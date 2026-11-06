@@ -2,10 +2,10 @@ import type {
   ActivitiesResponse,
   FuelPlan,
   Overview,
+  PlannerWeekResponse,
   SessionDetail,
   SyncResult,
   UnitDetail,
-  WeekResponse,
 } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -33,7 +33,10 @@ export const api = {
       `/api/activities?limit=300${sport ? `&sport=${encodeURIComponent(sport)}` : ""}`,
     ),
   session: (id: number) => request<SessionDetail>(`/api/session/${id}`),
-  week: () => request<WeekResponse>("/api/week"),
+  planner: (week?: string) =>
+    request<PlannerWeekResponse>(
+      `/api/planner${week ? `?week=${encodeURIComponent(week)}` : ""}`,
+    ),
   unit: (rowId: number) => request<UnitDetail>(`/api/unit/${rowId}`),
   fuel: (params: {
     minutes: number;

@@ -79,6 +79,7 @@ export interface Goal {
 
 export interface Overview {
   athlete: { name: string; id: string };
+  time_zone: string;
   goals: Goal[];
   generated_at: string;
   today: {
@@ -208,12 +209,131 @@ export interface WeekUnit extends Activity {
   total_min: number | null;
 }
 
-export interface WeekResponse {
+/** Zustand einer Planerquelle. „loading" entsteht nur in der Oberfläche. */
+export type PlannerSourceState =
+  | "loading"
+  | "complete"
+  | "empty"
+  | "partial"
+  | "error"
+  | "unavailable";
+
+export interface PlannerSource {
+  source: "plans" | "activities";
+  key: string;
+  state: PlannerSourceState;
+  loaded: boolean;
+  complete: boolean;
+  count: number;
+  error: string | null;
+  coverage: "covered" | "uncovered" | "unknown";
+}
+
+export interface PlannerQuery {
+  key: string;
+  plans_key: string;
+  activities_key: string;
+  dashboard_key: string;
+  projection: "week";
+}
+
+export interface PlannerPlannedValues {
+  minutes: number | null;
+  km: number | null;
+  estimated: "dauer" | "distanz" | "keine";
+  primary: "duration" | "distance" | null;
+  load: number | null;
+  seconds: number | null;
+  distance_metres: number | null;
+  known_seconds: number | null;
+  known_distance_metres: number | null;
+  has_unknown: boolean;
+}
+
+export interface PlannerActualValues {
+  minutes: number | null;
+  km: number | null;
+  load: number | null;
+  intensity?: number | null;
+  seconds: number;
+}
+
+export interface PlannerActivity extends Activity {
+  row_id: number;
+}
+
+export interface PlannerEntry {
+  kind: "planned" | "recorded" | "linked" | "completionReference";
+  key: string;
+  date: string;
+  start: string | null;
+  plan: {
+    id: number;
+    remote_id: string;
+    local_id: string;
+    reference: string;
+    date: string;
+    sport: string | null;
+    sport_label: string;
+    name: string;
+  } | null;
+  plan_id: number | null;
+  name: string;
+  sport: string | null;
+  sport_label: string;
+  planned: PlannerPlannedValues | null;
+  actual: PlannerActualValues | null;
+  /** Bei einer bestätigten Beziehung: jede Aufzeichnung bleibt erreichbar. */
+  activities?: PlannerEntry[];
+  activity?: PlannerActivity | null;
+  activity_row_id?: number;
+  activity_id?: string;
+  activity_dates?: string[];
+  compact_text?: string;
+  status: "planned" | "recorded" | "completed" | "completionReference";
+  relationship_id?: string;
+}
+
+export interface PlannerDay {
+  date: string;
+  weekday: string;
+  weekday_short: string;
+  label: string;
+  is_today: boolean;
+  entries: PlannerEntry[];
+}
+
+export interface PlannerSummaryEntry {
+  state: PlannerSourceState;
+  complete: boolean;
+  seconds: number | null;
+  load?: number | null;
+  distance_metres?: number | null;
+  count: number | null;
+  has_unknown?: boolean;
+}
+
+export interface PlannerWeekResponse {
+  week: string;
   from: string;
   to: string;
-  seconds: number;
-  load: number;
-  units: WeekUnit[];
+  time_zone: string;
+  label: string;
+  calendar_week: number;
+  today: string;
+  days: PlannerDay[];
+  entries: PlannerEntry[];
+  summary: {
+    recorded: PlannerSummaryEntry;
+    open_plan: PlannerSummaryEntry;
+  };
+  sources: {
+    plans: PlannerSource;
+    activities: PlannerSource;
+  };
+  query: PlannerQuery;
+  relationship_issues: string[];
+  generated_at: string;
 }
 
 export interface ZoneShare {

@@ -954,3 +954,115 @@ bestehenden `GET /api/week`, getrennte Quellenzustände in
 ## 5. Nächstes Paket
 
 **P07 — Bestehende Liste zum Trainingsplaner umbauen und Dashboard-Links bereinigen.**
+
+---
+
+# Trainingsplaner — Arbeitsnachweis P07
+
+**Stand:** 06.11.2026
+**Paket:** P07 — Bestehende Liste zum Trainingsplaner umbauen und Dashboard-Links bereinigen
+**Basis:** Branch `feature/trainingsplaner`, HEAD `8715f9d`
+**Umfang:** Planer-Seite und Haupttab, Wochennavigation, sieben Tagesgruppen,
+getrennte Quellenhinweise, Ist-/Plan-Zusammenfassung, lesende Detailblätter,
+alte URL-Weiterleitung; Dashboard-Karte ohne Umfang-/Einheiten-Navigation.
+
+## 1. Ergebnis
+
+- Die alte `WeekSheet`-Liste ist entfernt. Es gibt keinen zweiten rollierenden
+  Listenmodus und keinen aktiven Dashboard-Weg dorthin.
+- Der Haupttab „Planer“ öffnet `/planer?woche=JJJJ-MM-TT`; die Seite zeigt
+  **Trainingsplaner**, den vollständigen Wochenzeitraum, Kalenderwoche,
+  Montag–Sonntag und sieben aufsteigende Tagesgruppen.
+- Drei Navigationsaktionen: vorige Woche, nächste Woche, „Diese Woche“.
+  Wochenwechsel nutzen `replaceState` und stapeln keine Zurück-Schritte.
+  Die gewählte Woche bleibt über Tabwechsel und Detailblätter erhalten.
+- Jeder Tag hat eine Plus-Aktion. Bis zum Anlegepaket öffnet sie einen
+  ehrlichen Hinweis ohne Schreibzugriff; sie ist an jedem Tag vorhanden.
+- Einträge sind typisiert und stabil sortiert: Tage aufsteigend, vorhandene
+  Startzeit aufsteigend, Einträge ohne Uhrzeit danach, dann Typ und Key.
+  Gleichnamige Planungen bleiben getrennt.
+- Bestätigte Beziehungen werden über die P05-Projektion dargestellt; eine
+  Beziehung erzeugt keine zweite unmarkierte Karte und keine doppelte
+  Ist-Zeit. Ohne belegte Beziehung bleiben Plan und Aufzeichnung getrennt.
+- Leere Tage erscheinen ruhig als „Keine Einheiten“ nur dann, wenn beide
+  relevanten Quellen vollständig geladen sind. Fehler, Teilzustände und
+  fehlende Abdeckung stehen als Quellenhinweis mit gezieltem
+  Wiederholen-Knopf; erfolgreiche Daten der anderen Quelle bleiben sichtbar.
+- Zusammenfassung: **Absolviert**, **Belastung**, **Einheiten** aus den
+  eindeutigen Aufzeichnungen; darunter separat „Noch geplant: …“ mit
+  gemischten Zeit-/Distanzvorgaben und Kennzeichnung unbekannter Angaben.
+  Die Werte sind nicht mit der rollierenden Dashboard-Karte gekoppelt.
+- Während eines Wochenwechsels werden Antworten über die laufende Anfrage und
+  den Antwort-Schlüssel verworfen, wenn sie nicht zur zuletzt gewählten Woche
+  gehören. Ein kurzer lokaler Cache zeigt nur Daten derselben Woche als
+  „wird aktualisiert“.
+- Dashboard-Karte „Letzte 7 Tage“ bleibt mit Volumeninfo, Kennzahlen,
+  Wochenstreifen und rollierender Berechnung erhalten. „Umfang“ und
+  „Einheiten“ sind reine `MetricRow`-Informationen ohne Button, Link,
+  Handler, Chevron, Fokus oder Karten-Wrapper. `MetricRow` selbst kennt keine
+  Aktion mehr.
+- Alte gespeicherte URLs (`/woche`, `/week`, `?tab=woche`, Datum oder Bereich)
+  werden validiert und per `replaceState` auf `/planer` geführt: ohne
+  Datumsbezug zur aktuellen Woche, mit Einzeldatum in dessen Woche, mit
+  Bereich über das Enddatum. Ungültige Daten fallen auf die aktuelle Woche
+  zurück; es entsteht keine Zurück-Schleife.
+
+## 2. Geänderte Dateien
+
+- `web/src/pages/Planner.tsx` — Wochenplaner, Tagesgruppen, Quellenhinweise,
+  Zusammenfassung, Plus-Aktion, Lese-Detailblätter.
+- `web/src/plannerQuery.ts` — Wochenabfrage, lokaler Query-Cache,
+  Stale-Schutz und gezieltes Wiederholen je Quelle.
+- `web/src/routing.ts` — Planerroute, Altlisten-Aliase, Wochenanker,
+  `replaceState`-Konventionen, Sitzungswiederherstellung.
+- `web/src/App.tsx` — Haupttab-Navigation, Browser-Zurück, Route statt
+  Tab-State.
+- `web/src/pages/Today.tsx`, `web/src/components/ui.tsx`,
+  `web/src/styles.css` — Dashboard-Karte ohne Umfang-/Einheiten-Navigation,
+  `MetricRow` als reine Information, Planer-Gestaltung.
+- `web/src/tabs.ts`, `web/src/components/icons.tsx` — Planer-Tab und
+  Kalender-/Plus-/Weiter-Symbole.
+- `web/src/types.ts`, `web/src/api.ts` — Planer-API-Form, Entfernen des alten
+  Listen-API-Aufrufs.
+- `web/src/components/WeekSheet.tsx` — entfernt.
+
+## 3. Prüfung
+
+| Befehl | Ergebnis |
+|---|---|
+| `npm run build --prefix web` | `tsc --noEmit` und Vite-Build erfolgreich |
+| `UV_CACHE_DIR=.uv-cache uv run pytest` | **247 passed**, 1 bestehende Starlette-Warnung |
+| `UV_CACHE_DIR=.uv-cache uv run ruff check ...` (P06/P07-Dateien) | ohne Befund |
+
+**Lesende Abnahme:** Die App wurde mit einer separaten lokalen
+Vorschau-Datenbank (keine echten Quellen, keine Schreibaktion) auf
+`127.0.0.1:8020` gestartet und bei 390 × 844 sowie 1440 × 900 geprüft:
+
+- gefüllte Woche 2.–8.11.2026: sieben Tage, geplante und absolvierte Einträge,
+  leerer Donnerstag, „Heute“-Markierung am Freitag, sieben Plus-Aktionen;
+- vollständig leere Woche 10.–16.8.2026: sieben ruhige „Keine Einheiten“;
+- alte URL `/woche?datum=2026-11-03` → `/planer?woche=2026-11-02`;
+  alte Bereichs-URL → Enddatumswoche, ohne zweiten Modus;
+- Dashboard-Karte: keine `button`-, `a`- oder `role="button"`-Elemente und
+  kein Chevron in der Wochenkarte;
+- Aktivitätsdetail aus der Woche: Rückkehr bei unveränderter Scrollposition
+  (`676 → 676`), ausgewählte Woche bleibt erhalten;
+- keine Browser-Fehler in der Konsole.
+
+Screenshots liegen nur lokal unter `data/screens/` (ignoriert) und sind keine
+Produktivdaten.
+
+## 4. Offene Punkte
+
+- Die Plus-Aktion öffnet bis P10 nur einen Hinweis; der Anlege-Editor und der
+  eigentliche lokale Entwurf folgen dort.
+- Geplante Einträge öffnen vorerst das vorhandene `SessionSheet`. Die neue
+  Planungsdetailansicht, „Plan ansehen“ und das typabhängige Detailrouting
+  folgen in P08.
+- Es gibt weiterhin keine persistierte explizite Plan-/Aktivitätsbeziehung im
+  Bestand; die Anzeige kann sie darstellen, der Produktpfad liefert derzeit
+  keine. Die Heuristik `plan.matches()` wird dafür nicht verwendet.
+
+## 5. Nächstes Paket
+
+**P08 — Planungsdetails und bestehende Aktivitätsdetails verbinden.**

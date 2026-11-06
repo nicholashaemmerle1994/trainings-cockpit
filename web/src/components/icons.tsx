@@ -41,6 +41,16 @@ export function IconList({ size = 20, className }: IconProps) {
   );
 }
 
+export function IconCalendar({ size = 20, className }: IconProps) {
+  return (
+    <svg {...svgProps(size)} className={className}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M7.5 3v4M16.5 3v4M3.5 9.5h17" />
+      <path d="M8 13h2M14 13h2M8 17h2M14 17h2" />
+    </svg>
+  );
+}
+
 export function IconFuel({ size = 20, className }: IconProps) {
   return (
     <svg {...svgProps(size)} className={className}>
@@ -134,6 +144,23 @@ export function IconBack({ size = 20, className }: IconProps) {
     <svg {...svgProps(size)} className={className}>
       <path d="M19 12H5" />
       <path d="m12 19-7-7 7-7" />
+    </svg>
+  );
+}
+
+export function IconForward({ size = 20, className }: IconProps) {
+  return (
+    <svg {...svgProps(size)} className={className}>
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
+  );
+}
+
+export function IconPlus({ size = 20, className }: IconProps) {
+  return (
+    <svg {...svgProps(size)} className={className}>
+      <path d="M12 5v14M5 12h14" />
     </svg>
   );
 }

@@ -1096,30 +1096,6 @@ h2 {
   font-size: 12.5px;
 }
 
-/* Die zwei Zeilen, hinter denen eine Liste steckt: ganzflächig antippbar,
-   mindestens 44 px hoch, mit einem Pfeil als Hinweis. */
-.metric-row--button {
-  min-height: 44px;
-  align-items: center;
-  cursor: pointer;
-}
-
-.metric-row--button:hover .metric-row__label {
-  color: var(--text);
-}
-
-.metric-row--button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.metric-row__caret {
-  margin-left: 6px;
-  font-family: var(--sans);
-  font-size: 13px;
-  color: var(--text-3);
-}
-
 .plan-head {
   margin: 16px 0 4px;
   font-size: 11.5px;
@@ -2587,6 +2563,295 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   .sheet-close {
     visibility: visible;
   }
+}
+
+/* ------------------------------------------------------------- Trainingsplaner */
+
+.planner-page {
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.planner-weeknav-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.planner-weeknav {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.planner-nav-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--raised);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background-color 140ms var(--ease), color 140ms var(--ease);
+}
+
+.planner-nav-btn:hover {
+  background: var(--raised-2);
+  color: var(--text);
+}
+
+.planner-weeknav__label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  text-align: center;
+}
+
+.planner-weeknav__label strong {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.planner-weeknav__label span {
+  font-size: var(--text-micro);
+  color: var(--text-3);
+}
+
+.planner-week-current {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.planner-week-current:hover {
+  color: var(--text-primary);
+}
+
+.planner-week-current:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.planner-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.planner-summary .sheet-cells {
+  margin-top: 0;
+}
+
+.planner-summary .sheet-cell {
+  padding: var(--space-3) var(--space-4);
+}
+
+.planner-summary .sheet-cell .n {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.planner-open {
+  margin: 0;
+  padding: 0 var(--space-1);
+  font-size: var(--text-label);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.planner-open--partial {
+  color: var(--warning);
+}
+
+.planner-days {
+  display: flex;
+  flex-direction: column;
+}
+
+.planner-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+}
+
+.planner-day__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+
+.planner-day__head h2 {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+.planner-day__head h2.planner-day__today {
+  color: var(--accent-hover);
+}
+
+.planner-today-badge {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.planner-add {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 140ms var(--ease), color 140ms var(--ease);
+}
+
+.planner-add:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.planner-empty {
+  margin: 0;
+  padding: 14px var(--space-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-inner);
+  font-size: var(--text-label);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.planner-source-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-inner);
+  background: var(--bg-surface-raised);
+}
+
+.planner-source-notice p {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: var(--text-label);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.planner-source-detail {
+  color: var(--text-muted);
+}
+
+.planner-retry {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.planner-retry:hover {
+  background: var(--raised-2);
+}
+
+.planner-retry:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.planner-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-inner);
+  background: var(--bg-surface-raised);
+}
+
+.planner-state p {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: var(--text-label);
+  color: var(--negative);
+}
+
+.planner-updating {
+  margin: 0;
+  font-size: var(--text-micro);
+  color: var(--text-muted);
+}
+
+.planner-skeleton,
+.planner-skeleton-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.planner-skeleton {
+  gap: var(--space-4);
+}
+
+.planner-skeleton-day {
+  padding-top: var(--space-2);
+}
+
+.planner-note {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.planner-src {
+  margin-top: var(--space-2);
+}
+
+.planner-nav-btn:focus-visible,
+.planner-week-current:focus-visible,
+.planner-add:focus-visible,
+.planner-retry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ------------------------------------------------------------------ Bewegung */

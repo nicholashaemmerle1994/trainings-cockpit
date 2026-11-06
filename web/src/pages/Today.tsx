@@ -5,7 +5,6 @@ import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
 import { UnitSheet } from "../components/UnitSheet";
 import { VendorScore } from "../components/VendorScore";
-import { WeekSheet } from "../components/WeekSheet";
 import { WorkoutPreview } from "../components/WorkoutPreview";
 import { DashboardCard, MetricRow, StatusBadge, type BadgeTone } from "../components/ui";
 import {
@@ -90,7 +89,6 @@ function deltaTone(delta: number, higherIsBetter: boolean, suffix: string): Delt
 export function Today({ data }: { data: Overview }) {
   const { today } = data;
   const [openSession, setOpenSession] = useState<number | null>(null);
-  const [weekOpen, setWeekOpen] = useState(false);
   const [openUnit, setOpenUnit] = useState<number | null>(null);
 
   const recovery = today.recovery;
@@ -295,30 +293,15 @@ export function Today({ data }: { data: Overview }) {
         <DashboardCard as="aside" className="week" title="Letzte 7 Tage" subtitle="Umfang und Plan">
           <WeekStrip series={data.series.load} today={today.date} />
 
-          <MetricRow
-            label="Umfang"
-            value={fmtSpan(today.load.week_seconds)}
-            onClick={() => setWeekOpen(true)}
-          />
+          <MetricRow label="Umfang" value={fmtSpan(today.load.week_seconds)} />
           <MetricRow label="Belastung" value={fmtNumber(today.load.week_load)} />
-          <MetricRow
-            label="Einheiten"
-            value={today.load.week_sessions}
-            onClick={() => setWeekOpen(true)}
-          />
+          <MetricRow label="Einheiten" value={today.load.week_sessions} />
           <MetricRow label="Belastungsverhältnis" value={fmtNumber(today.load.acwr, 2)} />
         </DashboardCard>
       </section>
 
       {openSession != null && (
         <SessionSheet id={openSession} onClose={() => setOpenSession(null)} />
-      )}
-      {weekOpen && (
-        <WeekSheet
-          onOpen={setOpenUnit}
-          onClose={() => setWeekOpen(false)}
-          top={openUnit == null}
-        />
       )}
       {openUnit != null && (
         <UnitSheet rowId={openUnit} onClose={() => setOpenUnit(null)} />
