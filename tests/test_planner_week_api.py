@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -331,11 +333,14 @@ def test_aktuelles_wochenende_gilt_fuer_aufzeichnungen_als_abgedeckt(
     settings = api.get_settings()
     conn = db.connect(settings.db_path)
     db.init_db(conn)
+    # Der Test läuft am aktuellen Tag: Die Quelle endet heute, nicht an einem
+    # festen Datum. Sonst kippt die Abdeckung, sobald der Kalender weiterläuft.
+    today = datetime.now(ZoneInfo(settings.time_zone)).date().isoformat()
     db.set_setting(
         conn,
         "synced_range",
-        '{"from":"2025-11-06","to":"2026-11-06",'
-        '"activities_to":"2026-11-06","events_to":"2027-11-06"}',
+        f'{{"from":"2025-11-06","to":"{today}",'
+        f'"activities_to":"{today}","events_to":"2027-11-06"}}',
     )
     conn.close()
 
