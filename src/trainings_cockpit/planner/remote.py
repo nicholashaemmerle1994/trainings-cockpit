@@ -547,7 +547,7 @@ def _parse_target(
         return _parse_hr(target, remote_id, path, state, event, zone_sets)
     if name == "power":
         return _parse_power(target, remote_id, path, state)
-    return _parse_pace(target, remote_id, path, state)
+    return _parse_pace(target, remote_id, path, state, event)
 
 
 def _parse_hr(
@@ -624,23 +624,65 @@ def _parse_pace(
     remote_id: RemoteEventId,
     path: str,
     state: _ParseState,
+    event: Mapping[str, Any],
 ):
-    units = str(raw.get("units") or "").lower()
-    values = _value_spec(raw, path, state, factor=60.0)
+    units = str(raw.get("units") or "").strip().lower()
+    if units.startswith("secs"):
+        # intervals.icu liefert absolute Pace in Sekunden je Referenzstrecke:
+        # ``secs`` ohne Angabe, sonst ``secs/km``, ``secs/100m`` usw. Die
+        # Referenzstrecke steht entweder in der Einheit oder in den
+        # Sporteinstellungen der Quelle (Schwimmen je 100 m, sonst je km).
+        unit = _pace_seconds_unit(units, _sport(event))
+        if unit is None:
+            state.restrict(
+                RestrictionCode.UNKNOWN_CONTENT,
+                f"{path}: unbekannte Pace-Referenz in {units!r}.",
+            )
+            return UnsupportedNode(
+                id=_node_id(remote_id, path),
+                label="Unbekanntes Pace-Ziel",
+                reason=f"Pace-Einheit {units!r} ist nicht belegt.",
+                source_ref=path,
+            )
+        factor = 1.0
+    elif units in {"min/km", "min_per_km", "pace"}:
+        unit = PaceUnit.SECONDS_PER_KM
+        factor = 60.0
+    elif units in {"min/100m", "min_per_100m", "min/100", "/100m"}:
+        unit = PaceUnit.SECONDS_PER_100M
+        factor = 60.0
+    else:
+        state.restrict(
+            RestrictionCode.UNKNOWN_CONTENT,
+            f"{path}: unbekannte Pace-Einheit {units!r}.",
+        )
+        return UnsupportedNode(
+            id=_node_id(remote_id, path),
+            label="Unbekanntes Pace-Ziel",
+            reason=f"Pace-Einheit {units!r} ist nicht belegt.",
+            source_ref=path,
+        )
+    values = _value_spec(raw, path, state, factor=factor, allow_value=True)
     if values is None:
         return NoTarget()
-    if isinstance(values, UnsupportedNode):
-        return values
-    if units in {"min/km", "min_per_km", "pace"}:
-        return PaceTarget(unit=PaceUnit.SECONDS_PER_KM, values=values)
-    if units in {"min/100m", "min_per_100m", "min/100", "/100m"}:
-        return PaceTarget(unit=PaceUnit.SECONDS_PER_100M, values=values)
-    state.restrict(RestrictionCode.UNKNOWN_CONTENT, f"{path}: unbekannte Pace-Einheit {units!r}.")
-    return UnsupportedNode(
-        id=_node_id(remote_id, path),
-        label="Unbekanntes Pace-Ziel",
-        reason=f"Pace-Einheit {units!r} ist nicht belegt.",
-        source_ref=path,
+    return PaceTarget(unit=unit, values=values)
+
+
+def _pace_seconds_unit(units: str, sport: str | None) -> PaceUnit | None:
+    """Referenzstrecke einer ``secs``-Einheit als kanonische Pace-Einheit."""
+    _, slash, reference = units.partition("/")
+    if reference in {"km", "kilometer"}:
+        return PaceUnit.SECONDS_PER_KM
+    if reference in {"100m", "100"}:
+        return PaceUnit.SECONDS_PER_100M
+    if reference:
+        return None
+    # Ohne ausdrückliche Referenz gilt die Sporteinstellung von intervals:
+    # Schwimmen rechnet je 100 m, alle anderen Sportarten je Kilometer.
+    return (
+        PaceUnit.SECONDS_PER_100M
+        if _SPORT_FAMILY.get(sport or "") == "swim"
+        else PaceUnit.SECONDS_PER_KM
     )
 
 
@@ -650,19 +692,21 @@ def _value_spec(
     state: _ParseState,
     *,
     factor: float = 1.0,
+    allow_value: bool = False,
 ) -> Value | ValueRange | UnsupportedNode | None:
     start = _number(raw.get("start"))
     end = _number(raw.get("end"))
-    if start is None and end is None:
+    single = _number(raw.get("value")) if allow_value else None
+    if start is None and end is None and single is None:
         return None
     if start is not None and end is not None:
         low, high = sorted((start * factor, end * factor))
         if low != high:
             return ValueRange(low, high)
         return Value(low)
-    value = (start if start is not None else end) * factor
-    assert value is not None
-    return Value(value)
+    chosen = start if start is not None else end if end is not None else single
+    assert chosen is not None
+    return Value(chosen * factor)
 
 
 def _role(raw: Mapping[str, Any]) -> StepRole:

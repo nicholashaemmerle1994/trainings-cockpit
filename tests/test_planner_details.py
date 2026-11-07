@@ -100,6 +100,57 @@ def test_f02_hat_getrennte_hf_und_pace_spuren(client: TestClient) -> None:
     )
 
 
+def test_intervals_pace_in_sekunden_kommt_als_pace_und_zaehlt_zur_distanz(
+    client: TestClient,
+) -> None:
+    event = {
+        "id": 145278006,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-07T00:00:00",
+        "type": "Run",
+        "name": "Long Run",
+        "description": "-12km Z2 HR\n-5km 5:35-5:44 Pace\n-1km Z2 HR",
+        "workout_doc": {
+            "steps": [
+                {
+                    "distance": 12000,
+                    "duration": 4860,
+                    "duration_source": "estimated",
+                    "hr": {"units": "hr_zone", "value": 2},
+                },
+                {
+                    "distance": 5000,
+                    "duration": 1700,
+                    "duration_source": "estimated",
+                    "pace": {"units": "secs", "start": 335, "end": 344},
+                },
+                {
+                    "distance": 1000,
+                    "duration": 400,
+                    "duration_source": "estimated",
+                    "hr": {"units": "hr_zone", "value": 2},
+                },
+            ]
+        },
+    }
+    _store(client, event)
+
+    payload = client.get(f"/api/planner/plan/{event['id']}").json()
+
+    assert payload["known"]["metres"] == 18000
+    assert payload["known"]["text"] == "18 km"
+    assert payload["known"]["has_unknown"] is False
+    assert payload["rights"]["editability"] == "full"
+    assert [node["kind"] for node in payload["nodes"]] == ["step", "step", "step"]
+    pace = payload["nodes"][1]
+    assert pace["end"] == {"kind": "distance", "metres": 5000.0, "text": "5 km"}
+    assert pace["target"]["kind"] == "pace"
+    assert pace["target"]["unit"] == "secondsPerKm"
+    assert pace["target"]["text"] == "Pace 5:35–5:44 min/km"
+    assert "pace:secondsPerKm" in {track["key"] for track in payload["graph"]["tracks"]}
+
+
+
 def test_f04_und_f05_bleiben_schematisch_mit_getrennten_teilmengen(
     client: TestClient,
 ) -> None:

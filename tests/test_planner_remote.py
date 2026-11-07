@@ -33,6 +33,8 @@ from trainings_cockpit.planner import (
     ZoneTarget,
     activity_date,
     activity_reference_from_record,
+    calculate_known_totals,
+    format_totals,
     iter_nodes,
     read_remote_event,
     recorded_entry_from_record,
@@ -107,6 +109,110 @@ def test_f04_distanz_plus_geschaetzte_dauer_bleibt_distanz() -> None:
     assert isinstance(work.end, DistanceEnd)
     assert work.end.metres == 1000
     assert work.target == PaceTarget(PaceUnit.SECONDS_PER_KM, Value(330))
+
+
+def _pace_event(*steps: dict, sport: str = "Run", event_id: int = 9130) -> dict:
+    return {
+        "id": event_id,
+        "category": "WORKOUT",
+        "start_date_local": "2026-11-07T00:00:00",
+        "type": sport,
+        "name": "Long Run",
+        "description": "-12km Z2 HR\n-5km 5:35-5:44 Pace\n-1km Z2 HR",
+        "workout_doc": {"steps": list(steps)},
+    }
+
+
+def test_intervals_pace_in_sekunden_zaehlt_zur_distanz() -> None:
+    # Die echte intervals.icu-Antwort schreibt absolute Pace als Sekunden je
+    # Referenzstrecke (`secs`), nicht als Minuten mit `min/km`. Der Abschnitt
+    # bleibt eine Distanz und zählt deshalb in die Gesamtkilometer.
+    event = _pace_event(
+        {
+            "distance": 12000,
+            "duration": 4860,
+            "duration_source": "estimated",
+            "hr": {"units": "hr_zone", "value": 2},
+        },
+        {
+            "distance": 5000,
+            "duration": 1700,
+            "duration_source": "estimated",
+            "pace": {"units": "secs", "start": 335, "end": 344},
+        },
+        {
+            "distance": 1000,
+            "duration": 400,
+            "duration_source": "estimated",
+            "hr": {"units": "hr_zone", "value": 2},
+        },
+    )
+    result = read_remote_event(
+        event,
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+        zone_sets={"Run": "run-hr"},
+    )
+    plan = result.plan
+    pace_step = plan.nodes[1]
+
+    assert plan.editability is Editability.FULL
+    assert not any(isinstance(node, UnsupportedNode) for node in plan.nodes)
+    assert isinstance(pace_step, StepNode)
+    assert pace_step.end == DistanceEnd(5000)
+    assert pace_step.target == PaceTarget(
+        PaceUnit.SECONDS_PER_KM, ValueRange(335, 344)
+    )
+
+    totals = calculate_known_totals(plan)
+    assert totals.distance_metres == 18000
+    assert totals.executions == 3
+    assert totals.has_unknown is False
+    assert format_totals(totals) == "18 km"
+
+
+def test_secs_ohne_referenz_folgt_der_sportart() -> None:
+    run = read_remote_event(
+        _pace_event(
+            {"distance": 1000, "duration": 340, "pace": {"units": "secs", "value": 340}},
+            event_id=9131,
+        ),
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+    ).plan
+    swim = read_remote_event(
+        _pace_event(
+            {"distance": 400, "duration": 480, "pace": {"units": "secs", "value": 120}},
+            sport="Swim",
+            event_id=9132,
+        ),
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+    ).plan
+
+    assert run.nodes[0].target == PaceTarget(PaceUnit.SECONDS_PER_KM, Value(340))
+    assert swim.nodes[0].target == PaceTarget(PaceUnit.SECONDS_PER_100M, Value(120))
+
+
+def test_secs_mit_ausdruecklicher_referenz_gewinnt_gegen_die_sportart() -> None:
+    plan = read_remote_event(
+        _pace_event(
+            {
+                "distance": 200,
+                "duration": 240,
+                "pace": {"units": "secs/100m", "start": 118, "end": 124},
+            },
+            sport="Run",
+            event_id=9133,
+        ),
+        fetched_at=FETCHED,
+        time_zone="Europe/Vienna",
+    ).plan
+
+    assert plan.nodes[0].target == PaceTarget(
+        PaceUnit.SECONDS_PER_100M, ValueRange(118, 124)
+    )
+
 
 
 def test_distanz_mit_berechneter_dauer_ohne_quelle_bleibt_distanz() -> None:

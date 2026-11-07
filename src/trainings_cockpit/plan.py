@@ -187,7 +187,7 @@ def speeds(conn: Any, days: int = 180, today: date | None = None) -> dict[str, f
 # ------------------------------------------------------------------ Schritte
 
 
-def _target(step: dict[str, Any]) -> dict[str, Any] | None:
+def _target(step: dict[str, Any], sport: str | None = None) -> dict[str, Any] | None:
     """Ziel eines Schritts als Band: Wert, Einheit und Spanne."""
     power = step.get("power")
     if isinstance(power, dict):
@@ -210,12 +210,40 @@ def _target(step: dict[str, Any]) -> dict[str, Any] | None:
 
     pace = step.get("pace")
     if isinstance(pace, dict):
-        units = str(pace.get("units") or "").lower()
+        units = str(pace.get("units") or "").strip().lower()
         start, end = pace.get("start"), pace.get("end")
+        if start is None and end is None:
+            start = end = pace.get("value")
+        if units.startswith("secs"):
+            # intervals.icu liefert absolute Pace in Sekunden je
+            # Referenzstrecke. ``secs`` ohne Zusatz folgt der Sportart:
+            # Schwimmen je 100 m, sonst je Kilometer.
+            unit = _pace_seconds_unit(units, sport)
+            return _band(start, end, unit, None, "pace") if unit else None
         if units in {"%pace", "%"}:
             return _band(start, end, "%", None, "pace")
-        return _band(start, end, "min/km", None, "pace")
+        if units in {"min/km", "min_per_km", "pace"}:
+            return _band(start, end, "min/km", None, "pace")
+        return None
     return None
+
+
+def _pace_seconds_unit(units: str, sport: str | None) -> str | None:
+    """Einheit einer ``secs``-Pace: Sekunden je km oder je 100 m."""
+    _, slash, reference = units.partition("/")
+    if reference in {"km", "kilometer"}:
+        return "s/km"
+    if reference in {"100m", "100"}:
+        return "s/100m"
+    if reference:
+        return None
+    return "s/100m" if sport_family(sport) == "swim" else "s/km"
+
+
+def _pace_text(seconds: float) -> str:
+    total = int(round(seconds))
+    minutes, rest = divmod(total, 60)
+    return f"{minutes}:{rest:02d}"
 
 
 def _band(
@@ -249,10 +277,26 @@ def _target_text(target: dict[str, Any] | None, distance_m: float | None) -> str
             )
         elif target["unit"] == "min/km":
             parts.append(f"{target['lo']:.2f}–{target['hi']:.2f} min/km")
+        elif target["unit"] == "s/km":
+            parts.append(_pace_span(target, "min/km"))
+        elif target["unit"] == "s/100m":
+            parts.append(_pace_span(target, "/100 m"))
     return " · ".join(parts)
 
 
-def _flatten(steps: list[dict[str, Any]], out: list[dict[str, Any]], depth: int = 0) -> None:
+def _pace_span(target: dict[str, Any], suffix: str) -> str:
+    low, high = target["lo"], target["hi"]
+    if low == high:
+        return f"{_pace_text(low)} {suffix}"
+    return f"{_pace_text(low)}–{_pace_text(high)} {suffix}"
+
+
+def _flatten(
+    steps: list[dict[str, Any]],
+    out: list[dict[str, Any]],
+    depth: int = 0,
+    sport: str | None = None,
+) -> None:
     if depth > 4:
         return
     for step in steps:
@@ -261,13 +305,13 @@ def _flatten(steps: list[dict[str, Any]], out: list[dict[str, Any]], depth: int 
         if isinstance(step.get("steps"), list) and step["steps"]:
             reps = int(step.get("reps") or 1)
             for _ in range(max(1, min(reps, 30))):
-                _flatten(step["steps"], out, depth + 1)
+                _flatten(step["steps"], out, depth + 1, sport)
             continue
         duration = step.get("duration") or 0
         distance = step.get("distance") or 0
         if not duration and not distance:
             continue
-        target = _target(step)
+        target = _target(step, sport)
         out.append(
             {
                 "seconds": float(duration or 0),
@@ -324,7 +368,7 @@ def parse_workout(
         return [], None
     doc = event.get("workout_doc") or {}
     flat: list[dict[str, Any]] = []
-    _flatten(doc.get("steps") or [], flat)
+    _flatten(doc.get("steps") or [], flat, 0, sport)
     if not flat:
         return [], None
 
@@ -347,6 +391,10 @@ def parse_workout(
         unit = "bpm"
     else:
         unit = "%"
+    for step in flat:
+        # Nur Ziele derselben Achse dürfen als Band gezeichnet werden; ein
+        # Pace-Ziel in einem bpm-Diagramm hätte dort keine Skala.
+        step["axis_unit"] = unit
     bands = [s["target"] for s in flat if s["target"] and s["target"]["unit"] == unit]
     if not bands:
         return _without_work(flat), None
@@ -453,6 +501,7 @@ def planned(
             else:
                 label = "Hauptteil" if step["work"] else "Ruhig"
         target = step["target"]
+        plotted = bool(axis and target and target["unit"] == step.get("axis_unit"))
         rows.append(
             {
                 "label": label,
@@ -461,8 +510,8 @@ def planned(
                 # Die Distanz steht in der eigenen Spalte, nicht nochmal im Ziel.
                 "target": _target_text(target, None),
                 "work": step["work"],
-                "lo": target["lo"] if target else None,
-                "hi": target["hi"] if target else None,
+                "lo": target["lo"] if plotted else None,
+                "hi": target["hi"] if plotted else None,
             }
         )
 

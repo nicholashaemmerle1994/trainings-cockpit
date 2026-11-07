@@ -134,6 +134,57 @@ def test_herzfrequenzzone_wird_zur_spanne() -> None:
     assert out["steps"][0]["hi"] == 70
 
 
+def test_pace_in_sekunden_wird_zu_min_pro_km_und_zaehlt_zur_distanz() -> None:
+    event = make_event(
+        [
+            {
+                "distance": 12000,
+                "duration": 4860,
+                "hr": {"units": "hr_zone", "value": 2},
+            },
+            {
+                "distance": 5000,
+                "duration": 1700,
+                "pace": {"units": "secs", "start": 335, "end": 344},
+            },
+            {
+                "distance": 1000,
+                "duration": 400,
+                "hr": {"units": "hr_zone", "value": 2},
+            },
+        ],
+        sport="Run",
+        distance=18000.0,
+    )
+    out = plan.planned(event, SPEEDS)
+
+    assert out["km"] == 18.0
+    assert out["steps"][1]["distance_km"] == 5.0
+    assert out["steps"][1]["target"] == "5:35–5:44 min/km"
+    # Die Achse läuft in HF-Prozent; ein Pace-Band gehört nicht hinein.
+    assert out["steps"][1]["lo"] is None
+    assert out["steps"][1]["hi"] is None
+
+
+def test_pace_ohne_hf_bleibt_lesbar_ohne_gemeinsame_achse() -> None:
+    event = make_event(
+        [
+            {
+                "distance": 5000,
+                "duration": 1700,
+                "pace": {"units": "secs", "value": 335},
+            }
+        ],
+        sport="Run",
+        distance=5000.0,
+    )
+    out = plan.planned(event, SPEEDS)
+
+    assert out["axis"] is None
+    assert out["steps"][0]["target"] == "5:35 min/km"
+    assert out["km"] == 5.0
+
+
 PROFILE = {"max_hr": 190, "zones": [132, 155, 167, 174, 190], "ftp": 195, "indoor_ftp": 185}
 
 
