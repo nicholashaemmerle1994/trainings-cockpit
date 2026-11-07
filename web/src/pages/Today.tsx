@@ -5,7 +5,6 @@ import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
 import { UnitSheet } from "../components/UnitSheet";
 import { VendorScore } from "../components/VendorScore";
-import { WeekSheet } from "../components/WeekSheet";
 import { WorkoutPreview } from "../components/WorkoutPreview";
 import { DashboardCard, MetricRow, StatusBadge, type BadgeTone } from "../components/ui";
 import {
@@ -90,7 +89,6 @@ function deltaTone(delta: number, higherIsBetter: boolean, suffix: string): Delt
 export function Today({ data }: { data: Overview }) {
   const { today } = data;
   const [openSession, setOpenSession] = useState<number | null>(null);
-  const [weekOpen, setWeekOpen] = useState(false);
   const [openUnit, setOpenUnit] = useState<number | null>(null);
 
   const recovery = today.recovery;
@@ -288,6 +286,7 @@ export function Today({ data }: { data: Overview }) {
         <TrainingCard
           sessions={data.sessions}
           unplanned={data.unplanned}
+          planSource={data.today.plan_source}
           onOpen={setOpenSession}
           onOpenUnit={setOpenUnit}
         />
@@ -295,30 +294,15 @@ export function Today({ data }: { data: Overview }) {
         <DashboardCard as="aside" className="week" title="Letzte 7 Tage" subtitle="Umfang und Plan">
           <WeekStrip series={data.series.load} today={today.date} />
 
-          <MetricRow
-            label="Umfang"
-            value={fmtSpan(today.load.week_seconds)}
-            onClick={() => setWeekOpen(true)}
-          />
+          <MetricRow label="Umfang" value={fmtSpan(today.load.week_seconds)} />
           <MetricRow label="Belastung" value={fmtNumber(today.load.week_load)} />
-          <MetricRow
-            label="Einheiten"
-            value={today.load.week_sessions}
-            onClick={() => setWeekOpen(true)}
-          />
+          <MetricRow label="Einheiten" value={today.load.week_sessions} />
           <MetricRow label="Belastungsverhältnis" value={fmtNumber(today.load.acwr, 2)} />
         </DashboardCard>
       </section>
 
       {openSession != null && (
         <SessionSheet id={openSession} onClose={() => setOpenSession(null)} />
-      )}
-      {weekOpen && (
-        <WeekSheet
-          onOpen={setOpenUnit}
-          onClose={() => setWeekOpen(false)}
-          top={openUnit == null}
-        />
       )}
       {openUnit != null && (
         <UnitSheet rowId={openUnit} onClose={() => setOpenUnit(null)} />
@@ -337,11 +321,13 @@ function sessionMeta(session: SessionRow): string {
 function TrainingCard({
   sessions,
   unplanned,
+  planSource,
   onOpen,
   onOpenUnit,
 }: {
   sessions: SessionRow[];
   unplanned: UnplannedUnit[];
+  planSource: Overview["today"]["plan_source"];
   onOpen: (id: number) => void;
   onOpenUnit: (rowId: number) => void;
 }) {
@@ -351,10 +337,21 @@ function TrainingCard({
     today.reduce((sum, session) => sum + (session.minutes ?? 0), 0) +
     unplanned.reduce((sum, unit) => sum + (unit.minutes ?? 0), 0);
   const count = today.length + unplanned.length;
+  // „Nichts geplant“ ist eine Aussage über den Planungsanteil, nicht über
+  // eine fehlende oder noch nicht geladene Quelle.
+  const planKnownEmpty = planSource.complete && today.length === 0;
   const subtitle =
-    count === 0
-      ? "Nichts geplant"
-      : `${count} ${count === 1 ? "Einheit" : "Einheiten"} · ${fmtMinutes(totalMinutes)}`;
+    count > 0
+      ? `${count} ${count === 1 ? "Einheit" : "Einheiten"} · ${fmtMinutes(totalMinutes)}`
+      : planKnownEmpty
+        ? "Nichts geplant"
+        : planSource.state === "error"
+          ? "Planungen nicht verfügbar"
+          : planSource.state === "unavailable"
+            ? "Planungen für heute nicht verfügbar"
+            : planSource.state === "partial"
+              ? "Planungen nur teilweise geladen"
+              : "Planungen werden geladen";
 
   const sessionRow = (session: SessionRow) => (
     <WorkoutPreview
@@ -390,7 +387,13 @@ function TrainingCard({
   return (
     <DashboardCard as="article" className="train" title="Training" subtitle={subtitle}>
       {count > 0 && today.map(sessionRow)}
-      {count === 0 && <p className="train-empty">Für heute steht nichts im Plan.</p>}
+      {count === 0 && (
+        <p className="train-empty">
+          {planKnownEmpty
+            ? "Für heute steht nichts im Plan."
+            : "Der Planungsanteil für heute ist nicht vollständig bekannt."}
+        </p>
+      )}
       {unplanned.map(extraRow)}
 
       {tomorrow.length > 0 && (

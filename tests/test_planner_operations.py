@@ -1,0 +1,529 @@
+"""P22: offene Vorgänge, Reload, unklare Antworten und Aufbewahrung."""
+
+from __future__ import annotations
+
+import copy
+import json
+import sqlite3
+from dataclasses import replace
+
+from planner_fixtures import build_plan_from_case, load_case
+
+from trainings_cockpit import db
+from trainings_cockpit.planner import (
+    EventWriteService,
+    GatewayNotFound,
+    SaveCoordinator,
+    SaveErrorKind,
+    SaveSnapshot,
+    SaveState,
+    WorkoutDraft,
+    WriteResult,
+    plan_from_json,
+    plan_to_json,
+    snapshot_from_json,
+    snapshot_to_json,
+)
+from trainings_cockpit.planner.operations import (
+    RETENTION_DAYS,
+    SqliteOperationStore,
+    retention_cutoff,
+)
+
+
+class CreateGateway:
+    def __init__(self) -> None:
+        self.events: dict[int, dict] = {}
+        self.create_calls: list[dict] = []
+        self.read_calls: list[str] = []
+        self.next_id = 1201
+        self.fail_create: BaseException | None = None
+        self.store_on_timeout = False
+        self.fail_read = False
+        self.next_plan = None
+
+    def create_event(self, payload: dict) -> dict:
+        self.create_calls.append(copy.deepcopy(payload))
+        if self.next_plan is not None:
+            event = {
+                "id": self.next_id,
+                "category": "WORKOUT",
+                "start_date_local": payload["start_date_local"],
+                "type": self.next_plan.sport,
+                "name": payload["name"],
+                "external_id": payload["external_id"],
+                "workout_doc": {
+                    "steps": [
+                        {
+                            "text": "Dauerlauf",
+                            "duration": 2700,
+                            "hr": {"units": "hr_zone", "value": 2},
+                        }
+                    ]
+                },
+            }
+            self.events[self.next_id] = event
+        if self.fail_create is not None:
+            if not self.store_on_timeout:
+                self.events.pop(self.next_id, None)
+            raise self.fail_create
+        return {"id": self.next_id, "external_id": payload["external_id"]}
+
+    def read_event(self, remote_id: str) -> dict:
+        self.read_calls.append(remote_id)
+        if self.fail_read:
+            raise TimeoutError("Rücklesen weg")
+        event = self.events.get(int(remote_id))
+        if event is None:
+            raise GatewayNotFound(remote_id)
+        return copy.deepcopy(event)
+
+    def update_event(self, remote_id: str, payload: dict) -> dict:
+        raise AssertionError("P22 darf kein Update als Create-Ersatz auslösen")
+
+    def find_by_external_id(self, external_id: str, day: str) -> list[dict]:
+        del day
+        return [
+            copy.deepcopy(event)
+            for event in self.events.values()
+            if event.get("external_id") == external_id
+        ]
+
+
+def _new_plan():
+    plan = build_plan_from_case(load_case("F01"))
+    return replace(
+        plan,
+        local_id="plan:draft:f09",
+        remote_id=None,
+        external_id=None,
+        name="Neue Einheit",
+        date="2026-11-09",
+        local_time=None,
+        notes=None,
+    )
+
+
+def _draft(plan, operation_id: str = "op:f09"):
+    return WorkoutDraft.new(plan, draft_id="draft:f09", operation_id=operation_id)
+
+
+def _conn(tmp_path, *, thread_safe: bool = False):
+    if thread_safe:
+        conn = sqlite3.connect(
+            tmp_path / "planner.db", timeout=30, check_same_thread=False
+        )
+        conn.row_factory = sqlite3.Row
+    else:
+        conn = db.connect(tmp_path / "planner.db")
+    db.init_db(conn)
+    return conn
+
+
+def test_plan_und_snapshot_roundtrip_erhaelt_struktur_und_identitaet(tmp_path) -> None:
+    plan = build_plan_from_case(load_case("F02"))
+    restored = plan_from_json(plan_to_json(plan))
+    assert plan_to_json(restored) == plan_to_json(plan)
+    assert restored.nodes == plan.nodes
+
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    coordinator = SaveCoordinator(
+        EventWriteService(CreateGateway()), recorder=store
+    )
+    draft = _draft(_new_plan())
+    outcome = coordinator.preview(draft, account_id="acct", athlete_id="7")
+    snapshot = outcome.snapshot
+    assert snapshot is not None
+    restored_snapshot = snapshot_from_json(snapshot_to_json(snapshot))
+    assert snapshot_to_json(restored_snapshot) == snapshot_to_json(snapshot)
+    conn.close()
+
+
+def test_vorgang_ist_vor_dem_dispatch_gespeichert(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    seen: list[tuple[str, str]] = []
+
+    class SpyService(EventWriteService):
+        def execute(self, snapshot: SaveSnapshot) -> WriteResult:
+            row = db.planner_operation(conn, str(snapshot.operation_id))
+            seen.append((row["state"], row["external_id"]))
+            return super().execute(snapshot)
+
+    coordinator = SaveCoordinator(SpyService(gateway), recorder=store)
+    outcome = coordinator.activate(
+        _draft(plan), account_id="acct", athlete_id="7"
+    )
+
+    assert outcome.status.state is SaveState.SAVED
+    assert seen == [("saving", "tc:planner:acct:7:plan:draft:f09")]
+    row = db.planner_operation(conn, "op:f09")
+    assert row is not None
+    assert row["state"] == "saved"
+    assert row["remote_id"] == "1201"
+    assert row["account_id"] == "acct"
+    assert row["athlete_id"] == "7"
+    conn.close()
+
+
+def test_parallele_aktivierungen_erzeugen_nur_einen_offenen_vorgang(tmp_path) -> None:
+    import threading
+
+    conn = _conn(tmp_path, thread_safe=True)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    coordinator = SaveCoordinator(
+        EventWriteService(gateway), recorder=store, shared=True
+    )
+    draft = _draft(plan)
+    outcomes = []
+    lock = threading.Lock()
+
+    def run():
+        result = coordinator.activate(draft, account_id="acct", athlete_id="7")
+        with lock:
+            outcomes.append(result)
+
+    threads = [threading.Thread(target=run) for _ in range(10)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(gateway.create_calls) == 1
+    assert len(outcomes) == 10
+    assert {str(item.status.operation_id) for item in outcomes} == {"op:f09"}
+    assert conn.execute("SELECT COUNT(*) FROM planner_operation").fetchone()[0] == 1
+    conn.close()
+
+
+def test_f09_nach_reload_genau_eine_einheit_und_kein_zweiter_create(tmp_path) -> None:
+    case = load_case("F09")
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    gateway.fail_create = TimeoutError("Antwort verloren")
+    gateway.store_on_timeout = True
+    service = EventWriteService(gateway)
+    coordinator = SaveCoordinator(service, recorder=store)
+
+    first = coordinator.activate(_draft(plan), account_id="acct", athlete_id="7")
+
+    assert first.status.state is SaveState.UNKNOWN
+    assert len(gateway.create_calls) == 1
+    row = db.planner_operation(conn, "op:f09")
+    assert row is not None
+    assert row["state"] == "unknown"
+    assert row["external_id"] == "tc:planner:acct:7:plan:draft:f09"
+
+    # App-Neustart: neuer Koordinator, derselbe persistierte Vorgang.
+    reloaded = SaveCoordinator(service, recorder=store)
+    restored = reloaded.restore_open(account_id="acct", athlete_id="7")
+    assert [item.status.state for item in restored] == [SaveState.UNKNOWN]
+
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.SAVED
+    assert result.status.remote_id == "1201"
+    assert len(gateway.create_calls) == 1
+    key = next(iter(gateway.events))
+    assert len(gateway.events) == 1
+    assert gateway.events[key]["external_id"] == "tc:planner:acct:7:plan:draft:f09"
+    assert case["expected"]["noSecondCreate"] is True
+    assert case["expected"]["remoteEventsForOperation"] == 1
+    conn.close()
+
+
+def test_bestaetigtes_create_mit_fehlgeschlagenem_read_behaelt_remote_id(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    gateway.fail_read = True
+    service = EventWriteService(gateway)
+    coordinator = SaveCoordinator(service, recorder=store)
+
+    first = coordinator.activate(_draft(plan), account_id="acct", athlete_id="7")
+
+    assert first.status.state is SaveState.SAVED_UNVERIFIED
+    assert first.status.remote_id == "1201"
+    row = db.planner_operation(conn, "op:f09")
+    assert row is not None
+    assert row["state"] == "savedUnverified"
+    assert row["remote_id"] == "1201"
+
+    reloaded = SaveCoordinator(service, recorder=store)
+    restored = reloaded.restore_open(account_id="acct", athlete_id="7")
+    assert [item.status.state for item in restored] == [SaveState.SAVED_UNVERIFIED]
+    assert restored[0].status.remote_id == "1201"
+
+    gateway.fail_read = False
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.SAVED
+    assert result.status.remote_id == "1201"
+    assert len(gateway.create_calls) == 1
+    conn.close()
+
+
+def test_persistenzfehler_vor_dem_senden_verhindert_den_write() -> None:
+    calls: list[str] = []
+
+    class BrokenRecorder:
+        def save(self, snapshot, state):
+            raise OSError("Platte voll")
+
+        def update(self, snapshot, state, *, confirmed=False, remote_id=None, external_id=None):
+            raise AssertionError("darf nicht erreicht werden")
+
+        def open_operations(self, *, account_id, athlete_id):
+            return []
+
+    class SpyService:
+        def execute(self, snapshot):
+            calls.append("execute")
+            return WriteResult(SaveState.SAVED, "ok")
+
+        def reconcile(self, snapshot):
+            raise AssertionError("kein Abgleich")
+
+    coordinator = SaveCoordinator(SpyService(), recorder=BrokenRecorder())
+    outcome = coordinator.activate(_draft(_new_plan()), account_id="acct", athlete_id="7")
+
+    assert outcome.status.state is SaveState.FAILED
+    assert outcome.status.error is SaveErrorKind.RECONCILIATION
+    assert outcome.status.persistence_error is not None
+    assert calls == []
+
+
+def test_metadatenfehler_nach_bestaetigtem_write_wiederholt_keinen_create(tmp_path) -> None:
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    calls = [0]
+
+    class FailingUpdateStore(SqliteOperationStore):
+        def update(self, snapshot, state, *, confirmed=False, remote_id=None, external_id=None):
+            calls[0] += 1
+            raise OSError("Metadaten kaputt")
+
+    conn = _conn(tmp_path)
+    coordinator = SaveCoordinator(
+        EventWriteService(gateway), recorder=FailingUpdateStore(conn)
+    )
+    outcome = coordinator.activate(_draft(plan), account_id="acct", athlete_id="7")
+
+    assert outcome.status.state is SaveState.SAVED
+    assert outcome.status.persistence_error is not None
+    assert len(gateway.create_calls) == 1
+    assert calls[0] == 1
+    conn.close()
+
+
+def test_accounttrennung_und_aufbewahrung(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    snapshot = SaveCoordinator(
+        EventWriteService(CreateGateway())
+    ).preview(_draft(plan), account_id="acct", athlete_id="7").snapshot
+    assert snapshot is not None
+    store.save(snapshot, SaveState.UNKNOWN)
+
+    assert len(store.open_operations(account_id="acct", athlete_id="7")) == 1
+    assert store.open_operations(account_id="other", athlete_id="7") == []
+
+    # Ein abgeschlossener, alter Vorgang wird bereinigt; ein offener bleibt.
+    old = "2020-01-01T00:00:00"
+    db.upsert_planner_operation(
+        conn,
+        operation_id="op:old-saved",
+        account_id="acct",
+        athlete_id="7",
+        local_id="plan:old",
+        draft_id="draft:old",
+        remote_id="42",
+        external_id="tc:old",
+        mode="update",
+        kind="metadata",
+        state="saved",
+        payload_json="{}",
+        snapshot_json=json.dumps(
+            snapshot_to_json(
+                replace(snapshot, operation_id="op:old-saved", local_id="plan:old")
+            )
+        ),
+        editor_shape_json=None,
+        editor_shape_state="prepared",
+        created_at=old,
+    )
+    conn.execute(
+        "UPDATE planner_operation SET updated_at = ? WHERE operation_id = 'op:old-saved'",
+        (old,),
+    )
+    conn.commit()
+
+    cutoff = retention_cutoff("2026-11-06T12:00:00")
+    removed = store.purge_completed(now=cutoff)
+
+    assert removed == 1
+    assert db.planner_operation(conn, "op:old-saved") is None
+    assert db.planner_operation(conn, "op:f09") is not None
+    assert RETENTION_DAYS == 7
+    conn.close()
+
+
+def test_editorshape_wird_erst_nach_bestaetigung_veroeffentlicht(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    coordinator = SaveCoordinator(EventWriteService(CreateGateway()))
+    snapshot = coordinator.preview(_draft(plan), account_id="acct", athlete_id="7").snapshot
+    assert snapshot is not None
+    prepared = replace(
+        snapshot,
+        editor_shape={"version": 1, "nodes": [{"kind": "repeat", "repetitions": 4}]},
+    )
+
+    store.save(prepared, SaveState.SAVING)
+    row = db.planner_operation(conn, "op:f09")
+    assert row is not None
+    assert row["editor_shape_state"] == "prepared"
+    assert row["editor_shape_json"] is not None
+
+    store.update(prepared, SaveState.SAVED, confirmed=True)
+    row = db.planner_operation(conn, "op:f09")
+    assert row is not None
+    assert row["editor_shape_state"] == "confirmed"
+    conn.close()
+
+
+def test_toter_create_wird_statt_ewig_offen_verworfen(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    gateway.fail_read = True
+    service = EventWriteService(gateway)
+    coordinator = SaveCoordinator(service, recorder=store)
+
+    first = coordinator.activate(_draft(plan), account_id="acct", athlete_id="7")
+    assert first.status.state is SaveState.SAVED_UNVERIFIED
+    assert first.status.remote_id == "1201"
+
+    # Die Remote-Anlage ist inzwischen bei der Quelle gelöscht; der lokale
+    # Vorgang kennt aber noch die ID aus der Create-Antwort.
+    gateway.events.clear()
+    gateway.fail_read = False
+    reloaded = SaveCoordinator(service, recorder=store)
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.FAILED
+    assert result.status.error is SaveErrorKind.NOT_FOUND
+    assert result.status.remote_id == "1201"
+    assert "nicht vorhanden" in result.status.message
+    assert "verworfen" in result.status.message
+    assert len(gateway.create_calls) == 1
+    assert store.open_operations(account_id="acct", athlete_id="7") == []
+    row = db.planner_operation(conn, "op:f09")
+    assert row is not None and row["state"] == "failed"
+    conn.close()
+
+
+def test_create_ohne_externe_id_wird_ueber_bekannte_remote_id_bestaetigt(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    coordinator = SaveCoordinator(EventWriteService(gateway), recorder=store)
+
+    created = coordinator.activate(
+        _draft(plan, operation_id="op:created"), account_id="acct", athlete_id="7"
+    )
+    assert created.status.state is SaveState.SAVED
+    event = gateway.events[1201]
+    # Ein älterer Fehler konnte ein Event ohne externe Identität hinterlassen;
+    # dann findet die externe Suche nichts, der direkte Read zur bekannten
+    # Remote-ID muss den Vorgang dennoch zuordnen.
+    event.pop("external_id")
+
+    snapshot = coordinator.preview(
+        _draft(plan, operation_id="op:legacy"), account_id="acct", athlete_id="7"
+    ).snapshot
+    assert snapshot is not None
+    store.save(replace(snapshot, remote_id="1201"), SaveState.UNKNOWN)
+
+    reloaded = SaveCoordinator(EventWriteService(gateway), recorder=store)
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+    result = reloaded.reconcile("op:legacy")
+
+    assert result.status.state is SaveState.SAVED
+    assert result.status.remote_id == "1201"
+    assert len(gateway.create_calls) == 1
+    assert store.open_operations(account_id="acct", athlete_id="7") == []
+    conn.close()
+
+
+def test_update_auf_verschwundenes_event_wird_erledigt(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    snapshot = SaveCoordinator(EventWriteService(CreateGateway())).preview(
+        _draft(plan), account_id="acct", athlete_id="7"
+    ).snapshot
+    assert snapshot is not None
+    store.save(
+        replace(snapshot, mode="structure", kind="update", remote_id="999"),
+        SaveState.UNKNOWN,
+    )
+
+    reloaded = SaveCoordinator(
+        EventWriteService(CreateGateway()), recorder=store
+    )
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.FAILED
+    assert result.status.error is SaveErrorKind.NOT_FOUND
+    assert result.status.remote_id == "999"
+    assert "nicht mehr" in result.status.message
+    assert store.open_operations(account_id="acct", athlete_id="7") == []
+    conn.close()
+
+
+def test_externe_suche_hat_vorrang_vor_der_bekannten_remote_id(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    store = SqliteOperationStore(conn)
+    plan = _new_plan()
+    gateway = CreateGateway()
+    gateway.next_plan = plan
+    gateway.fail_read = True
+    coordinator = SaveCoordinator(EventWriteService(gateway), recorder=store)
+
+    first = coordinator.activate(_draft(plan), account_id="acct", athlete_id="7")
+    assert first.status.state is SaveState.SAVED_UNVERIFIED
+    gateway.read_calls.clear()
+
+    # Die externe Suche findet das Event. Der direkte Read zur bekannten
+    # Remote-ID würde einen Timeout liefern, darf aber gar nicht nötig sein.
+    reloaded = SaveCoordinator(EventWriteService(gateway), recorder=store)
+    reloaded.restore_open(account_id="acct", athlete_id="7")
+    result = reloaded.reconcile("op:f09")
+
+    assert result.status.state is SaveState.SAVED
+    assert result.status.remote_id == "1201"
+    assert gateway.read_calls == []
+    conn.close()

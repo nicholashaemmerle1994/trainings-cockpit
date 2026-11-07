@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconBack, IconClose } from "./icons";
 
@@ -23,10 +23,66 @@ export function Sheet({
   top?: boolean;
   children: ReactNode;
 }) {
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    returnFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      const target = returnFocus.current;
+      if (
+        target &&
+        target.isConnected &&
+        (document.activeElement == null ||
+          document.activeElement === document.body ||
+          sheetRef.current?.contains(document.activeElement))
+      ) {
+        target.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!top) return;
+    const sheet = sheetRef.current;
+    const focusableElements = () =>
+      Array.from(
+        sheet?.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      ).filter(
+        (element) =>
+          element.offsetParent !== null &&
+          getComputedStyle(element).visibility !== "hidden",
+      );
+    const focusFirst = () => {
+      const first = focusableElements()[0];
+      (first ?? sheet)?.focus({ preventScroll: true });
+    };
+    if (!sheet?.contains(document.activeElement)) focusFirst();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !sheet) return;
+      const focusable = focusableElements();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        sheet.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -43,10 +99,12 @@ export function Sheet({
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose} role="presentation">
       <div
+        ref={sheetRef}
         className="sheet"
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="sheet-top">

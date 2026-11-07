@@ -1,0 +1,111 @@
+{
+  "case": "F02",
+  "title": "Gemischte HF-/Pace-Intervalle",
+  "kind": "planned-workout",
+  "remoteFixture": "remote/repeated-intervals.json",
+  "profileSport": "Run",
+  "plan": {
+    "localId": "plan:f02",
+    "remoteId": "9102",
+    "externalId": "fixture:f02",
+    "name": "Gemischte HF- und Pace-Intervalle",
+    "sport": "Run",
+    "date": "2026-11-03",
+    "timeZone": "Europe/Vienna",
+    "editability": "full",
+    "nodes": [
+      {
+        "kind": "step",
+        "id": "node:f02:warmup",
+        "name": "Einlaufen",
+        "role": "warmup",
+        "end": {"kind": "time", "seconds": 600},
+        "target": {
+          "kind": "zone",
+          "metric": "heartRate",
+          "zoneId": "run-hr-2",
+          "zoneSetId": "run-hr"
+        },
+        "sourceRef": "/workout_doc/steps/0"
+      },
+      {
+        "kind": "repeat",
+        "id": "node:f02:main",
+        "name": "Hauptteil 4x",
+        "repetitions": 4,
+        "skipFinalRecovery": false,
+        "sourceRef": "/workout_doc/steps/1",
+        "children": [
+          {
+            "kind": "step",
+            "id": "node:f02:work",
+            "name": "Belastung",
+            "role": "work",
+            "end": {"kind": "time", "seconds": 120},
+            "target": {
+              "kind": "pace",
+              "unit": "secondsPerKm",
+              "values": {"kind": "range", "min": 330, "max": 345}
+            },
+            "sourceRef": "/workout_doc/steps/1/steps/0"
+          },
+          {
+            "kind": "step",
+            "id": "node:f02:recovery",
+            "name": "Erholung",
+            "role": "recovery",
+            "end": {"kind": "time", "seconds": 120},
+            "target": {
+              "kind": "zone",
+              "metric": "heartRate",
+              "zoneId": "run-hr-1",
+              "zoneSetId": "run-hr"
+            },
+            "sourceRef": "/workout_doc/steps/1/steps/1"
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "id": "node:f02:cooldown",
+        "name": "Auslaufen",
+        "role": "cooldown",
+        "end": {"kind": "time", "seconds": 600},
+        "target": {
+          "kind": "zone",
+          "metric": "heartRate",
+          "zoneId": "run-hr-1",
+          "zoneSetId": "run-hr"
+        },
+        "sourceRef": "/workout_doc/steps/2"
+      }
+    ]
+  },
+  "variants": [
+    {
+      "name": "Belastung auf 3 Minuten",
+      "change": {"nodeId": "node:f02:work", "field": "end.seconds", "value": 180},
+      "expected": {"durationSeconds": 2400, "executedSteps": 10}
+    },
+    {
+      "name": "letzte Erholung auslassen",
+      "change": {"nodeId": "node:f02:main", "field": "skipFinalRecovery", "value": true},
+      "expected": {"durationSeconds": 2040, "executedSteps": 9}
+    },
+    {
+      "name": "Gruppe entfernen",
+      "change": {"nodeId": "node:f02:main", "field": "remove", "value": true},
+      "expected": {"durationSeconds": 1200, "executedSteps": 2}
+    }
+  ],
+  "expected": {
+    "rootNodeKinds": ["step", "repeat", "step"],
+    "executedSteps": 10,
+    "durationSeconds": 2160,
+    "distanceMetres": 0,
+    "repeatGroups": 1,
+    "targetKinds": ["zone", "pace", "zone"],
+    "zoneIds": ["run-hr-2", "run-hr-1", "run-hr-1"],
+    "unsupportedNodes": 0
+  }
+}

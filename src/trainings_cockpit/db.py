@@ -87,6 +87,44 @@ CREATE TABLE IF NOT EXISTS activity_stream (
     series     TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS planner_operation (
+    operation_id       TEXT PRIMARY KEY,
+    account_id         TEXT NOT NULL,
+    athlete_id         TEXT NOT NULL,
+    local_id           TEXT NOT NULL,
+    draft_id           TEXT NOT NULL,
+    remote_id          TEXT,
+    external_id        TEXT,
+    mode               TEXT NOT NULL,
+    kind               TEXT NOT NULL,
+    state              TEXT NOT NULL,
+    payload_json       TEXT NOT NULL,
+    snapshot_json      TEXT NOT NULL,
+    editor_shape_json  TEXT,
+    editor_shape_state TEXT NOT NULL DEFAULT 'prepared',
+    created_at         TEXT NOT NULL,
+    updated_at         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_planner_operation_open
+    ON planner_operation(account_id, athlete_id, state);
+
+CREATE TABLE IF NOT EXISTS plan_link (
+    account_id  TEXT NOT NULL,
+    athlete_id  TEXT NOT NULL,
+    event_id    INTEGER NOT NULL REFERENCES event(id) ON DELETE CASCADE,
+    activity_id INTEGER NOT NULL REFERENCES activity(id) ON DELETE CASCADE,
+    state       TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (account_id, athlete_id, event_id, activity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_plan_link_scope
+    ON plan_link(account_id, athlete_id, state);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_link_event_unique
+    ON plan_link(event_id) WHERE state = 'linked';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_link_activity_unique
+    ON plan_link(activity_id) WHERE state = 'linked';
 """
 
 
@@ -323,6 +361,122 @@ def delete_unlisted(
     return len(weg)
 
 
+def delete_unlisted_events(
+    conn: sqlite3.Connection,
+    start: date,
+    end: date,
+    listed: set[str],
+) -> int:
+    """Geplante Einheiten löschen, die die Quelle im Zeitraum nicht mehr führt.
+
+    Wird eine Einheit in intervals.icu gelöscht, verschwindet sie beim nächsten
+    Sync auch aus dem Trainingsplaner. Wie bei den Aktivitäten (D-54) gilt das
+    nur für den nachweislich gelesenen Zeitraum; nichts außerhalb wird
+    angefasst.
+    """
+    rows = conn.execute(
+        "SELECT id FROM event WHERE date BETWEEN ? AND ?",
+        (start.isoformat(), end.isoformat()),
+    ).fetchall()
+    weg = [(int(row["id"]),) for row in rows if str(row["id"]) not in listed]
+    if not weg:
+        return 0
+    conn.executemany("DELETE FROM event WHERE id = ?", weg)
+    conn.commit()
+    return len(weg)
+
+
+# ------------------------------------------------------- Plan-/Ist-Verknüpfung
+
+
+def plan_links(
+    conn: sqlite3.Connection,
+    *,
+    account_id: str,
+    athlete_id: str,
+) -> list[dict[str, Any]]:
+    """Ausdrückliche Verknüpfungen eines Accounts, bestätigt oder getrennt.
+
+    Gespeichert wird nur, was der Athlet entschieden hat. ``linked`` heißt
+    „diese Planung gehört zu dieser Aufzeichnung“, ``separated`` heißt „diese
+    beiden nicht“. Automatische 1:1-Paarungen entstehen beim Lesen und haben
+    keine Zeile. Ohne die getrennte Zeile würde eine eindeutige Paarung nach
+    dem Trennen beim nächsten Lesen sofort wieder entstehen.
+    """
+    rows = conn.execute(
+        "SELECT * FROM plan_link WHERE account_id = ? AND athlete_id = ? "
+        "ORDER BY event_id, activity_id",
+        (account_id, athlete_id),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def set_plan_link(
+    conn: sqlite3.Connection,
+    *,
+    account_id: str,
+    athlete_id: str,
+    event_id: int,
+    activity_id: int,
+) -> None:
+    """Eine manuelle Verknüpfung setzen.
+
+    Eine Planung und eine Aufzeichnung können nur je einmal verknüpft sein.
+    Andere bestätigte Links derselben beiden IDs werden deshalb gelöst; die
+    ausdrücklichen Trennungen bleiben erhalten.
+    """
+    stamp = datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        "DELETE FROM plan_link WHERE account_id = ? AND athlete_id = ? "
+        "AND state = 'linked' AND (event_id = ? OR activity_id = ?)",
+        (account_id, athlete_id, event_id, activity_id),
+    )
+    conn.execute(
+        """
+        INSERT INTO plan_link (account_id, athlete_id, event_id, activity_id,
+            state, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'linked', ?, ?)
+        ON CONFLICT(account_id, athlete_id, event_id, activity_id) DO UPDATE SET
+            state = 'linked', updated_at = excluded.updated_at
+        """,
+        (account_id, athlete_id, event_id, activity_id, stamp, stamp),
+    )
+    conn.commit()
+
+
+def separate_plan_link(
+    conn: sqlite3.Connection,
+    *,
+    account_id: str,
+    athlete_id: str,
+    event_id: int,
+    activity_id: int,
+) -> None:
+    """Eine Verknüpfung trennen und die Trennung dauerhaft merken.
+
+    Auch eine automatisch erkannte Paarung wird damit ausdrücklich getrennt;
+    die Zeile verhindert, dass die nächste Wochenabfrage sie sofort wieder
+    herstellt.
+    """
+    stamp = datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        "DELETE FROM plan_link WHERE account_id = ? AND athlete_id = ? "
+        "AND event_id = ? AND activity_id = ? AND state = 'linked'",
+        (account_id, athlete_id, event_id, activity_id),
+    )
+    conn.execute(
+        """
+        INSERT INTO plan_link (account_id, athlete_id, event_id, activity_id,
+            state, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'separated', ?, ?)
+        ON CONFLICT(account_id, athlete_id, event_id, activity_id) DO UPDATE SET
+            state = 'separated', updated_at = excluded.updated_at
+        """,
+        (account_id, athlete_id, event_id, activity_id, stamp, stamp),
+    )
+    conn.commit()
+
+
 def upsert_events(conn: sqlite3.Connection, rows: Iterable[dict[str, Any]]) -> int:
     now = datetime.now().isoformat(timespec="seconds")
     count = 0
@@ -416,6 +570,17 @@ def activity_by_row_id(conn: sqlite3.Connection, row_id: int) -> dict[str, Any] 
 def event_by_id(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | None:
     row = conn.execute("SELECT * FROM event WHERE id = ?", (event_id,)).fetchone()
     return dict(row) if row else None
+
+
+def delete_event(conn: sqlite3.Connection, event_id: int) -> bool:
+    """Eine geplante Einheit aus dem lokalen Bestand entfernen.
+
+    Gelöscht wird der Plan, nicht das Training: eine zugehörige Aufzeichnung
+    bleibt bestehen. Gibt zurück, ob es die Zeile noch gab.
+    """
+    cur = conn.execute("DELETE FROM event WHERE id = ?", (event_id,))
+    conn.commit()
+    return cur.rowcount > 0
 
 
 def upsert_stream(
@@ -566,3 +731,133 @@ def date_span(conn: sqlite3.Connection) -> tuple[date | None, date | None]:
 
 def days_back(today: date, days: int) -> date:
     return today - timedelta(days=max(days, 1) - 1)
+
+
+# ------------------------------------------------------- Planer-Vorgänge
+
+
+def upsert_planner_operation(
+    conn: sqlite3.Connection,
+    *,
+    operation_id: str,
+    account_id: str,
+    athlete_id: str,
+    local_id: str,
+    draft_id: str,
+    remote_id: str | None,
+    external_id: str | None,
+    mode: str,
+    kind: str,
+    state: str,
+    payload_json: str,
+    snapshot_json: str,
+    editor_shape_json: str | None,
+    editor_shape_state: str,
+    created_at: str,
+) -> None:
+    """Einen offenen oder abgeschlossenen Planer-Vorgang sichern.
+
+    Die Zuordnung bleibt bei Account, Athlet und lokaler Plan-ID. Der
+    eingefrorene Snapshot wird mitgeschrieben, damit ein Reload den Vorgang
+    lesend fortsetzen kann, ohne einen zweiten Write zu starten.
+    """
+    now = datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        """
+        INSERT INTO planner_operation (operation_id, account_id, athlete_id,
+            local_id, draft_id, remote_id, external_id, mode, kind, state,
+            payload_json, snapshot_json, editor_shape_json, editor_shape_state,
+            created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(operation_id) DO UPDATE SET
+            remote_id=excluded.remote_id, external_id=excluded.external_id,
+            state=excluded.state, snapshot_json=excluded.snapshot_json,
+            editor_shape_json=COALESCE(
+                excluded.editor_shape_json, planner_operation.editor_shape_json
+            ),
+            editor_shape_state=excluded.editor_shape_state,
+            updated_at=excluded.updated_at
+        """,
+        (
+            operation_id,
+            account_id,
+            athlete_id,
+            local_id,
+            draft_id,
+            remote_id,
+            external_id,
+            mode,
+            kind,
+            state,
+            payload_json,
+            snapshot_json,
+            editor_shape_json,
+            editor_shape_state,
+            created_at,
+            now,
+        ),
+    )
+    conn.commit()
+
+
+def planner_operation(conn: sqlite3.Connection, operation_id: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT * FROM planner_operation WHERE operation_id = ?", (operation_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def planner_operations(
+    conn: sqlite3.Connection,
+    *,
+    account_id: str,
+    athlete_id: str,
+    states: Iterable[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Vorgänge eines Accounts/Athleten, neueste zuerst.
+
+    Account und Athlet sind Bestandteil der Abfrage; ein Logout oder
+    Accountwechsel kann keine fremde Zuordnung anzeigen.
+    """
+    sql = (
+        "SELECT * FROM planner_operation WHERE account_id = ? AND athlete_id = ?"
+    )
+    params: list[Any] = [account_id, athlete_id]
+    if states is not None:
+        wanted = list(states)
+        if not wanted:
+            return []
+        sql += " AND state IN (" + ", ".join("?" for _ in wanted) + ")"
+        params.extend(wanted)
+    sql += " ORDER BY created_at DESC, operation_id"
+    rows = conn.execute(sql, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def delete_planner_operation(conn: sqlite3.Connection, operation_id: str) -> None:
+    conn.execute("DELETE FROM planner_operation WHERE operation_id = ?", (operation_id,))
+    conn.commit()
+
+
+def purge_planner_operations(
+    conn: sqlite3.Connection,
+    *,
+    older_than: str,
+    terminal_states: Iterable[str] = ("saved", "failed", "conflict"),
+) -> int:
+    """Endgültig abgeschlossene Vorgänge nach der Aufbewahrungsregel löschen.
+
+    Offene, unklare und noch nicht bestätigte Vorgänge bleiben unabhängig vom
+    Alter erhalten. Für abgeschlossene Vorgänge gilt eine kurze Aufbewahrung
+    von sieben Tagen (siehe ``docs/trainingsplaner/KONFLIKTE.md``).
+    """
+    wanted = list(terminal_states)
+    if not wanted:
+        return 0
+    markers = ", ".join("?" for _ in wanted)
+    cur = conn.execute(
+        f"DELETE FROM planner_operation WHERE state IN ({markers}) AND updated_at < ?",  # noqa: S608
+        (*wanted, older_than),
+    )
+    conn.commit()
+    return int(cur.rowcount or 0)

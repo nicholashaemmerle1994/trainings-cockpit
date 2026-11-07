@@ -1,0 +1,92 @@
+{
+  "fixtureVersion": 1,
+  "kind": "sport-profiles",
+  "note": "Synthetische Testprofile. Keine echten Personendaten, keine Trainingsempfehlung. Zonen-IDs sind Strings; die Anzeigenamen sind nicht die Identität.",
+  "accountId": "fixture-account",
+  "athleteId": "fixture-athlete",
+  "timeZone": "Europe/Vienna",
+  "sports": {
+    "Run": {
+      "profileId": "run-profile",
+      "maxHrBpm": 190,
+      "thresholdPaceSecondsPerKm": 300,
+      "hrZoneSet": {
+        "id": "run-hr",
+        "name": "Lauf HF",
+        "zones": [
+          {"id": "run-hr-1", "name": "Z1", "minBpm": 95, "maxBpm": 131},
+          {"id": "run-hr-2", "name": "Z2", "minBpm": 132, "maxBpm": 155},
+          {"id": "run-hr-3", "name": "Z3", "minBpm": 156, "maxBpm": 167},
+          {"id": "run-hr-4", "name": "Z4", "minBpm": 168, "maxBpm": 176},
+          {"id": "run-hr-5", "name": "Z5", "minBpm": 177, "maxBpm": 190}
+        ]
+      },
+      "paceZoneSet": {
+        "id": "run-pace",
+        "name": "Lauf Pace",
+        "reference": "secondsPerKm",
+        "thresholdSeconds": 300,
+        "zones": [
+          {"id": "run-pace-easy", "name": "Locker", "minSeconds": 330, "maxSeconds": 360},
+          {"id": "run-pace-steady", "name": "Ruhig", "minSeconds": 310, "maxSeconds": 330},
+          {"id": "run-pace-threshold", "name": "Schwelle", "minSeconds": 285, "maxSeconds": 310}
+        ]
+      }
+    },
+    "Ride": {
+      "profileId": "ride-profile",
+      "maxHrBpm": 188,
+      "ftpWatts": 250,
+      "indoorFtpWatts": 240,
+      "hrZoneSet": {
+        "id": "ride-hr",
+        "name": "Rad HF",
+        "zones": [
+          {"id": "ride-hr-1", "name": "Z1", "minBpm": 94, "maxBpm": 131},
+          {"id": "ride-hr-2", "name": "Z2", "minBpm": 132, "maxBpm": 150},
+          {"id": "ride-hr-3", "name": "Z3", "minBpm": 151, "maxBpm": 169},
+          {"id": "ride-hr-4", "name": "Z4", "minBpm": 170, "maxBpm": 178},
+          {"id": "ride-hr-5", "name": "Z5", "minBpm": 179, "maxBpm": 188}
+        ]
+      },
+      "powerZoneSet": {
+        "id": "ride-power",
+        "name": "Rad Leistung",
+        "reference": "percentFtp",
+        "ftpWatts": 250,
+        "zones": [
+          {"id": "ride-power-1", "name": "Z1", "minPercentFtp": 0, "maxPercentFtp": 55},
+          {"id": "ride-power-2", "name": "Z2", "minPercentFtp": 56, "maxPercentFtp": 75},
+          {"id": "ride-power-sweetspot", "name": "Sweetspot", "minPercentFtp": 84, "maxPercentFtp": 97},
+          {"id": "ride-power-4", "name": "Z4", "minPercentFtp": 98, "maxPercentFtp": 105}
+        ]
+      }
+    },
+    "Swim": {
+      "profileId": "swim-profile",
+      "maxHrBpm": 186,
+      "thresholdPaceSecondsPer100m": 120,
+      "hrZoneSet": {
+        "id": "swim-hr",
+        "name": "Schwimm HF",
+        "zones": [
+          {"id": "swim-hr-1", "name": "Z1", "minBpm": 93, "maxBpm": 130},
+          {"id": "swim-hr-2", "name": "Z2", "minBpm": 131, "maxBpm": 149},
+          {"id": "swim-hr-3", "name": "Z3", "minBpm": 150, "maxBpm": 164},
+          {"id": "swim-hr-4", "name": "Z4", "minBpm": 165, "maxBpm": 176},
+          {"id": "swim-hr-5", "name": "Z5", "minBpm": 177, "maxBpm": 186}
+        ]
+      },
+      "paceZoneSet": {
+        "id": "swim-pace",
+        "name": "Schwimm Pace",
+        "reference": "secondsPer100m",
+        "thresholdSeconds": 120,
+        "zones": [
+          {"id": "swim-pace-easy", "name": "Locker", "minSeconds": 130, "maxSeconds": 150},
+          {"id": "swim-pace-threshold", "name": "Schwelle", "minSeconds": 115, "maxSeconds": 130}
+        ]
+      }
+    }
+  }
+}

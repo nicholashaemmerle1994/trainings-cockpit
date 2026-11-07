@@ -1,0 +1,223 @@
+{
+  "fixtureVersion": 2,
+  "kind": "capability-matrix",
+  "observedAt": "2026-11-06",
+  "statusValues": [
+    "belegt",
+    "offen",
+    "nicht unterstützt",
+    "gesperrt"
+  ],
+  "writeScope": "belegt = Serializer plus kontrollierter Adapterrundlauf; kein Live-Schreibzugriff gegen intervals.icu",
+  "liveProof": "nicht ausgeführt (kein Testdatensatz und keine Freigabe für Produktiv-Writes)",
+  "adapterFindings": [
+    {
+      "id": "read-event",
+      "finding": "IntervalsClient.events() liest GET /athlete/{id}/events; der Sync schreibt das vollständige Roh-JSON in event.raw.",
+      "evidence": [
+        "src/trainings_cockpit/sources/intervals.py",
+        "src/trainings_cockpit/sync.py",
+        "src/trainings_cockpit/db.py"
+      ],
+      "status": "belegt"
+    },
+    {
+      "id": "read-workout-doc",
+      "finding": "Der Planer liest workout_doc.steps, Ende-Bedingungen, Rollen und Ziele. Nicht abbildbare Inhalte bleiben als UnsupportedNode mit Rohsnapshot erhalten; Tiefe und Wiederholungen werden begrenzt.",
+      "evidence": [
+        "src/trainings_cockpit/planner/remote.py",
+        "tests/test_planner_remote.py"
+      ],
+      "status": "offen"
+    },
+    {
+      "id": "write-product-path",
+      "finding": "Produkt-Endpunkte, SaveCoordinator, Vorgangspersistenz, Konfliktsicherung und lokale Übernahme bestätigter Events existieren. Create nutzt den Bulk-Upsert, Update die ursprüngliche Event-ID; nach Reload wird ein offener Vorgang lesend abgeglichen und lokal einsortiert.",
+      "evidence": [
+        "src/trainings_cockpit/api.py",
+        "src/trainings_cockpit/planner/save.py",
+        "src/trainings_cockpit/planner/event_write.py",
+        "src/trainings_cockpit/planner/service.py"
+      ],
+      "status": "belegt"
+    },
+    {
+      "id": "live-write-proof",
+      "finding": "Es gab keinen Live-Rundlauf gegen intervals.icu. Ohne ausdrücklich vorgesehenen Testdatensatz und Freigabe wurde kein produktiver Schreibzugriff ausgeführt.",
+      "evidence": [
+        "docs/training-planner-progress.md#arbeitsnachweis-p26"
+      ],
+      "status": "offen"
+    },
+    {
+      "id": "relationship",
+      "finding": "Es gibt weiterhin keine dauerhaft bestätigte Plan-/Aktivitätsbeziehung im Produktbestand. Die Projektion kann einen übergebenen Beziehungsvertrag darstellen, erzeugt aber keine Beziehung und keinen Write.",
+      "evidence": [
+        "src/trainings_cockpit/planner/projections.py",
+        "src/trainings_cockpit/planner/week.py"
+      ],
+      "status": "offen"
+    },
+    {
+      "id": "canonical-activity",
+      "finding": "Dedupe entfernt den Verlierer; eine dauerhafte Zuordnung mehrerer Quell-IDs existiert nicht. F12 ist deshalb nur als Fixture-/Projektionsfall belegt.",
+      "evidence": [
+        "src/trainings_cockpit/dedupe.py",
+        "src/trainings_cockpit/sync.py"
+      ],
+      "status": "offen"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "time",
+      "label": "Zeitabschnitte",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "belegt",
+      "write": "belegt",
+      "evidence": "Serializer, F01/F02, Create-/Update-Rundlauf im kontrollierten Adapter.",
+      "missingProof": "Live-Gegenprobe gegen intervals.icu steht aus."
+    },
+    {
+      "id": "distance",
+      "label": "Distanzabschnitte",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "belegt",
+      "write": "belegt",
+      "evidence": "Distanzachse und mtr-Serialisierung, F04; 400 Meter werden nicht zu Minuten.",
+      "missingProof": "Live-Gegenprobe gegen intervals.icu steht aus."
+    },
+    {
+      "id": "simple-repeat",
+      "label": "Einfache Wiederholungen",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "belegt",
+      "write": "belegt",
+      "evidence": "F02-Gruppe, Rollen, Skip-Sperre und Auflösen; Update-Rundlauf im kontrollierten Adapter.",
+      "missingProof": "Skip als Gruppe benötigt den noch nicht lesend angebundenen EditorShapeMetadata-Weg."
+    },
+    {
+      "id": "hr-standard-zone",
+      "label": "HF-Standardzonen",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "belegt",
+      "write": "belegt",
+      "evidence": "Zonen aus dem tatsächlichen Sportprofil, Z2-HR-Serialisierung, F01/F02.",
+      "missingProof": "Live-Gegenprobe gegen intervals.icu steht aus."
+    },
+    {
+      "id": "absolute-pace",
+      "label": "Absolute Pace und Pacebereich",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "belegt",
+      "write": "belegt",
+      "evidence": "Explizite Einheit /km bzw. /100m, Bereichsrichtung und F02/F04/F05.",
+      "missingProof": "Live-Gegenprobe gegen intervals.icu steht aus."
+    },
+    {
+      "id": "watts",
+      "label": "Watt und Wattbereich",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "belegt",
+      "write": "belegt",
+      "evidence": "Watt-Einzelwert und -Bereich, 0 W bleibt gültig, F03.",
+      "missingProof": "Live-Gegenprobe gegen intervals.icu steht aus."
+    },
+    {
+      "id": "percent-ftp",
+      "label": "% FTP",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "belegt",
+      "write": "belegt",
+      "evidence": "Relative Semantik bleibt beim Serialisieren erhalten, F03.",
+      "missingProof": "Live-Gegenprobe gegen intervals.icu steht aus."
+    },
+    {
+      "id": "power-zones",
+      "label": "Leistungszonen",
+      "read": "offen",
+      "display": "offen",
+      "edit": "gesperrt",
+      "write": "gesperrt",
+      "evidence": "Der Parser liest Leistung als start/end; eine String-Zonenreferenz mit Zonenmodell fehlt.",
+      "missingProof": "Profil- und Serializer-Nachweis für Leistungszonen fehlt; die UI bietet die Zielart nur als nicht belegt an."
+    },
+    {
+      "id": "absolute-bpm",
+      "label": "Absolute bpm-Werte",
+      "read": "offen",
+      "display": "offen",
+      "edit": "gesperrt",
+      "write": "gesperrt",
+      "evidence": "HF ohne Zonenkennung wird nicht als absolute bpm-Ziel interpretiert.",
+      "missingProof": "Kein eindeutiger aktueller Schreibbeleg; keine Textsyntax erfinden."
+    },
+    {
+      "id": "custom-zones",
+      "label": "Benutzerdefinierte Zonen",
+      "read": "offen",
+      "display": "offen",
+      "edit": "gesperrt",
+      "write": "gesperrt",
+      "evidence": "Standardzonen werden gelesen; nichtnumerische String-IDs und das Zonenmodell fehlen.",
+      "missingProof": "Vollständig geprüfte Zonenidentität und Schreibbeleg fehlen."
+    },
+    {
+      "id": "multiple-targets",
+      "label": "Mehrere Ziele in einem Schritt",
+      "read": "nicht unterstützt",
+      "display": "nicht unterstützt",
+      "edit": "gesperrt",
+      "write": "nicht unterstützt",
+      "evidence": "Unbekannte Zielkombinationen bleiben als UnsupportedNode mit Rohsnapshot erhalten.",
+      "missingProof": "Kein sicherer Export; Strukturbearbeitung bleibt gesperrt."
+    },
+    {
+      "id": "ramps-lap-special",
+      "label": "Rampen, Lap-Taste, Spezialschritte",
+      "read": "nicht unterstützt",
+      "display": "nicht unterstützt",
+      "edit": "gesperrt",
+      "write": "nicht unterstützt",
+      "evidence": "Der Import erhält sie als UnsupportedNode samt Quellreferenz.",
+      "missingProof": "Keine verlustfreie Struktur- oder Schreibabbildung belegt."
+    },
+    {
+      "id": "nested-repeats",
+      "label": "Verschachtelte Wiederholungen",
+      "read": "offen",
+      "display": "offen",
+      "edit": "gesperrt",
+      "write": "gesperrt",
+      "evidence": "Der Reader erkennt Verschachtelung und begrenzt die Editierbarkeit; der Editor öffnet eine Ebene.",
+      "missingProof": "Kein Schreibbeleg für verschachtelte Gruppen; keine Textgrammatik aus Lesefeldern ableiten."
+    },
+    {
+      "id": "global-target-priority",
+      "label": "Globale Zielpriorität",
+      "read": "offen",
+      "display": "offen",
+      "edit": "gesperrt",
+      "write": "gesperrt",
+      "evidence": "Ein Workout-weites Ziel-/Prioritätsfeld ist im vorhandenen Vertrag nicht belegt.",
+      "missingProof": "Konkreter Auto-/Prioritätsvertrag fehlt."
+    },
+    {
+      "id": "skip-final-recovery",
+      "label": "Letzte Erholung auslassen (als Gruppe)",
+      "read": "belegt",
+      "display": "belegt",
+      "edit": "belegt",
+      "write": "gesperrt",
+      "evidence": "Lokal 34 min und neun Ausführungen; Auflösen in Einzelabschnitte ist speicherbar.",
+      "missingProof": "EditorShapeMetadata hat noch keinen lesenden Konsumenten; die Gruppe wird vor der Payload-Erzeugung mit konkretem Grund abgelehnt."
+    }
+  ]
+}

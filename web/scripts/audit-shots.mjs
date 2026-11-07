@@ -20,7 +20,7 @@ const browser = await puppeteer.launch({
   args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"],
 });
 
-const PAGES = (process.env.SHOT_PAGES ?? "Heute,Verpflegung,Aktivitäten")
+const PAGES = (process.env.SHOT_PAGES ?? "Heute,Planer,Verpflegung")
   .split(",")
   .map((label) => label.trim())
   .filter(Boolean);

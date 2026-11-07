@@ -1,0 +1,76 @@
+{
+  "case": "F04",
+  "title": "Zeit und Distanz gemischt",
+  "kind": "planned-workout",
+  "remoteFixture": "remote/distance-step.json",
+  "profileSport": "Run",
+  "plan": {
+    "localId": "plan:f04",
+    "remoteId": "9104",
+    "externalId": "fixture:f04",
+    "name": "Bahnintervalle mit Distanz",
+    "sport": "Run",
+    "date": "2026-11-05",
+    "timeZone": "Europe/Vienna",
+    "editability": "full",
+    "nodes": [
+      {
+        "kind": "step",
+        "id": "node:f04:warmup",
+        "name": "Einlaufen",
+        "role": "warmup",
+        "end": {"kind": "time", "seconds": 600},
+        "target": {"kind": "none"}
+      },
+      {
+        "kind": "repeat",
+        "id": "node:f04:main",
+        "name": "Hauptteil 4x",
+        "repetitions": 4,
+        "skipFinalRecovery": false,
+        "children": [
+          {
+            "kind": "step",
+            "id": "node:f04:work",
+            "name": "Belastung",
+            "role": "work",
+            "end": {"kind": "distance", "metres": 1000},
+            "target": {
+              "kind": "pace",
+              "unit": "secondsPerKm",
+              "values": {"kind": "value", "value": 330}
+            },
+            "sourceRef": "/workout_doc/steps/1/steps/0"
+          },
+          {
+            "kind": "step",
+            "id": "node:f04:recovery",
+            "name": "Erholung",
+            "role": "recovery",
+            "end": {"kind": "time", "seconds": 120},
+            "target": {"kind": "none"}
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "id": "node:f04:cooldown",
+        "name": "Auslaufen",
+        "role": "cooldown",
+        "end": {"kind": "time", "seconds": 600},
+        "target": {"kind": "none"}
+      }
+    ]
+  },
+  "expected": {
+    "rootNodeKinds": ["step", "repeat", "step"],
+    "executedSteps": 10,
+    "knownDurationSeconds": 1680,
+    "distanceMetres": 4000,
+    "durationBasis": "mixed",
+    "distanceSteps": 4,
+    "distanceStepMetres": 1000,
+    "distanceStepHasEstimatedDurationInSource": true,
+    "chartMode": "schematic"
+  }
+}

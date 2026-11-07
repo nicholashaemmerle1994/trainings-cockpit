@@ -1,0 +1,42 @@
+{
+  "case": "F13",
+  "title": "Durchführung außerhalb der Planwoche",
+  "kind": "history-relationships",
+  "timeZone": "Europe/Vienna",
+  "weeks": [
+    {"from": "2026-11-02", "to": "2026-11-08", "role": "plan-week"},
+    {"from": "2026-11-09", "to": "2026-11-15", "role": "activity-week"}
+  ],
+  "plans": [
+    {"localId": "plan:P1", "remoteId": "1301", "date": "2026-11-08", "sport": "Run", "name": "Sonntagsplan", "durationSeconds": 2700}
+  ],
+  "activities": [
+    {"rowId": 1, "activityId": "1301", "date": "2026-11-09", "sport": "Run", "name": "Montagslauf", "movingSeconds": 2520, "load": 40}
+  ],
+  "relationships": [
+    {
+      "relationshipId": "rel:1301",
+      "planLocalId": "plan:P1",
+      "activityIds": ["1301"],
+      "status": "confirmed",
+      "completionConfirmed": true
+    }
+  ],
+  "expected": {
+    "planWeek": {
+      "completionReferenceVisible": true,
+      "completionText": "Erledigt am 9. November",
+      "recordedSecondsAdded": 0,
+      "planCountedAsOpen": false,
+      "planDate": "2026-11-08"
+    },
+    "activityWeek": {
+      "recordedEntries": 1,
+      "date": "2026-11-09",
+      "planReachable": true,
+      "planDateStill": "2026-11-08"
+    },
+    "uncertainRelationshipStaysVisible": true,
+    "nameMatchingNotUsed": true
+  }
+}

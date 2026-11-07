@@ -21,6 +21,7 @@ from typing import Any
 
 from . import db, dedupe, streams
 from .config import Settings
+from .planner.dates import local_today
 from .sources.garmin import GarminDump, GarminUnavailable, actor_rows, fetch_garmin, wellness_rows
 from .sources.intervals import IntervalsClient
 
@@ -29,7 +30,10 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
     if not settings.intervals_key:
         raise RuntimeError("Kein INTERVALS_API_KEY gesetzt.")
 
-    today = today or date.today()
+    # Der gelesene Bereich gehört zum Athletenkalender, nicht zur zufälligen
+    # Serverzeitzone. Sonst könnte der Planer eine aktuelle Woche am
+    # UTC-Tagesrand als nicht abgedeckt markieren.
+    today = today or date.fromisoformat(local_today(settings.time_zone))
     oldest = today - timedelta(days=max(days, 1))
     events_until = today + timedelta(days=365)
     started = datetime.now()
@@ -80,6 +84,12 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         n_wellness = db.upsert_wellness(
             conn, _seit_epoche(garmin.wellness, db.wellness_epoch(conn))
         )
+        # Eine in intervals.icu gelöschte Planung verschwindet auch aus dem
+        # Trainingsplaner. Sonst stünde eine Einheit im Kalender, die die
+        # Quelle nicht mehr kennt und die sich nicht mehr bearbeiten lässt.
+        n_events_verwaist = db.delete_unlisted_events(
+            conn, oldest, events_until, {str(event.get("id")) for event in events}
+        )
         n_events = db.upsert_events(conn, events)
 
         # Verläufe sind Zugabe: ein fehlender Verlauf kostet ein Bild, nicht den
@@ -98,6 +108,20 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         db.set_setting(conn, "athlete_name", _pretty_name(athlete.get("name")))
         db.set_setting(conn, "athlete_id", str(athlete.get("id") or ""))
         db.set_setting(conn, "last_sync", datetime.now().isoformat(timespec="seconds"))
+        # Der Planer darf eine Woche außerhalb dieses nachweislich gelesenen
+        # Bereichs nicht als bestätigt leer ausgeben (P06/F14).
+        db.set_setting(
+            conn,
+            "synced_range",
+            json.dumps(
+                {
+                    "from": oldest.isoformat(),
+                    "to": today.isoformat(),
+                    "activities_to": today.isoformat(),
+                    "events_to": events_until.isoformat(),
+                }
+            ),
+        )
         db.log_sync(
             conn,
             "intervals",
@@ -107,6 +131,11 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             f" streams={n_streams}"
             + (f" dubletten={n_doppelt}" if n_doppelt else "")
             + (f" verwaist={n_verwaist}" if n_verwaist else "")
+            + (
+                f" events_verwaist={n_events_verwaist}"
+                if n_events_verwaist
+                else ""
+            )
             + garmin.note
             + verlauf_note,
         )
@@ -115,6 +144,7 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             "activities": n_activities + n_direkt,
             "wellness": n_wellness,
             "events": n_events,
+            "events_removed": n_events_verwaist,
             "streams": n_streams,
             "orphans": n_verwaist,
             "athlete": _pretty_name(athlete.get("name")),

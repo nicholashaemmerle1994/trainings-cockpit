@@ -47,18 +47,19 @@ Alle Aufnahmen: Vorschau-Build (`VITE_APP_VARIANT=preview`), Chromium, Viewport 
 
 ![Vergleich mit Score: links vorher, rechts nachher](screens/ring-dicker/vergleich-mit-score.png)
 
-Einzelbilder: [vorher](screens/ring-dicker/vorher-mit-score.png) · [nachher](screens/ring-dicker/nachher-mit-score.png) · ganze Ansicht: [vorher](screens/ring-dicker/vorher-ansicht-mit-score.png) · [nachher](screens/ring-dicker/nachher-ansicht-mit-score.png)
+Einzelbilder: [vorher](screens/recovery-dunkel/mit-score-390x844.png) · [nachher](screens/ring-dicker/nachher-mit-score.png) · ganze Ansicht: [vorher](screens/ring-dicker/vorher-ansicht-mit-score.png) · [nachher](screens/ring-dicker/nachher-ansicht-mit-score.png)
 
 ### Ohne Score
 
 ![Vergleich ohne Score: links vorher, rechts nachher](screens/ring-dicker/vergleich-ohne-score.png)
 
-Einzelbilder: [vorher](screens/ring-dicker/vorher-ohne-score.png) · [nachher](screens/ring-dicker/nachher-ohne-score.png)
+Einzelbilder: [vorher](screens/recovery-dunkel/ohne-score-390x844.png) · [nachher](screens/ring-dicker/nachher-ohne-score.png)
 
 Die Vergleichsbilder stellen beide Karten mit derselben Breite von 350 CSS-px dar (2×-Aufnahmen, wieder auf 350 px gesetzt); die Oberkanten sind bündig. Der Unterschied ist der Strich; Beschriftungen, Abstände und Kartenkanten liegen deckungsgleich.
 
 **Ablage der Aufnahmen:** `docs/design/screens/ring-dicker/`
-`vorher-mit-score.png`, `nachher-mit-score.png`, `vergleich-mit-score.png`, `vorher-ohne-score.png`, `nachher-ohne-score.png`, `vergleich-ohne-score.png`, `vorher-ansicht-mit-score.png`, `nachher-ansicht-mit-score.png`.
+`nachher-mit-score.png`, `vergleich-mit-score.png`, `nachher-ohne-score.png`, `vergleich-ohne-score.png`, `vorher-ansicht-mit-score.png`, `nachher-ansicht-mit-score.png`.
+Die beiden Vorher-Bilder liegen als `mit-score-390x844.png` und `ohne-score-390x844.png` in `docs/design/screens/recovery-dunkel/` und werden mit dem dortigen Bericht geteilt.
 
 ---
 
@@ -90,7 +91,7 @@ Der Kartenrahmen bleibt bei 390 px Breite **350 × 431,39 px** (mit Score) bzw. 
 - `web/src/components/RecoveryDial.tsx` — `STROKE` 6 → 8
 - `docs/ENTSCHEIDUNGEN.md` — D-65 und Log-Zeile
 - `docs/design/ring-dicker.md` — dieser Bericht
-- `docs/design/screens/ring-dicker/` — acht Nachweisbilder
+- `docs/design/screens/ring-dicker/` — sechs Nachweisbilder; die beiden Vorher-Bilder liegen geteilt unter `docs/design/screens/recovery-dunkel/`
 
 **Unverändert:**
 
