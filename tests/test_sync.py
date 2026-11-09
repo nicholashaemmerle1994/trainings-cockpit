@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import pytest
@@ -274,3 +275,132 @@ def test_was_intervals_nicht_mehr_fuehrt_verschwindet_aus_dem_planer(
 
     assert ergebnis["events_removed"] == 1
     assert ids == [9101, 9103]
+
+
+def _lauf_eintragen(settings: Settings, tag: str, status: str = "ok") -> None:
+    """Einen abgeschlossenen Sync-Lauf mit festem Datum hinterlegen."""
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    conn.execute(
+        "INSERT INTO sync_run (source, started_at, finished_at, status, detail)"
+        " VALUES ('intervals', ?, ?, ?, 'test')",
+        (f"{tag}T07:00:00", f"{tag}T07:00:20", status),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_knopf_liest_nur_das_fenster_seit_dem_letzten_lauf(
+    settings: Settings, monkeypatch
+) -> None:
+    """Der Refresh holt keinen Jahresvorlauf, sondern nur den Rückstand."""
+    _lauf_eintragen(settings, "2026-11-03")
+    gelesen: list[tuple[date, date]] = []
+
+    class MitBereich(FakeIntervals):
+        def activities(self, oldest: date, newest: date) -> list[dict]:
+            gelesen.append((oldest, newest))
+            return []
+
+    monkeypatch.setattr(sync_mod, "IntervalsClient", MitBereich)
+
+    ergebnis = sync_mod.sync(settings, today=date(2026, 11, 5))
+
+    assert gelesen == [(date(2026, 11, 3), date(2026, 11, 5))]
+    assert ergebnis["range"] == ["2026-11-03", "2026-11-05"]
+
+
+def test_ohne_lauf_wird_einmal_das_jahr_gelesen(settings: Settings) -> None:
+    """Ein leerer Bestand ist unbekannt — der erste Lauf holt die Historie."""
+    ergebnis = sync_mod.sync(settings, today=date(2026, 11, 5))
+
+    assert ergebnis["range"] == ["2025-11-05", "2026-11-05"]
+
+
+def test_fehlgeschlagener_lauf_verkuerzt_das_fenster_nicht(settings: Settings) -> None:
+    """Nur ein erfolgreicher Lauf zählt als „zuletzt gelesen"."""
+    _lauf_eintragen(settings, "2026-11-03")
+    _lauf_eintragen(settings, "2026-11-05", status="error")
+
+    ergebnis = sync_mod.sync(settings, today=date(2026, 11, 5))
+
+    assert ergebnis["range"] == ["2026-11-03", "2026-11-05"]
+
+
+def test_explizite_tage_schlagen_das_automatische_fenster(settings: Settings) -> None:
+    """Der volle Nachlade-Weg bleibt offen (später der Profil-Tab)."""
+    _lauf_eintragen(settings, "2026-11-03")
+
+    ergebnis = sync_mod.sync(settings, days=30, today=date(2026, 11, 5))
+
+    assert ergebnis["range"] == ["2026-10-06", "2026-11-05"]
+
+
+def test_kurzer_lauf_verkuerzt_die_abdeckung_nicht(settings: Settings) -> None:
+    """Der Planer darf ältere Wochen nicht plötzlich als unvollständig lesen."""
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.set_setting(
+        conn,
+        "synced_range",
+        json.dumps(
+            {
+                "from": "2025-01-08",
+                "to": "2026-11-04",
+                "activities_to": "2026-11-04",
+                "events_to": "2027-11-04",
+            }
+        ),
+    )
+    conn.close()
+
+    sync_mod.sync(settings, days=1, today=date(2026, 11, 5))
+
+    conn = db.connect(settings.db_path)
+    bericht = json.loads(db.get_setting(conn, "synced_range"))
+    conn.close()
+
+    assert bericht["from"] == "2025-01-08"
+    assert bericht["to"] == "2026-11-05"
+    assert bericht["activities_to"] == "2026-11-05"
+    assert bericht["events_to"] == "2027-11-05"
+
+
+def test_bestand_ausserhalb_des_fensters_bleibt(tmp_path, monkeypatch) -> None:
+    """D-54 räumt nur im gelesenen Fenster: alte Tage verschwinden nicht."""
+    settings = Settings(
+        intervals_key="test",
+        intervals_athlete="0",
+        garmin_key=None,
+        data_dir=tmp_path,
+        base_url="https://example.invalid/api/v1",
+    )
+    monkeypatch.setattr(sync_mod, "IntervalsClient", FakeIntervalsMitFahrt)
+    monkeypatch.setattr(sync_mod, "fetch_garmin", lambda *a, **k: GarminDump())
+
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_activities(
+        conn,
+        [
+            {
+                "id": "i-alt",
+                "start_date_local": "2026-10-31T06:08:56",
+                "type": "VirtualRide",
+                "name": "Alte Fahrt",
+                "moving_time": 3840,
+                "elapsed_time": 3900,
+                "distance": 28000.0,
+            }
+        ],
+    )
+    conn.close()
+
+    ergebnis = sync_mod.sync(settings, days=1, today=date(2026, 11, 3))
+
+    conn = db.connect(settings.db_path)
+    ids = sorted(row["source_id"] for row in conn.execute("SELECT source_id FROM activity"))
+    conn.close()
+
+    assert ergebnis["orphans"] == 0
+    assert ids == ["i-alt", "i-neu"]

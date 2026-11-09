@@ -150,7 +150,12 @@ def _goals(settings: Settings, today: date | None = None) -> list[dict[str, Any]
 
 
 def _sync_range(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Der zuletzt tatsächlich gelesene Bereich, sofern der Sync ihn hinterließ."""
+    """Der nachweislich vollständig gelesene Bereich.
+
+    `from` ist der älteste je gelesene Tag, nicht der Beginn des letzten Laufs:
+    ein kurzer Sync liest nur das junge Fenster und verkürzt die Abdeckung
+    älterer Wochen nicht.
+    """
     raw = db.get_setting(conn, "synced_range")
     if not raw:
         return {}
@@ -1015,7 +1020,12 @@ def _last_weight() -> float | None:
 
 
 @app.post("/api/sync")
-def run_sync(days: int = Query(365, ge=7, le=730)) -> dict[str, Any]:
+def run_sync(days: int | None = Query(None, ge=1, le=730)) -> dict[str, Any]:
+    """Was der Knopf holt: das Fenster seit dem letzten Lauf, nicht das Jahr.
+
+    Ohne `days` entscheidet der Sync selbst; mit `days` bleibt der volle
+    Nachlade-Weg offen (später der Profil-Tab).
+    """
     settings = get_settings()
     if not settings.intervals_key:
         raise HTTPException(status_code=400, detail="Kein intervals.icu-Key konfiguriert.")

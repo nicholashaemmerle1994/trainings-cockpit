@@ -25,8 +25,16 @@ from .planner.dates import local_today
 from .sources.garmin import GarminDump, GarminUnavailable, actor_rows, fetch_garmin, wellness_rows
 from .sources.intervals import IntervalsClient
 
+#: Ein Knopfdruck holt nur, was seit dem letzten Lauf neu sein kann. Im
+#: Tagesbetrieb ist das ein Tag; die Historie steht bereits in der Datenbank.
+AKTUELL_TAGE = 1
+#: Ohne erfolgreichen Lauf ist der Bestand unbekannt — dann einmal das Jahr.
+ERSTLAUF_TAGE = 365
+#: Mehr gibt intervals.icu nicht her.
+MAX_TAGE = 730
 
-def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict[str, Any]:
+
+def sync(settings: Settings, days: int | None = None, today: date | None = None) -> dict[str, Any]:
     if not settings.intervals_key:
         raise RuntimeError("Kein INTERVALS_API_KEY gesetzt.")
 
@@ -34,13 +42,18 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
     # Serverzeitzone. Sonst könnte der Planer eine aktuelle Woche am
     # UTC-Tagesrand als nicht abgedeckt markieren.
     today = today or date.fromisoformat(local_today(settings.time_zone))
-    oldest = today - timedelta(days=max(days, 1))
     events_until = today + timedelta(days=365)
     started = datetime.now()
 
     conn = db.connect(settings.db_path)
     try:
         db.init_db(conn)
+        tage = _fenster(conn, today, days)
+        oldest = today - timedelta(days=tage)
+        # Was einmal vollständig gelesen wurde, bleibt im Bestand. Die
+        # Abdeckung für den Planer beginnt deshalb beim ältesten je gelesenen
+        # Tag — ein kurzer Lauf darf sie nicht auf gestern verkürzen.
+        gelesen_ab = _gelesen_ab(conn, oldest)
         with IntervalsClient(
             settings.intervals_key, settings.intervals_athlete, settings.base_url
         ) as client:
@@ -109,13 +122,14 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         db.set_setting(conn, "athlete_id", str(athlete.get("id") or ""))
         db.set_setting(conn, "last_sync", datetime.now().isoformat(timespec="seconds"))
         # Der Planer darf eine Woche außerhalb dieses nachweislich gelesenen
-        # Bereichs nicht als bestätigt leer ausgeben (P06/F14).
+        # Bereichs nicht als bestätigt leer ausgeben (P06/F14). `from` ist der
+        # älteste je gelesene Tag, nicht der Beginn dieses Laufs.
         db.set_setting(
             conn,
             "synced_range",
             json.dumps(
                 {
-                    "from": oldest.isoformat(),
+                    "from": gelesen_ab.isoformat(),
                     "to": today.isoformat(),
                     "activities_to": today.isoformat(),
                     "events_to": events_until.isoformat(),
@@ -127,7 +141,8 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
             "intervals",
             started,
             "ok",
-            f"activities={n_activities} direkt={n_direkt} wellness={n_wellness} events={n_events}"
+            f"fenster={tage}"
+            f" activities={n_activities} direkt={n_direkt} wellness={n_wellness} events={n_events}"
             f" streams={n_streams}"
             + (f" dubletten={n_doppelt}" if n_doppelt else "")
             + (f" verwaist={n_verwaist}" if n_verwaist else "")
@@ -155,6 +170,51 @@ def sync(settings: Settings, days: int = 365, today: date | None = None) -> dict
         raise
     finally:
         conn.close()
+
+
+def _fenster(conn: Any, today: date, days: int | None) -> int:
+    """Wie viele Tage rückwärts dieser Lauf liest.
+
+    Ohne Vorgabe ab dem letzten erfolgreichen Lauf: im Tagesbetrieb ein Tag,
+    nach einer Pause genau so viel, wie liegen geblieben ist. Ein festes
+    Jahresfenster holt bei jedem Knopfdruck Daten, die längst in der Datenbank
+    stehen, und blockiert so lange den Refresh.
+    """
+    if days is not None:
+        return min(max(int(days), 1), MAX_TAGE)
+    letzter = db.last_sync(conn)
+    if not letzter:
+        return ERSTLAUF_TAGE
+    try:
+        seit = date.fromisoformat(str(letzter)[:10])
+    except ValueError:
+        return ERSTLAUF_TAGE
+    return min(max((today - seit).days, AKTUELL_TAGE), MAX_TAGE)
+
+
+def _gelesen_ab(conn: Any, oldest: date) -> date:
+    """Ab wann der Bestand nachweislich vollständig ist.
+
+    Ein kurzer Lauf verkürzt die Abdeckung nicht: die älteren Tage stehen
+    weiter in der Datenbank, und `delete_unlisted` räumt nur im gelesenen
+    Fenster. Ohne diese Grenze meldete der Planer jede Woche vor gestern als
+    „nur teilweise gelesen".
+    """
+    raw = db.get_setting(conn, "synced_range")
+    if not raw:
+        # Ältere Datenbanken tragen noch keine Marke. Dann beginnt der
+        # Bestand dort, wo die erste gespeicherte Einheit liegt.
+        erster, _ = db.first_last(conn)
+        try:
+            return min(oldest, date.fromisoformat(str(erster)[:10]))
+        except (TypeError, ValueError):
+            return oldest
+    try:
+        vorher = json.loads(raw)
+        frueher = date.fromisoformat(str(vorher["from"])[:10])
+    except (KeyError, TypeError, ValueError):
+        return oldest
+    return min(oldest, frueher)
 
 
 def dubletten_entfernen(conn: Any) -> int:

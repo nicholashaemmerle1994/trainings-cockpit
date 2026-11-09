@@ -194,7 +194,7 @@ Details, HTTPS über Tailscale, Backup und iPhone-Installation:
 | Befehl | Zweck |
 |---|---|
 | `tc doctor [--online]` | Keys, Rechte und Verbindungen prüfen |
-| `tc sync --days 365` | intervals.icu in die lokale DB laden |
+| `tc sync [--days N]` | intervals.icu in die lokale DB laden; ohne `--days` nur den Rückstand seit dem letzten Lauf |
 | `tc serve [--port 8000]` | Dashboard starten |
 | `tc fetch intervals --days 90` | Rohdaten als JSON sichern |
 | `tc fetch garmin --days 30 --fit` | Garmin-Aktivitäten, Schlaf, HRV, FIT-Test |
