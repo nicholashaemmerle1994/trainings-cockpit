@@ -53,7 +53,12 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("--date", help="Dump-Tag YYYY-MM-DD (Default: neuester intervals-Dump)")
 
     syn = sub.add_parser("sync", help="Daten von intervals.icu in die lokale DB laden")
-    syn.add_argument("--days", type=int, default=365, help="Vergangenheit in Tagen")
+    syn.add_argument(
+        "--days",
+        type=int,
+        default=None,
+        help="Vergangenheit in Tagen; ohne Angabe ab dem letzten Lauf",
+    )
 
     wch = sub.add_parser("woche", help="Wochenübersicht aus der Datenbank")
     wch.add_argument("--wochen", type=int, default=6, help="Anzahl Wochen (Default 6)")
@@ -561,8 +566,9 @@ def _dedupe(settings: Settings, dry_run: bool) -> int:
         conn.close()
 
 
-def _sync(settings: Settings, days: int) -> int:
-    console.print(f"[bold]Sync[/bold] · intervals.icu · {days} Tage")
+def _sync(settings: Settings, days: int | None) -> int:
+    zusatz = f" · {days} Tage" if days else " · seit dem letzten Lauf"
+    console.print(f"[bold]Sync[/bold] · intervals.icu{zusatz}")
     result = sync_mod.sync(settings, days=days)
     table = Table(box=None, show_header=False, padding=(0, 1))
     table.add_row("Athlet", str(result["athlete"]))
