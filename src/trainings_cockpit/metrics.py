@@ -253,14 +253,16 @@ def _complete_night(day: Day) -> bool:
 
 
 def _last_complete_index(days: list[Day], index: int, epoch: date | None) -> int | None:
-    """Die letzte abgeschlossene Nacht mit allen Pflichtwerten (D-88).
+    """Die heutige oder die unmittelbar vorherige Nacht (D-88).
 
-    Fehlt die heutige Nacht noch im Sync, ist das die Nacht davor. Einzelne
-    Signale werden nicht von gestern geliehen: entweder die ganze Nacht oder
-    keine.
+    Der Rückfall auf die Nacht davor deckt nur den Sync-Verzug am Morgen ab.
+    Eine ältere vollständige Nacht ist kein aktueller Erholungswert: fehlen
+    heute und gestern die Pflichtwerte, gibt es „Keine Daten“. Einzelne Signale
+    werden nicht von gestern geliehen: entweder die ganze Nacht oder keine.
     """
-    start = max(0, index - REFERENCE_DAYS + 1)
-    for position in range(index, start - 1, -1):
+    for position in (index, index - 1):
+        if position < 0:
+            continue
         day = days[position]
         if epoch is not None and day.day < epoch:
             continue
@@ -270,9 +272,8 @@ def _last_complete_index(days: list[Day], index: int, epoch: date | None) -> int
 
 
 def _missing_signals(days: list[Day], index: int, epoch: date | None) -> list[str]:
-    """Was der letzten Nacht fehlt, die überhaupt ein Signal hat."""
-    start = max(0, index - REFERENCE_DAYS + 1)
-    for day in reversed(days[start : index + 1]):
+    """Was der heutigen oder gestrigen Nacht fehlt — nicht einer alten Nacht."""
+    for day in reversed(days[max(0, index - 1) : index + 1]):
         if epoch is not None and day.day < epoch:
             continue
         if not _valid_night(day):

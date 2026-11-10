@@ -237,6 +237,24 @@ def test_unvollstaendige_heutige_nacht_wird_nicht_gemischt() -> None:
     assert hrv["today"] == 50.0
 
 
+def test_alte_vollstaendige_nacht_ist_kein_aktueller_wert() -> None:
+    """Nur heute oder gestern dürfen einspringen, keine Nacht von vor 40 Tagen."""
+    today = date(2026, 11, 10)
+    old = today - timedelta(days=40)
+    wellness = _wellness(40, old)
+    # Heute und gestern haben nur die HRV, keine vollständige Nacht.
+    wellness.append({"date": today.isoformat(), "hrv": 50.0})
+    wellness.append({"date": (today - timedelta(days=1)).isoformat(), "hrv": 50.0})
+
+    days = metrics.daily_days(wellness, [], today - timedelta(days=120), today)
+    recovery = metrics.compute_recovery(days, len(days) - 1)
+
+    assert recovery["score"] is None
+    assert recovery["label"] == "Keine Daten"
+    assert recovery["date"] is None
+    assert "der Ruhepuls" in recovery["explanation"]
+
+
 def test_sleep_debt_ignores_missing_nights() -> None:
     day = metrics.Day(day=date(2026, 10, 31), load=0.0)
     night = metrics.Day(day=date(2026, 10, 30), load=0.0, sleep_h=7.0)
