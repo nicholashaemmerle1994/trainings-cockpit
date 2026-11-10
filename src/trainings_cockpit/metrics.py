@@ -13,21 +13,21 @@ from .planner.summaries import recorded_seconds
 
 TARGET_SLEEP_H = 7.5
 #: Garmins Sleep Need ist ein Ziel, keine Mindestdauer — unter sieben Stunden
-#: wird es aber nicht als Ziel verwendet (D-88).
+#: wird es aber nicht als Ziel verwendet (D-89).
 MIN_SLEEP_NEED_H = 7.0
 #: Referenzfenster: 60 Kalendertage. Der Sommer mit anderem Rhythmus soll einen
 #: schlechten Oktober nicht mehr abfedern, aber vier Wochen sind zu wenig, um
 #: die eigene Streuung zu kennen.
 REFERENCE_DAYS = 60
-#: Ab so vielen gültigen Nächten im Fenster entsteht ein Wert (D-88).
+#: Ab so vielen gültigen Nächten im Fenster entsteht ein Wert (D-89).
 REFERENCE_MIN_NIGHTS = 5
 #: Median/MAD sind robust; der Faktor macht die MAD zur üblichen Streuung.
 MAD_SCALE = 1.4826
 #: Unter dieser Streuung wäre jeder z-Score ein Ausreißer. Die Werte sind
-#: Mindeststreuungen je Signal, keine Normalisierung (D-88).
+#: Mindeststreuungen je Signal, keine Normalisierung (D-89).
 MIN_SPREAD = {"hrv": 1.0, "rhr": 1.0, "resp": 0.2}
 #: Asymmetrische Abbildung: unter dem Üblichen zählt jeder z-Punkt 16, darüber
-#: 10 Score-Punkte. Ein normaler Tag liegt bei 80 (D-88).
+#: 10 Score-Punkte. Ein normaler Tag liegt bei 80 (D-89).
 SCORE_CENTER = 80.0
 SCORE_PER_SD_BELOW = 16.0
 SCORE_PER_SD_ABOVE = 10.0
@@ -53,7 +53,7 @@ WEIGHTS = {"hrv": 35.0, "rhr": 25.0, "sleep": 30.0, "resp": 10.0}
 #: Vergleichs-App (Bevel) eintragen: erst Paare sammeln, dann vergleichen (D-52).
 VENDOR_COMPARE_DAYS = 7
 #: Ohne diese Signale gibt es keinen Score (D-26). SpO2 ist bewusst nicht dabei:
-#: es fließt seit v2 nicht mehr in den Score ein (D-88).
+#: es fließt seit v2 nicht mehr in den Score ein (D-89).
 REQUIRED_SIGNALS = {
     "hrv": "die HRV",
     "rhr": "der Ruhepuls",
@@ -67,7 +67,7 @@ BANDS = (
     (40, "orange", "Erholungsbedarf"),
     (0, "red", "Ruhetag"),
 )
-#: Gesamtdeckel der Warnregeln (D-89). Nie positiv, nie tiefer als 15 Punkte.
+#: Gesamtdeckel der Warnregeln (D-90). Nie positiv, nie tiefer als 15 Punkte.
 WARNING_CAP = -15.0
 
 BAND_SENTENCES = {
@@ -211,7 +211,7 @@ def _seconds_to_hours(
 
 
 def reference_nights(days: list[Day], index: int, epoch: date | None) -> int:
-    """Gültige Nächte im 60-Tage-Fenster, das mit `index` endet (D-88)."""
+    """Gültige Nächte im 60-Tage-Fenster, das mit `index` endet (D-89)."""
     return len(_reference_window(days, index, epoch))
 
 
@@ -225,7 +225,7 @@ def _reference_window(days: list[Day], index: int, epoch: date | None) -> list[D
 
 
 def _baseline_window(days: list[Day], target: int, epoch: date | None) -> list[Day]:
-    """Alle gültigen Nächte im 60-Tage-Fenster, inklusive der Zielnacht (D-88)."""
+    """Alle gültigen Nächte im 60-Tage-Fenster, inklusive der Zielnacht (D-89)."""
     return _reference_window(days, target, epoch)
 
 
@@ -250,7 +250,7 @@ def _complete_night(day: Day) -> bool:
 
 
 def _last_complete_index(days: list[Day], index: int, epoch: date | None) -> int | None:
-    """Die heutige oder die unmittelbar vorherige Nacht (D-88).
+    """Die heutige oder die unmittelbar vorherige Nacht (D-89).
 
     Der Rückfall auf die Nacht davor deckt nur den Sync-Verzug am Morgen ab.
     Eine ältere vollständige Nacht ist kein aktueller Erholungswert: fehlen
@@ -335,7 +335,7 @@ def _reference_building(reference: dict[str, Any]) -> dict[str, Any]:
 def compute_recovery(
     days: list[Day], index: int, epoch: date | None = None
 ) -> dict[str, Any]:
-    """Erholung nach Nachtsignalen im 60-Tage-Fenster (D-88).
+    """Erholung nach Nachtsignalen im 60-Tage-Fenster (D-89).
 
     HRV, Ruhepuls und Atmung werden gegen den persönlichen Median derselben
     Nächte bewertet (Median/MAD, Mindeststreuung), der Schlaf gegen das
@@ -510,7 +510,7 @@ def _component(
 
 
 def _sleep_target(day: Day) -> float:
-    """Garmin Sleep Need, sonst Garmin-Schlafziel, sonst lokal 7:30 (D-88)."""
+    """Garmin Sleep Need, sonst Garmin-Schlafziel, sonst lokal 7:30 (D-89)."""
     if day.sleep_need_h is not None:
         return max(day.sleep_need_h, MIN_SLEEP_NEED_H)
     if day.sleep_goal_h is not None:
@@ -522,7 +522,7 @@ def _sleep_component(day: Day, window: list[Day]) -> dict[str, Any] | None:
     """Schlaf aus Dauer, Wachheit und — falls vorhanden — Phasen.
 
     Mit Phasen: 60 % Dauer, 25 % Wachheit, 15 % Phasen. Ohne Phasen: 70/30.
-    Der Garmin-Sleep-Score wird nicht verwendet (D-88).
+    Der Garmin-Sleep-Score wird nicht verwendet (D-89).
     """
     if day.sleep_h is None or day.sleep_awake_h is None:
         return None
@@ -573,7 +573,7 @@ def _sleep_component(day: Day, window: list[Day]) -> dict[str, Any] | None:
 def _warning_rules(
     components: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], float]:
-    """Die vier Warnregeln mit festen Schwellen (D-89).
+    """Die vier Warnregeln mit festen Schwellen (D-90).
 
     Sie prüfen bewusst die Abweichung, nicht den z-Score: die Schwellen sind
     fachlich (10 %, 5 bpm, Schlafscore 60) und bleiben auch dann gleich, wenn
@@ -633,7 +633,7 @@ def _warning_rules(
 
 
 def _capped_adjustment(rule_sum: float) -> float:
-    """Der Gesamtdeckel der Warnregeln: nie positiv, nie tiefer als −15 (D-89)."""
+    """Der Gesamtdeckel der Warnregeln: nie positiv, nie tiefer als −15 (D-90)."""
     return max(WARNING_CAP, rule_sum) if rule_sum < 0 else 0.0
 
 

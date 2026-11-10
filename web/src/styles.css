@@ -1006,7 +1006,7 @@ h2 {
   color: var(--text-3);
 }
 
-/* Warnregeln der Erholung (D-89): ruhige Liste, der Abzug trägt die
+/* Warnregeln der Erholung (D-90): ruhige Liste, der Abzug trägt die
    Warnfarbe. Kein eigener Kasten, keine zweite Fläche in der Karte. */
 .recovery-warnings {
   margin-top: var(--space-4);

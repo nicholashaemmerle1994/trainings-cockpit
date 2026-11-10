@@ -44,7 +44,7 @@ Keine intervals-Fachbegriffe in der Oberfläche:
 Nachtsignale, gewichtetes Mittel. Bewertet wird die letzte abgeschlossene Nacht
 mit allen Pflichtwerten; fehlt die heutige noch im Sync, steht die Nacht davor
 als „Nacht vom …“ auf der Karte. Verglichen wird mit den eigenen letzten
-**60 Kalendertagen** (mindestens 5 gültige Nächte, D-88).
+**60 Kalendertagen** (mindestens 5 gültige Nächte, D-89).
 **Training fließt nicht direkt ein** – Belastung wirkt über die nächste Nacht.
 
 **Alles oder nichts (D-26):** Ein Wert entsteht nur, wenn HRV, Ruhepuls, Schlaf
@@ -68,7 +68,7 @@ Ampel: ≥ 85 sehr gut erholt, 70–84 gut erholt, 55–69 solide, 40–54
 Erholungsbedarf, < 40 Ruhetag (Schwellen provisorisch).
 Jeder Wert zeigt **heute**, **Schnitt** und **üblich**; darunter erklärt ein Satz
 den Score. Vier Warnregeln können den Score zusätzlich um insgesamt höchstens
-15 Punkte senken und stehen mit Einzelabzug auf der Karte (D-89). Ausreißer
+15 Punkte senken und stehen mit Einzelabzug auf der Karte (D-90). Ausreißer
 (z. B. HRV 255) werden gefiltert.
 
 ## Verpflegung
@@ -200,7 +200,7 @@ Details, HTTPS über Tailscale, Backup und iPhone-Installation:
 | Befehl | Zweck |
 |---|---|
 | `tc doctor [--online]` | Keys, Rechte und Verbindungen prüfen |
-| `tc sync --days 365` | intervals.icu in die lokale DB laden |
+| `tc sync [--days N]` | intervals.icu in die lokale DB laden; ohne `--days` nur den Rückstand seit dem letzten Lauf |
 | `tc serve [--port 8000]` | Dashboard starten |
 | `tc fetch intervals --days 90` | Rohdaten als JSON sichern |
 | `tc fetch garmin --days 30 --fit` | Garmin-Aktivitäten, Schlaf, HRV, FIT-Test |

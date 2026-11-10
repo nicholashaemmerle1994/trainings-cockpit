@@ -66,9 +66,12 @@ Chevron und keinen `tabindex`.
   erkennen. Diese Grenze ist im Abnahmebericht P26 benannt.
 - **Garmin:** Aktivitäten werden in 100er-Seiten bis maximal 1000 geladen;
   die Nachtsignale laufen in 28-Tage-Fenstern.
-- **Reichweite:** `tc sync --days 365` ist der Standard; die API akzeptiert
-  maximal 730 Tage. Events werden zusätzlich 365 Tage in die Zukunft gelesen.
-  Ältere Wochen sind nur so vollständig, wie sie im lokalen Bestand liegen.
+- **Reichweite:** Ohne `--days` liest der Sync ab dem letzten erfolgreichen
+  Lauf (mindestens ein Tag, Erstlauf 365 Tage), `tc sync --days 365` lädt die
+  volle Historie; die API akzeptiert maximal 730 Tage. Events werden zusätzlich
+  365 Tage in die Zukunft gelesen. Ältere Wochen sind nur so vollständig, wie
+  sie im lokalen Bestand liegen; die Abdeckung beginnt beim ältesten je
+  gelesenen Tag (D-88).
 - F14 prüft mehrere Seiten, vollständig leer, nicht verfügbar und getrennte
   Quellenfehler als Konzeptfälle. Die tatsächliche Pagination-Grenze von
   intervals.icu bleibt die oben genannte Einschränkung.

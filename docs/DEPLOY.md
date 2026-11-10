@@ -86,8 +86,14 @@ curl -s http://127.0.0.1:8000/api/health
 Aktuell wird per Knopf im Dashboard oder per CLI synchronisiert:
 
 ```bash
-docker compose exec cockpit tc sync --days 365
+docker compose exec cockpit tc sync            # Rückstand seit dem letzten Lauf
+docker compose exec cockpit tc sync --days 365 # volle Historie nachladen
 ```
+
+Ohne `--days` liest der Sync nur, was seit dem letzten erfolgreichen Lauf neu
+sein kann (mindestens einen Tag, nach einer Pause genau die Lücke). Der Knopf
+im Dashboard tut dasselbe. Die volle Historie steht in der Datenbank und wird
+nur bei Bedarf nachgeladen.
 
 Ein automatischer Scheduler (morgens/abends) ist noch nicht eingebaut und
 kommt in einer späteren Etappe.

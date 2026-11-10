@@ -12,7 +12,7 @@ export interface RecoveryComponent {
   date?: string | null;
   z?: number | null;
   vendor?: number | null;
-  /** Schlaf: Ziel, Wachheit, Phasen (D-88). */
+  /** Schlaf: Ziel, Wachheit, Phasen (D-89). */
   target?: number;
   awake?: number;
   deep?: number | null;
@@ -46,9 +46,9 @@ export interface Recovery {
   missing?: string[];
   reference?: RecoveryReference | null;
   explanation: string;
-  /** Nacht, zu der der Score gehört (D-88). */
+  /** Nacht, zu der der Score gehört (D-89). */
   date?: string | null;
-  /** Ausgelöste Warnregeln mit Einzelabzug (D-89). */
+  /** Ausgelöste Warnregeln mit Einzelabzug (D-90). */
   triggeredRules?: RecoveryRule[];
   /** Gedeckelte Summe der Warnregeln, nie positiv. */
   adjustment?: number;

@@ -84,8 +84,8 @@ Vorgangspersistenz und die Rückleseprüfung.
   nicht gesetzt (API: „default is all“); eine serverseitige Kappung könnte die
   aktuelle Implementierung nicht erkennen. Garmin lädt Aktivitäten in
   100er-Seiten bis maximal 1000. Die historische Verfügbarkeit endet dort, wo
-  der lokale Sync sie hinterlässt (Standard 365 Tage, API maximal 730 Tage;
-  Events zusätzlich 365 Tage voraus).
+  der lokale Sync sie hinterlässt (Standard: Rückstand seit dem letzten Lauf,
+  Erstlauf 365 Tage, API maximal 730 Tage; Events zusätzlich 365 Tage voraus).
 - **Geräteübertragung:** Ein gespeicherter Plan belegt nur den Write nach
   intervals.icu, nicht die Übertragung auf ein Gerät.
 

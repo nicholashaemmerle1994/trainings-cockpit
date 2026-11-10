@@ -162,7 +162,7 @@ setting(key, value_json)
 Teilscores 0–100, gewichtetes Mittel **ohne Renormierung**: fehlt ein
 Pflichtsignal, entsteht kein Wert (D-26). Bewertet wird die letzte vollständige
 Nacht; die Referenz sind die eigenen letzten **60 Kalendertage** (mindestens 5
-gültige Nächte, D-88). **Training fließt nicht direkt ein** (Bevel-Logik).
+gültige Nächte, D-89). **Training fließt nicht direkt ein** (Bevel-Logik).
 
 | Input | Gewicht | Basis |
 |---|---|---|
@@ -173,7 +173,7 @@ gültige Nächte, D-88). **Training fließt nicht direkt ein** (Bevel-Logik).
 
 Skala: `80 + 16·z` unter dem Üblichen, `80 + 10·z` darüber, geklemmt auf 0–100.
 Bänder: 85/70/55/40 (provisorisch). Vier Warnregeln senken den Score um
-insgesamt höchstens 15 Punkte (D-89). SpO₂ und Body Battery sind nicht im Score.
+insgesamt höchstens 15 Punkte (D-90). SpO₂ und Body Battery sind nicht im Score.
 Garmin-Sleep-Score und Schlafkonsistenz zählen nicht.
 
 Anzeige: je Signal **heute / Schnitt / üblich**, „Nacht vom …“, Referenz x/60,

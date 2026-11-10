@@ -145,7 +145,7 @@ def test_recovery_uses_respiration_but_not_spo2() -> None:
     assert "resp" in components
     # Niedrigere Atmung ist besser und liegt klar unter dem Üblichen.
     assert components["resp"]["score"] > 80
-    # SpO2 ist seit v2 kein Bestandteil des Scores mehr (D-88).
+    # SpO2 ist seit v2 kein Bestandteil des Scores mehr (D-89).
     assert "spo2" not in components
     assert {component["weight"] for component in recovery["components"]} == {
         35.0,
@@ -209,7 +209,7 @@ def test_activity_payload_formats_pace() -> None:
 
 
 def test_fehlende_heutige_nacht_nimmt_die_letzte_vollstaendige() -> None:
-    """Die heutige Nacht ist noch nicht im Sync – die letzte ganze zählt (D-88)."""
+    """Die heutige Nacht ist noch nicht im Sync – die letzte ganze zählt (D-89)."""
     today = date(2026, 10, 31)
     wellness = _wellness(30, today - timedelta(days=1))
     days = metrics.daily_days(wellness, [], today - timedelta(days=120), today)
@@ -325,7 +325,7 @@ def test_ein_fehlendes_signal_ergibt_keinen_score() -> None:
 
 
 def test_neuer_sensor_wartet_auf_die_fuenf_naechte() -> None:
-    """Der erste Wert kommt ab fünf gültigen Nächten (D-88)."""
+    """Der erste Wert kommt ab fünf gültigen Nächten (D-89)."""
     today = date(2026, 11, 9)
     wellness = _wellness(90, today)
     days = metrics.daily_days(wellness, [], today - timedelta(days=89), today)
@@ -376,7 +376,7 @@ def test_referenz_ist_immer_das_60_tage_fenster() -> None:
 
 
 def test_referenz_zaehlt_die_score_nacht_nicht_die_teilnacht_heute() -> None:
-    """Kommt der Score von gestern, zählt die Referenz bis gestern (D-88)."""
+    """Kommt der Score von gestern, zählt die Referenz bis gestern (D-89)."""
     today = date(2026, 11, 10)
     wellness = _wellness(6, today - timedelta(days=1))
     wellness.append({"date": today.isoformat(), "hrv": 99.0})
@@ -410,7 +410,7 @@ def _vorschau_naechte(mit_atmung: bool = True) -> list[dict]:
     Vorschau. Atmung und Wachheit waren über die API im Container nicht
     lesbar (kein Garmin-Key); 14,0/min und 20 Minuten wach sind Testwerte,
     die nur die Pflichtschwelle erfüllen. Die echten Werte bestätigt der
-    erste Sync mit Key (offener Punkt in D-88).
+    erste Sync mit Key (offener Punkt in D-89).
     """
     hrv = [28, 29, 31, 29, 21, 32]
     rhr = [58, 56, 57, 56, 59, 55]
