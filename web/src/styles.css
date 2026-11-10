@@ -1006,6 +1006,50 @@ h2 {
   color: var(--text-3);
 }
 
+/* Warnregeln der Erholung (D-90): ruhige Liste, der Abzug trägt die
+   Warnfarbe. Kein eigener Kasten, keine zweite Fläche in der Karte. */
+.recovery-warnings {
+  margin-top: var(--space-4);
+}
+
+.recovery-warnings-head {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  color: var(--warning);
+}
+
+.recovery-warnings-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-warnings-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-label);
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.recovery-warnings-penalty {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--warning);
+}
+
+.recovery-warnings-total {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-micro);
+  line-height: 1.4;
+  color: var(--warning);
+  text-align: right;
+}
+
 /* ------------------------------------------------------------------ Diagramm */
 
 

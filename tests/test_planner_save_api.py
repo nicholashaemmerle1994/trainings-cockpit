@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -245,9 +245,11 @@ def test_aktivitaetssync_zaehlt_neue_aufzeichnung_nur_einmal(
     settings = api.get_settings()
     conn = db.connect(settings.db_path)
     db.init_db(conn)
+    today = date.today()
+    week_start = (today - timedelta(days=today.weekday())).isoformat()
     row = {
         "id": "act-sync-1",
-        "start_date_local": "2026-11-03T07:00:00",
+        "start_date_local": f"{today.isoformat()}T07:00:00",
         "type": "Run",
         "name": "Neue Aufzeichnung",
         "moving_time": 1800,
@@ -259,7 +261,7 @@ def test_aktivitaetssync_zaehlt_neue_aufzeichnung_nur_einmal(
     assert conn.execute("SELECT COUNT(*) FROM activity").fetchone()[0] == 1
     conn.close()
 
-    week = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+    week = client.get("/api/planner", params={"week": week_start}).json()
     assert week["summary"]["recorded"]["seconds"] == 1800
     assert week["summary"]["recorded"]["count"] == 1
     overview = client.get("/api/overview").json()
@@ -273,7 +275,7 @@ def test_aktivitaetssync_zaehlt_neue_aufzeichnung_nur_einmal(
     assert conn.execute("SELECT COUNT(*) FROM activity").fetchone()[0] == 1
     row_id = conn.execute("SELECT id FROM activity").fetchone()[0]
     conn.close()
-    corrected = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+    corrected = client.get("/api/planner", params={"week": week_start}).json()
     assert corrected["summary"]["recorded"]["seconds"] == 2400
     assert corrected["summary"]["recorded"]["count"] == 1
     unit = client.get(f"/api/unit/{row_id}").json()

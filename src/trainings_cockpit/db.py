@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS wellness (
     rhr              REAL,
     sleep_s          REAL,
     sleep_score      REAL,
+    sleep_awake_s    REAL,
+    sleep_deep_s     REAL,
+    sleep_light_s    REAL,
+    sleep_rem_s      REAL,
+    sleep_need_h     REAL,
+    sleep_goal_h     REAL,
     respiration      REAL,
     spo2             REAL,
     stress           REAL,
@@ -143,6 +149,12 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("event", "distance_m", "REAL"),
     ("event", "intensity", "REAL"),
     ("event", "raw", "TEXT"),
+    ("wellness", "sleep_awake_s", "REAL"),
+    ("wellness", "sleep_deep_s", "REAL"),
+    ("wellness", "sleep_light_s", "REAL"),
+    ("wellness", "sleep_rem_s", "REAL"),
+    ("wellness", "sleep_need_h", "REAL"),
+    ("wellness", "sleep_goal_h", "REAL"),
 )
 
 
@@ -193,6 +205,12 @@ def map_wellness(row: dict[str, Any]) -> dict[str, Any]:
         "rhr": row.get("restingHR"),
         "sleep_s": row.get("sleepSecs"),
         "sleep_score": row.get("sleepScore"),
+        "sleep_awake_s": row.get("awakeSleepSeconds"),
+        "sleep_deep_s": row.get("deepSleepSeconds"),
+        "sleep_light_s": row.get("lightSleepSeconds"),
+        "sleep_rem_s": row.get("remSleepSeconds"),
+        "sleep_need_h": row.get("sleepNeedHours"),
+        "sleep_goal_h": row.get("sleepGoalHours"),
         "respiration": row.get("respiration"),
         "spo2": row.get("spO2"),
         "stress": row.get("stress"),
@@ -273,15 +291,24 @@ def upsert_wellness(conn: sqlite3.Connection, rows: Iterable[dict[str, Any]]) ->
         row = map_wellness(raw)
         conn.execute(
             """
-            INSERT INTO wellness (date, hrv, rhr, sleep_s, sleep_score, respiration, spo2,
-                stress, weight_kg, readiness_vendor, ctl, atl, updated_at)
-            VALUES (:date, :hrv, :rhr, :sleep_s, :sleep_score, :respiration, :spo2,
-                :stress, :weight_kg, :readiness_vendor, :ctl, :atl, :updated_at)
+            INSERT INTO wellness (date, hrv, rhr, sleep_s, sleep_score, sleep_awake_s,
+                sleep_deep_s, sleep_light_s, sleep_rem_s, sleep_need_h, sleep_goal_h,
+                respiration, spo2, stress, weight_kg, readiness_vendor, ctl, atl, updated_at)
+            VALUES (:date, :hrv, :rhr, :sleep_s, :sleep_score, :sleep_awake_s,
+                :sleep_deep_s, :sleep_light_s, :sleep_rem_s, :sleep_need_h, :sleep_goal_h,
+                :respiration, :spo2, :stress, :weight_kg, :readiness_vendor, :ctl, :atl,
+                :updated_at)
             ON CONFLICT(date) DO UPDATE SET
                 hrv=COALESCE(excluded.hrv, wellness.hrv),
                 rhr=COALESCE(excluded.rhr, wellness.rhr),
                 sleep_s=COALESCE(excluded.sleep_s, wellness.sleep_s),
                 sleep_score=COALESCE(excluded.sleep_score, wellness.sleep_score),
+                sleep_awake_s=COALESCE(excluded.sleep_awake_s, wellness.sleep_awake_s),
+                sleep_deep_s=COALESCE(excluded.sleep_deep_s, wellness.sleep_deep_s),
+                sleep_light_s=COALESCE(excluded.sleep_light_s, wellness.sleep_light_s),
+                sleep_rem_s=COALESCE(excluded.sleep_rem_s, wellness.sleep_rem_s),
+                sleep_need_h=COALESCE(excluded.sleep_need_h, wellness.sleep_need_h),
+                sleep_goal_h=COALESCE(excluded.sleep_goal_h, wellness.sleep_goal_h),
                 respiration=COALESCE(excluded.respiration, wellness.respiration),
                 spo2=COALESCE(excluded.spo2, wellness.spo2),
                 stress=COALESCE(excluded.stress, wellness.stress),

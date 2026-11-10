@@ -80,3 +80,108 @@ def test_wellness_nimmt_die_atmung_aus_der_nacht_vor_der_tagesatmung() -> None:
     )
 
     assert wellness_rows(dump)[0]["respiration"] == 13.4
+
+
+def test_wellness_liest_phasen_sleep_need_und_schlafziel() -> None:
+    dump = GarminDump(
+        profile={"sleepGoal": 28_800},
+        sleep=[
+            {
+                "calendarDate": "2026-11-04",
+                "sleepTimeSeconds": 27_000,
+                "awakeSleepSeconds": 1_200,
+                "deepSleepSeconds": 5_400,
+                "lightSleepSeconds": 18_000,
+                "remSleepSeconds": 3_600,
+                "sleepNeed": {"actual": 29_400},
+            }
+        ],
+    )
+
+    row = wellness_rows(dump)[0]
+    assert row["awakeSleepSeconds"] == 1_200
+    assert row["deepSleepSeconds"] == 5_400
+    assert row["lightSleepSeconds"] == 18_000
+    assert row["remSleepSeconds"] == 3_600
+    assert row["sleepNeedHours"] == 8.17
+    assert row["sleepGoalHours"] == 8.0
+
+
+def test_sleep_need_ohne_dict_und_ohne_ziel() -> None:
+    dump = GarminDump(
+        sleep=[
+            {
+                "calendarDate": "2026-11-04",
+                "sleepTimeSeconds": 27_000,
+                "sleepNeed": 27_900,
+            }
+        ]
+    )
+
+    row = wellness_rows(dump)[0]
+    assert row["sleepNeedHours"] == 7.75
+    assert "sleepGoalHours" not in row
+
+
+def test_wachzeit_aus_zeit_im_bett_abgeleitet() -> None:
+    dump = GarminDump(
+        sleep=[
+            {
+                "calendarDate": "2026-11-04",
+                "sleepTimeSeconds": 27_000,
+                "sleepStartTimestampGMT": 1_760_000_000_000,
+                "sleepEndTimestampGMT": 1_760_028_200_000,
+            }
+        ]
+    )
+
+    assert wellness_rows(dump)[0]["awakeSleepSeconds"] == 1_200
+
+
+def test_wachzeit_aus_lokalen_iso_zeiten_abgeleitet() -> None:
+    dump = GarminDump(
+        sleep=[
+            {
+                "calendarDate": "2026-11-04",
+                "sleepTimeSeconds": 27_000,
+                "sleepStartTimestampLocal": "2026-11-04T23:00:00",
+                "sleepEndTimestampLocal": "2026-11-05T06:50:00",
+            }
+        ]
+    )
+
+    assert wellness_rows(dump)[0]["awakeSleepSeconds"] == 1_200
+
+
+def test_explizite_wachzeit_gewinnt() -> None:
+    dump = GarminDump(
+        sleep=[
+            {
+                "calendarDate": "2026-11-04",
+                "sleepTimeSeconds": 27_000,
+                "awakeSleepSeconds": 600,
+                "sleepStartTimestampGMT": 1_760_000_000_000,
+                "sleepEndTimestampGMT": 1_760_028_200_000,
+            }
+        ]
+    )
+
+    assert wellness_rows(dump)[0]["awakeSleepSeconds"] == 600
+
+
+def test_schlaf_aus_daily_sleep_dto() -> None:
+    dump = GarminDump(
+        sleep=[
+            {
+                "dailySleepDTO": {
+                    "calendarDate": "2026-11-04",
+                    "sleepTimeSeconds": 27_000,
+                    "awakeSleepSeconds": 1_200,
+                }
+            }
+        ]
+    )
+
+    row = wellness_rows(dump)[0]
+    assert row["sleepSecs"] == 27_000
+    assert row["awakeSleepSeconds"] == 1_200

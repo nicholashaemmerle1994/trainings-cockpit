@@ -14,7 +14,7 @@ und Verpflegung. Stabil auf Port 8100, Vorschau auf 8101.
 
 | Seite | Inhalt |
 |---|---|
-| **Heute** | Erholungskarte mit Ring — Score erst ab 21 Nächten, vorher „Referenz wird aufgebaut". HRV, Ruhepuls und Schlaf mit Delta zur eigenen Referenz, Countdowns, Training für heute und morgen, Letzte 7 Tage mit Umfang, Belastung, Einheiten und Belastungsverhältnis. „Umfang“ ist eine reine Kennzahl ohne Navigation. |
+| **Heute** | Erholungskarte mit Ring — Score ab 5 gültigen Nächten im 60-Tage-Fenster, vorher „Referenz wird aufgebaut". HRV, Ruhepuls und Schlaf mit Delta zur eigenen Referenz, Countdowns, Training für heute und morgen, Letzte 7 Tage mit Umfang, Belastung, Einheiten und Belastungsverhältnis. „Umfang“ ist eine reine Kennzahl ohne Navigation. |
 | **Planer** | Kalenderwoche Montag–Sonntag mit getrennten Plan-/Ist-Summen, Tages-Plus, Inline-Editor, wiederholbaren Aufbauten, Planungsdetail und bestehenden Aktivitätsdetails. Alte Listen-URLs leiten kompatibel in den Planer. |
 | **Verpflegung** | Kohlenhydratrechner für Locker und Wettkampf: Gramm je Stunde, Getränk, Gels oder Ahornsirup, Wasser, Salz, Zeitplan, Herrichten und Drumherum |
 
@@ -41,29 +41,35 @@ Keine intervals-Fachbegriffe in der Oberfläche:
 
 ## Erholung
 
-Nachtsignale, gewichtetes Mittel. Die letzte Nacht zählt vollständig; verglichen
-wird mit den eigenen letzten drei Wochen.
+Nachtsignale, gewichtetes Mittel. Bewertet wird die letzte abgeschlossene Nacht
+mit allen Pflichtwerten; fehlt die heutige noch im Sync, steht die Nacht davor
+als „Nacht vom …“ auf der Karte. Verglichen wird mit den eigenen letzten
+**60 Kalendertagen** (mindestens 5 gültige Nächte, D-89).
 **Training fließt nicht direkt ein** – Belastung wirkt über die nächste Nacht.
 
 **Alles oder nichts (D-26):** Ein Wert entsteht nur, wenn HRV, Ruhepuls, Schlaf
-**und** Atmung von heute vorliegen. Fehlt eines, zeigt das Cockpit „Keine Daten"
-und nennt das fehlende Signal — kein Teilwert, keine Hochrechnung aus dem Rest,
-kein Wert von gestern.
+**und** Atmung vorliegen. Fehlt eines, zeigt das Cockpit „Keine Daten“ und nennt
+das fehlende Signal — kein Teilwert, keine Hochrechnung aus dem Rest, kein
+einzelnes Signal von gestern.
 
 | Signal | Gewicht | Basis |
 |---|---|---|
-| HRV | 35 % | Tageswert gegen die eigene 21-Tage-Referenz (z-Score) |
-| Ruhepuls | 20 % | dito, invertiert |
-| Schlaf | 30 % | 50 % Dauer gegen 7:30 h, 50 % Schlafscore |
-| Atmung | 5 % | Nachtschnitt gegen 21-Tage-Referenz, niedriger = besser |
-| SpO₂ | 5 % | **nur Abzug** unter 95 % oder ≥ 2 Punkte unter Referenz |
+| HRV | 35 % | Tageswert gegen den eigenen 60-Tage-Median (Median/MAD, Mindeststreuung) |
+| Ruhepuls | 25 % | dito, invertiert |
+| Schlaf | 30 % | 60 % Dauer, 25 % Wachheit, 15 % Phasen; ohne Phasen 70/30 |
+| Atmung | 10 % | Nachtschnitt gegen 60-Tage-Median, niedriger = besser |
 
-Skala: `68 + 25·z` – ein normaler Tag ergibt 68, +1 SD 93, −1 SD 43.
-Ampel: ≥ 85 sehr gut erholt, 70–84 gut erholt, 50–69 solide, 35–49
-Erholungsbedarf, < 35 Ruhetag.
+Schlafziel: Garmin Sleep Need (nicht unter 7:00), sonst Garmin-Schlafziel, sonst
+7:30. Garmin-Sleep-Score und Schlafkonsistenz zählen nicht. SpO₂ und Body
+Battery sind nicht im Score.
+
+Skala: `80 + 16·z` unter dem Üblichen, `80 + 10·z` darüber, geklemmt auf 0–100.
+Ampel: ≥ 85 sehr gut erholt, 70–84 gut erholt, 55–69 solide, 40–54
+Erholungsbedarf, < 40 Ruhetag (Schwellen provisorisch).
 Jeder Wert zeigt **heute**, **Schnitt** und **üblich**; darunter erklärt ein Satz
-den Score. Ausreißer (z. B. HRV 255) werden gefiltert. Temperatur fehlt aktuell
-in den Daten und wird ergänzt, sobald sie verfügbar ist.
+den Score. Vier Warnregeln können den Score zusätzlich um insgesamt höchstens
+15 Punkte senken und stehen mit Einzelabzug auf der Karte (D-90). Ausreißer
+(z. B. HRV 255) werden gefiltert.
 
 ## Verpflegung
 

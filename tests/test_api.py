@@ -43,6 +43,7 @@ def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
                 "hrv": 50,
                 "restingHR": 48,
                 "sleepSecs": 8 * 3600,
+                "awakeSleepSeconds": 20 * 60,
                 "respiration": 13.0,
                 "sleepScore": 80,
                 "ctl": 50,
@@ -111,6 +112,7 @@ def test_fuel_defaults_to_last_known_weight(client: TestClient) -> None:
                 "hrv": 50,
                 "restingHR": 48,
                 "sleepSecs": 8 * 3600,
+                "awakeSleepSeconds": 20 * 60,
                 "respiration": 13.0,
                 "weight": 81.2,
             }
@@ -143,6 +145,41 @@ def test_fuel_can_use_maple_syrup(client: TestClient) -> None:
 
 def test_fuel_rejects_unknown_source(client: TestClient) -> None:
     assert client.get("/api/fuel", params={"source": "cola"}).status_code == 400
+
+
+def test_overview_liefert_warnregeln_und_abzug(client: TestClient) -> None:
+    settings = api.get_settings()
+    conn = db.connect(settings.db_path)
+    db.init_db(conn)
+    db.upsert_wellness(
+        conn,
+        [
+            {
+                "id": date.today().isoformat(),
+                "hrv": 40,
+                "restingHR": 56,
+                "sleepSecs": 3 * 3600,
+                "awakeSleepSeconds": 6 * 60,
+                "respiration": 13.0,
+            }
+        ],
+    )
+    conn.close()
+
+    recovery = client.get("/api/overview").json()["today"]["recovery"]
+
+    assert recovery["date"] == date.today().isoformat()
+    assert recovery["adjustment"] == -15
+    assert recovery["score"] is not None
+    assert {rule["id"] for rule in recovery["triggeredRules"]} == {
+        "hrv_rhr",
+        "hrv_sleep",
+        "rhr_sleep",
+        "triple_low",
+    }
+    assert all(
+        set(rule) == {"id", "label", "adjustment"} for rule in recovery["triggeredRules"]
+    )
 
 
 def test_vendor_score_can_be_saved(client: TestClient) -> None:
