@@ -100,27 +100,33 @@ export function Today({ data }: { data: Overview }) {
   const hrv = componentFor("hrv");
   const rhr = componentFor("rhr");
   const sleep = componentFor("sleep");
+  // Mit Score zeigen die Nachtwerte dieselbe Nacht wie der Score (recovery.date).
+  // Ohne Score bleiben die Werte der letzten Nacht sichtbar (D-58); die dürfen
+  // nicht mit einer älteren Score-Nacht gemischt werden.
+  const hrvValue = hasScore ? (hrv?.today ?? null) : today.hrv.value;
+  const rhrValue = hasScore ? (rhr?.today ?? null) : today.rhr.value;
+  const sleepValue = hasScore ? (sleep?.today ?? null) : today.sleep.hours;
   const nightly = [
     {
       key: "hrv",
       label: "HRV",
-      value: today.hrv.value,
+      value: hrvValue,
       unit: "ms",
-      delta: deltaPercent(today.hrv.value, hrv?.baseline, hrv?.average),
+      delta: deltaPercent(hrvValue, hrv?.baseline, hrv?.average),
     },
     {
       key: "rhr",
       label: "Ruhepuls",
-      value: today.rhr.value,
+      value: rhrValue,
       unit: "bpm",
-      delta: deltaNumber(today.rhr.value, rhr?.baseline, rhr?.average, "bpm", false),
+      delta: deltaNumber(rhrValue, rhr?.baseline, rhr?.average, "bpm", false),
     },
     {
       key: "sleep",
       label: "Schlaf",
-      value: today.sleep.hours,
+      value: sleepValue,
       unit: "h",
-      delta: deltaNumber(today.sleep.hours, sleep?.baseline, sleep?.average, "min", true, 60),
+      delta: deltaNumber(sleepValue, sleep?.baseline, sleep?.average, "min", true, 60),
     },
   ];
   const showNightly =
