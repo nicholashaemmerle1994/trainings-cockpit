@@ -208,22 +208,22 @@ def test_activity_payload_formats_pace() -> None:
     assert payload["sport_label"] == "Laufen"
 
 
-def test_fehlende_heutige_nacht_nimmt_die_letzte_vollstaendige() -> None:
-    """Die heutige Nacht ist noch nicht im Sync – die letzte ganze zählt (D-89)."""
+def test_fehlende_heutige_nacht_ergibt_keinen_wert() -> None:
+    """Kein Wert von gestern: fehlt die heutige Nacht, gibt es keinen Score (D-26)."""
     today = date(2026, 10, 31)
     wellness = _wellness(30, today - timedelta(days=1))
     days = metrics.daily_days(wellness, [], today - timedelta(days=120), today)
 
     recovery = metrics.compute_recovery(days, len(days) - 1)
-    assert recovery["score"] is not None
-    assert recovery["date"] == (today - timedelta(days=1)).isoformat()
-    assert all(
-        component["date"] == recovery["date"] for component in recovery["components"]
-    )
+    assert recovery["score"] is None
+    assert recovery["label"] == "Keine Daten"
+    assert recovery["date"] is None
+    assert recovery["components"] == []
+    assert "die HRV" in recovery["explanation"]
 
 
-def test_unvollstaendige_heutige_nacht_wird_nicht_gemischt() -> None:
-    """Kein Wert von gestern als Ersatz für ein fehlendes Signal von heute."""
+def test_unvollstaendige_heutige_nacht_ergibt_keinen_wert() -> None:
+    """Auch eine halbe heutige Nacht wird nicht mit gestern aufgefüllt (D-26)."""
     today = date(2026, 10, 31)
     wellness = _wellness(30, today)
     wellness[0].pop("respiration")
@@ -231,14 +231,15 @@ def test_unvollstaendige_heutige_nacht_wird_nicht_gemischt() -> None:
     days = metrics.daily_days(wellness, [], today - timedelta(days=120), today)
 
     recovery = metrics.compute_recovery(days, len(days) - 1)
-    hrv = next(c for c in recovery["components"] if c["key"] == "hrv")
-    assert recovery["date"] == (today - timedelta(days=1)).isoformat()
-    # Die ganze Nacht kommt von gestern, nicht nur das fehlende Signal.
-    assert hrv["today"] == 50.0
+    assert recovery["score"] is None
+    assert recovery["label"] == "Keine Daten"
+    assert recovery["date"] is None
+    assert recovery["components"] == []
+    assert "Atmung" in recovery["explanation"]
 
 
 def test_alte_vollstaendige_nacht_ist_kein_aktueller_wert() -> None:
-    """Nur heute oder gestern dürfen einspringen, keine Nacht von vor 40 Tagen."""
+    """Auch eine alte vollständige Nacht ersetzt die heutige nicht."""
     today = date(2026, 11, 10)
     old = today - timedelta(days=40)
     wellness = _wellness(40, old)
@@ -375,8 +376,8 @@ def test_referenz_ist_immer_das_60_tage_fenster() -> None:
     assert recovery["score"] is not None
 
 
-def test_referenz_zaehlt_die_score_nacht_nicht_die_teilnacht_heute() -> None:
-    """Kommt der Score von gestern, zählt die Referenz bis gestern (D-89)."""
+def test_teilnacht_heute_ergibt_keinen_wert() -> None:
+    """Eine halb synchrone heutige Nacht ist kein Score, auch mit voller Historie."""
     today = date(2026, 11, 10)
     wellness = _wellness(6, today - timedelta(days=1))
     wellness.append({"date": today.isoformat(), "hrv": 99.0})
@@ -384,13 +385,14 @@ def test_referenz_zaehlt_die_score_nacht_nicht_die_teilnacht_heute() -> None:
 
     recovery = metrics.compute_recovery(days, len(days) - 1)
 
-    assert recovery["date"] == (today - timedelta(days=1)).isoformat()
-    assert recovery["reference"]["nights"] == 6
-    assert recovery["score"] is not None
+    assert recovery["score"] is None
+    assert recovery["date"] is None
+    # Die Nacht zählt als vorhandenes Signal in die Referenz, aber nicht als Score.
+    assert recovery["reference"]["nights"] == 7
 
 
-def test_referenz_minimum_gilt_fuer_die_score_nacht() -> None:
-    """Vier volle Nächte plus eine halbe heutige Nacht sind noch keine fünf."""
+def test_teilnacht_heute_erfuellt_das_minimum_nicht_als_score() -> None:
+    """Fünf Nächte mit Signal ergeben keinen Score, wenn heute unvollständig ist."""
     today = date(2026, 11, 10)
     wellness = _wellness(4, today - timedelta(days=1))
     wellness.append({"date": today.isoformat(), "hrv": 99.0})
@@ -398,9 +400,10 @@ def test_referenz_minimum_gilt_fuer_die_score_nacht() -> None:
 
     recovery = metrics.compute_recovery(days, len(days) - 1)
 
-    assert recovery["label"] == "Referenz wird aufgebaut"
-    assert recovery["reference"]["nights"] == 4
+    assert recovery["label"] == "Keine Daten"
+    assert recovery["reference"]["nights"] == 5
     assert recovery["score"] is None
+    assert "der Ruhepuls" in recovery["explanation"]
 
 
 def _vorschau_naechte(mit_atmung: bool = True) -> list[dict]:

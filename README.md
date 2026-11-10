@@ -41,16 +41,16 @@ Keine intervals-Fachbegriffe in der Oberfläche:
 
 ## Erholung
 
-Nachtsignale, gewichtetes Mittel. Bewertet wird die letzte abgeschlossene Nacht
-mit allen Pflichtwerten; fehlt die heutige noch im Sync, steht die Nacht davor
-als „Nacht vom …“ auf der Karte. Verglichen wird mit den eigenen letzten
-**60 Kalendertagen** (mindestens 5 gültige Nächte, D-89).
+Nachtsignale, gewichtetes Mittel. Bewertet wird ausschließlich die **heutige**
+Nacht mit allen Pflichtwerten; fehlt sie ganz oder teilweise, zeigt die Karte
+„Keine Daten“ statt eines Werts von gestern (D-26/D-91). Verglichen wird mit den
+eigenen letzten **60 Kalendertagen** (mindestens 5 gültige Nächte, D-89).
 **Training fließt nicht direkt ein** – Belastung wirkt über die nächste Nacht.
 
 **Alles oder nichts (D-26):** Ein Wert entsteht nur, wenn HRV, Ruhepuls, Schlaf
-**und** Atmung vorliegen. Fehlt eines, zeigt das Cockpit „Keine Daten“ und nennt
-das fehlende Signal — kein Teilwert, keine Hochrechnung aus dem Rest, kein
-einzelnes Signal von gestern.
+**und** Atmung von heute vorliegen. Fehlt eines, zeigt das Cockpit „Keine Daten“
+und nennt das fehlende Signal — kein Teilwert, keine Hochrechnung aus dem Rest,
+kein Wert von gestern.
 
 | Signal | Gewicht | Basis |
 |---|---|---|
