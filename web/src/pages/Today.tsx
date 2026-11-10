@@ -129,9 +129,10 @@ export function Today({ data }: { data: Overview }) {
       delta: deltaNumber(sleepValue, sleep?.baseline, sleep?.average, "min", true, 60),
     },
   ];
+  const nightIsToday = hasScore || today.as_of === today.date;
   const showNightly =
-    nightly.some((row) => row.value != null) && (hasScore || drivers.length === 0);
-  const nightDate = recovery.date ?? today.as_of ?? today.date;
+    nightIsToday && nightly.some((row) => row.value != null) && (hasScore || drivers.length === 0);
+  const nightDate = recovery.date ?? today.date;
   const nightText = `Nacht vom ${fmtDate(nightDate, {
     day: "numeric",
     month: "long",
@@ -155,9 +156,9 @@ export function Today({ data }: { data: Overview }) {
   const referenceText = reference
     ? reference.nights < reference.minimum
       ? `${reference.nights} von ${reference.minimum} Nächten`
-      : referenceScore == null
-        ? `Referenz ${reference.nights} von ${reference.target} Nächten`
-        : `${reference.nights} von ${reference.target} Nächten · Schnitt ${referenceScore}`
+      : hasScore && referenceScore != null
+        ? `${reference.nights} von ${reference.target} Nächten · Schnitt ${referenceScore}`
+        : `${reference.nights} von ${reference.target} Nächten`
     : referenceScore == null
       ? "60-Tage-Schnitt —"
       : `60-Tage-Schnitt ${referenceScore}`;

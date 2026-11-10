@@ -249,42 +249,22 @@ def _complete_night(day: Day) -> bool:
     )
 
 
-def _last_complete_index(days: list[Day], index: int, epoch: date | None) -> int | None:
-    """Die heutige oder die unmittelbar vorherige Nacht (D-89).
-
-    Der Rückfall auf die Nacht davor deckt nur den Sync-Verzug am Morgen ab.
-    Eine ältere vollständige Nacht ist kein aktueller Erholungswert: fehlen
-    heute und gestern die Pflichtwerte, gibt es „Keine Daten“. Einzelne Signale
-    werden nicht von gestern geliehen: entweder die ganze Nacht oder keine.
-    """
-    for position in (index, index - 1):
-        if position < 0:
-            continue
-        day = days[position]
-        if epoch is not None and day.day < epoch:
-            continue
-        if _complete_night(day):
-            return position
-    return None
-
-
 def _missing_signals(days: list[Day], index: int, epoch: date | None) -> list[str]:
-    """Was der heutigen oder gestrigen Nacht fehlt — nicht einer alten Nacht."""
-    for day in reversed(days[max(0, index - 1) : index + 1]):
-        if epoch is not None and day.day < epoch:
-            continue
-        if not _valid_night(day):
-            continue
-        return [
-            name
-            for key, name in REQUIRED_SIGNALS.items()
-            if (
-                getattr(day, {"sleep": "sleep_h", "resp": "respiration"}.get(key, key))
-                is None
-                or (key == "sleep" and not _has_sleep_input(day))
-            )
-        ]
-    return list(REQUIRED_SIGNALS.values())
+    """Was der heutigen Nacht fehlt — nie die Werte eines anderen Tages (D-26)."""
+    day = days[index]
+    if epoch is not None and day.day < epoch:
+        return list(REQUIRED_SIGNALS.values())
+
+    missing: list[str] = []
+    for key, name in REQUIRED_SIGNALS.items():
+        if key == "sleep":
+            if day.sleep_h is None:
+                missing.append(name)
+            elif not _has_sleep_input(day):
+                missing.append("die Wachzeit")
+        elif getattr(day, "respiration" if key == "resp" else key) is None:
+            missing.append(name)
+    return missing
 
 
 def _reference_payload(
@@ -341,23 +321,22 @@ def compute_recovery(
     Nächte bewertet (Median/MAD, Mindeststreuung), der Schlaf gegen das
     Garmin-Schlafziel. Gewichte: HRV 35, Ruhepuls 25, Schlaf 30, Atmung 10.
     Es gibt keinen Teilwert: fehlt ein Pflichtsignal, entsteht kein Score
-    (D-26). Der Score gehört zur letzten vollständigen Nacht; fehlt die heutige
-    noch im Sync, wird die Nacht davor genommen und in der Oberfläche benannt.
+    (D-26). Der Score gehört ausschließlich zur heutigen Nacht. Fehlt sie ganz
+    oder teilweise, gibt es „Keine Daten“ — nie einen Wert von gestern oder
+    einem anderen Tag.
     """
-    target = _last_complete_index(days, index, epoch)
-    # Die Referenz gehört zur Score-Nacht. Eine erst halb synchronisierte
-    # heutige Nacht zählt nicht mit, wenn der Score von gestern kommt.
-    reference = _reference_payload(days, index if target is None else target, epoch)
+    current = days[index]
+    reference = _reference_payload(days, index, epoch)
     if reference["nights"] < REFERENCE_MIN_NIGHTS:
         return _reference_building(reference)
 
-    if target is None:
+    if not _complete_night(current):
         missing = _missing_signals(days, index, epoch)
         if len(missing) == 1:
-            text = f"Für die letzte Nacht fehlt noch {missing[0]}."
+            text = f"Für die heutige Nacht fehlt noch {missing[0]}."
         else:
             text = (
-                f"Für die letzte Nacht fehlen noch {', '.join(missing[:-1])} "
+                f"Für die heutige Nacht fehlen noch {', '.join(missing[:-1])} "
                 f"und {missing[-1]}."
             )
         return _no_recovery(
@@ -367,9 +346,8 @@ def compute_recovery(
             missing=missing,
         )
 
-    current = days[target]
-    window = _reference_window(days, target, epoch)
-    baseline_days = _baseline_window(days, target, epoch)
+    window = _reference_window(days, index, epoch)
+    baseline_days = _baseline_window(days, index, epoch)
 
     def baseline(field: str) -> list[float]:
         return [
@@ -433,10 +411,10 @@ def compute_recovery(
         # Die Zielnacht war vollständig, aber ein Signal hat keine belastbare
         # Referenz (zu wenige Werte). Auch dann gibt es keinen Teilwert.
         if len(fehlend) == 1:
-            text = f"Für die letzte Nacht fehlt noch {fehlend[0]}."
+            text = f"Für die heutige Nacht fehlt noch {fehlend[0]}."
         else:
             text = (
-                f"Für die letzte Nacht fehlen noch {', '.join(fehlend[:-1])} "
+                f"Für die heutige Nacht fehlen noch {', '.join(fehlend[:-1])} "
                 f"und {fehlend[-1]}."
             )
         return _no_recovery(
@@ -731,15 +709,14 @@ def _duration(hours: float) -> str:
 
 
 def recovery_series(days: list[Day], epoch: date | None = None) -> list[dict[str, Any]]:
-    """Je Nacht ein Punkt — nicht je Tag, an dem zufällig ein Score gilt.
+    """Je Tag ein Punkt, wenn für genau diesen Tag ein Score entsteht.
 
-    Der Score gehört zur letzten vollständigen Nacht. Damit die Serie keine
-    Nacht mehrfach zeigt, zählt nur der Tag, an dem diese Nacht liegt.
+    Es gibt keinen Tages-Fallback: eine Nacht gehört zu ihrem eigenen Tag.
     """
     out: list[dict[str, Any]] = []
     for index in range(len(days)):
         result = compute_recovery(days, index, epoch)
-        if result["score"] is None or result.get("date") != days[index].day.isoformat():
+        if result["score"] is None:
             continue
         out.append(
             {
