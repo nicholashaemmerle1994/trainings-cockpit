@@ -175,7 +175,7 @@ def _baseline(settings: Settings, args: argparse.Namespace) -> int:
             db.set_wellness_epoch(conn, epoch)
             console.print(
                 f"Referenz beginnt am {epoch.strftime('%d.%m.%Y')}. "
-                f"Die ersten {metrics.REFERENCE_MIN_NIGHTS} Nächte ergeben keinen Wert."
+                f"Ab {metrics.REFERENCE_MIN_NIGHTS} Nächten im 60-Tage-Fenster entsteht ein Wert."
             )
             return 0
 
@@ -197,7 +197,7 @@ def _baseline(settings: Settings, args: argparse.Namespace) -> int:
         )
         console.print(
             f"Seit {epoch.strftime('%d.%m.%Y')}: {nights} Nächte mit Signal, "
-            f"Ziel {metrics.BASELINE_DAYS}. {state}."
+            f"Fenster {metrics.REFERENCE_DAYS} Tage. {state}."
         )
         return 0
     finally:

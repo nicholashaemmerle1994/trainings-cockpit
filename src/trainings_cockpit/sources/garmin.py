@@ -10,7 +10,7 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -193,18 +193,48 @@ def wellness_rows(dump: GarminDump) -> list[dict[str, Any]]:
     def tag(day: str) -> dict[str, Any]:
         return tage.setdefault(day, {"id": day})
 
-    for eintrag in dump.sleep:
+    for roh in dump.sleep:
+        # Je nach Endpunkt liegt die Nacht direkt oder unter `dailySleepDTO`.
+        eintrag = (
+            {**roh["dailySleepDTO"], **roh}
+            if isinstance(roh, dict) and isinstance(roh.get("dailySleepDTO"), dict)
+            else roh
+        )
         day = _day(eintrag)
         if not day:
             continue
         zeile = tag(day)
         if eintrag.get("sleepTimeSeconds") is not None:
             zeile["sleepSecs"] = eintrag["sleepTimeSeconds"]
+        for quelle, ziel in (
+            ("awakeSleepSeconds", "awakeSleepSeconds"),
+            ("deepSleepSeconds", "deepSleepSeconds"),
+            ("lightSleepSeconds", "lightSleepSeconds"),
+            ("remSleepSeconds", "remSleepSeconds"),
+        ):
+            if eintrag.get(quelle) is not None:
+                zeile[ziel] = eintrag[quelle]
+        # Fehlt `awakeSleepSeconds`, lässt es sich aus Zeit im Bett minus
+        # Schlafdauer ableiten — dieselbe Nacht, kein erfundener Wert.
+        awake = _awake_seconds(eintrag)
+        if awake is not None:
+            zeile["awakeSleepSeconds"] = awake
+        need = _sleep_hours(eintrag.get("sleepNeed"))
+        if need is not None:
+            zeile["sleepNeedHours"] = need
         score = (eintrag.get("sleepScores") or {}).get("overall") or {}
         if score.get("value") is not None:
             zeile["sleepScore"] = score["value"]
         if eintrag.get("averageRespirationValue") is not None:
             zeile["respiration"] = eintrag["averageRespirationValue"]
+
+    # Das Schlafziel steht im Profil, nicht in der Nacht. Es gilt für alle
+    # Nächte des Laufs; fehlt es, bleibt die Spalte leer und `metrics` nimmt
+    # den lokalen Fallback (7:30).
+    goal = _profile_sleep_goal(dump.profile)
+    if goal is not None:
+        for zeile in tage.values():
+            zeile["sleepGoalHours"] = goal
 
     for eintrag in dump.hrv:
         day = _day(eintrag)
@@ -236,6 +266,95 @@ def _day(eintrag: dict[str, Any]) -> str | None:
     """Der Tag, dem ein Messwert gehört — Garmin nennt ihn `calendarDate`."""
     tag = eintrag.get("calendarDate") or eintrag.get("date")
     return str(tag)[:10] if tag else None
+
+
+def _awake_seconds(eintrag: dict[str, Any]) -> int | None:
+    """Wachzeit der Nacht — explizit, sonst Zeit im Bett minus Schlafdauer."""
+    explicit = eintrag.get("awakeSleepSeconds")
+    if explicit is not None:
+        try:
+            return max(0, int(round(float(explicit))))
+        except (TypeError, ValueError):
+            return None
+    total = eintrag.get("sleepTimeSeconds")
+    if total is None:
+        return None
+    seconds = _timestamp_seconds(
+        eintrag.get("sleepStartTimestampGMT"), eintrag.get("sleepEndTimestampGMT")
+    )
+    if seconds is None:
+        seconds = _timestamp_seconds(
+            eintrag.get("sleepStartTimestampLocal"),
+            eintrag.get("sleepEndTimestampLocal"),
+        )
+    if seconds is None:
+        return None
+    try:
+        return max(0, int(round(seconds - float(total))))
+    except (TypeError, ValueError):
+        return None
+
+
+def _timestamp_seconds(start: Any, end: Any) -> float | None:
+    """Abstand zweier Garmin-Zeitstempel; Millisekunden und ISO sind erlaubt."""
+    if start is None or end is None:
+        return None
+    if isinstance(start, (int, float)) and isinstance(end, (int, float)):
+        factor = 1000 if max(start, end) > 1e11 else 1
+        return (float(end) - float(start)) / factor
+    try:
+        beginn = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+        ende = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+        return (ende - beginn).total_seconds()
+    except (TypeError, ValueError):
+        try:
+            start_number = float(start)
+            end_number = float(end)
+        except (TypeError, ValueError):
+            return None
+        factor = 1000 if max(start_number, end_number) > 1e11 else 1
+        return (end_number - start_number) / factor
+
+
+def _sleep_hours(value: Any) -> float | None:
+    """Schlafziel in Stunden, egal ob die Quelle Sekunden oder Stunden liefert.
+
+    Garmin führt Dauern in Sekunden; ein bereits normalisiertes Feld in Stunden
+    bleibt Stunden. Ein Dict trägt den Wert unter `actual`, `need` oder
+    `baseline` — die genaue Form bestätigt der erste Sync mit Key.
+    """
+    if isinstance(value, dict):
+        for key in ("actual", "need", "recommendedSleepNeed", "baseline", "value"):
+            if value.get(key) is not None:
+                return _sleep_hours(value[key])
+        return None
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return None
+    return round(number / 3600, 2) if number > 24 else round(number, 2)
+
+
+def _profile_sleep_goal(profile: dict[str, Any] | None) -> float | None:
+    """Das Schlafziel aus dem Profil, tolerant gegenüber der Verschachtelung."""
+    if not isinstance(profile, dict):
+        return None
+    for key in ("sleepGoal", "sleepGoalHours", "sleepNeedGoal"):
+        if key in profile:
+            goal = _sleep_hours(profile[key])
+            if goal is not None:
+                return goal
+    for value in profile.values():
+        if isinstance(value, dict):
+            goal = _profile_sleep_goal(value)
+            if goal is not None:
+                return goal
+    return None
+
 
 
 def _all_activities(

@@ -12,6 +12,15 @@ export interface RecoveryComponent {
   date?: string | null;
   z?: number | null;
   vendor?: number | null;
+  /** Schlaf: Ziel, Wachheit, Phasen (D-88). */
+  target?: number;
+  awake?: number;
+  deep?: number | null;
+  rem?: number | null;
+  efficiency?: number;
+  duration_score?: number;
+  wake_score?: number;
+  phase_score?: number | null;
 }
 
 export interface RecoveryReference {
@@ -19,6 +28,13 @@ export interface RecoveryReference {
   minimum: number;
   target: number;
   average: number | null;
+  days?: number;
+}
+
+export interface RecoveryRule {
+  id: string;
+  label: string;
+  adjustment: number;
 }
 
 export interface Recovery {
@@ -30,6 +46,12 @@ export interface Recovery {
   missing?: string[];
   reference?: RecoveryReference | null;
   explanation: string;
+  /** Nacht, zu der der Score gehört (D-88). */
+  date?: string | null;
+  /** Ausgelöste Warnregeln mit Einzelabzug (D-89). */
+  triggeredRules?: RecoveryRule[];
+  /** Gedeckelte Summe der Warnregeln, nie positiv. */
+  adjustment?: number;
   /** Solange das Vergleichsfenster läuft: Feld für den Bevel-Wert (D-52). */
   vendor_prompt?: boolean;
 }
