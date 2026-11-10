@@ -21,9 +21,6 @@ MIN_SLEEP_NEED_H = 7.0
 REFERENCE_DAYS = 60
 #: Ab so vielen gültigen Nächten im Fenster entsteht ein Wert (D-88).
 REFERENCE_MIN_NIGHTS = 5
-#: Alias für die Serien-/Baseline-Helfer, die weiter mit einem Tagesfenster
-#: arbeiten. Beide Fenster sind derselbe 60-Tage-Zeitraum.
-BASELINE_DAYS = REFERENCE_DAYS
 #: Median/MAD sind robust; der Faktor macht die MAD zur üblichen Streuung.
 MAD_SCALE = 1.4826
 #: Unter dieser Streuung wäre jeder z-Score ein Ausreißer. Die Werte sind
@@ -323,6 +320,18 @@ def _no_recovery(
     }
 
 
+def _reference_building(reference: dict[str, Any]) -> dict[str, Any]:
+    return _no_recovery(
+        "Referenz wird aufgebaut",
+        reference,
+        (
+            f"Für die Referenz fehlen noch Nächte: {reference['nights']} von "
+            f"{REFERENCE_MIN_NIGHTS} sind da. Ein Erholungswert entsteht, sobald "
+            f"genug Nächte im 60-Tage-Fenster liegen."
+        ),
+    )
+
+
 def compute_recovery(
     days: list[Day], index: int, epoch: date | None = None
 ) -> dict[str, Any]:
@@ -335,19 +344,13 @@ def compute_recovery(
     (D-26). Der Score gehört zur letzten vollständigen Nacht; fehlt die heutige
     noch im Sync, wird die Nacht davor genommen und in der Oberfläche benannt.
     """
-    reference = _reference_payload(days, index, epoch)
-    if reference["nights"] < REFERENCE_MIN_NIGHTS:
-        return _no_recovery(
-            "Referenz wird aufgebaut",
-            reference,
-            (
-                f"Für die Referenz fehlen noch Nächte: {reference['nights']} von "
-                f"{REFERENCE_MIN_NIGHTS} sind da. Ein Erholungswert entsteht, sobald "
-                f"genug Nächte im 60-Tage-Fenster liegen."
-            ),
-        )
-
     target = _last_complete_index(days, index, epoch)
+    # Die Referenz gehört zur Score-Nacht. Eine erst halb synchronisierte
+    # heutige Nacht zählt nicht mit, wenn der Score von gestern kommt.
+    reference = _reference_payload(days, index if target is None else target, epoch)
+    if reference["nights"] < REFERENCE_MIN_NIGHTS:
+        return _reference_building(reference)
+
     if target is None:
         missing = _missing_signals(days, index, epoch)
         if len(missing) == 1:

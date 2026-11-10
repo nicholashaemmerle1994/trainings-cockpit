@@ -375,6 +375,34 @@ def test_referenz_ist_immer_das_60_tage_fenster() -> None:
     assert recovery["score"] is not None
 
 
+def test_referenz_zaehlt_die_score_nacht_nicht_die_teilnacht_heute() -> None:
+    """Kommt der Score von gestern, zählt die Referenz bis gestern (D-88)."""
+    today = date(2026, 11, 10)
+    wellness = _wellness(6, today - timedelta(days=1))
+    wellness.append({"date": today.isoformat(), "hrv": 99.0})
+    days = metrics.daily_days(wellness, [], today - timedelta(days=70), today)
+
+    recovery = metrics.compute_recovery(days, len(days) - 1)
+
+    assert recovery["date"] == (today - timedelta(days=1)).isoformat()
+    assert recovery["reference"]["nights"] == 6
+    assert recovery["score"] is not None
+
+
+def test_referenz_minimum_gilt_fuer_die_score_nacht() -> None:
+    """Vier volle Nächte plus eine halbe heutige Nacht sind noch keine fünf."""
+    today = date(2026, 11, 10)
+    wellness = _wellness(4, today - timedelta(days=1))
+    wellness.append({"date": today.isoformat(), "hrv": 99.0})
+    days = metrics.daily_days(wellness, [], today - timedelta(days=70), today)
+
+    recovery = metrics.compute_recovery(days, len(days) - 1)
+
+    assert recovery["label"] == "Referenz wird aufgebaut"
+    assert recovery["reference"]["nights"] == 4
+    assert recovery["score"] is None
+
+
 def _vorschau_naechte(mit_atmung: bool = True) -> list[dict]:
     """Die sechs echten Nächte 4.–9.11.2026 aus der Vorschau.
 
