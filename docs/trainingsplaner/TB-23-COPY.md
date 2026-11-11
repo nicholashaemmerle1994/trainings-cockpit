@@ -120,7 +120,7 @@ planner_copy_item(
 
 ## 5. Tests
 
-`tests/test_planner_copy_api.py` (16) und `tests/test_planner_copy.py` (2)
+`tests/test_planner_copy_api.py` (17) und `tests/test_planner_copy.py` (2)
 decken ab:
 
 - lesende Vorschau ohne Job-/Event-Schreibe;
@@ -139,7 +139,7 @@ decken ab:
 - fremder Scope = 404;
 - Schema-Upgrade auf bestehender DB und Provenienz-Index.
 
-Gesamtsuite: **528 passed**, 1 bekannte Starlette-Deprecation-Warnung.
+Gesamtsuite: **529 passed**, 1 bekannte Starlette-Deprecation-Warnung.
 `ruff` grün.
 
 ## 6. Bekannte Grenzen

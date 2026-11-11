@@ -175,7 +175,7 @@ auf denselben Job = `409 copy_busy`. Kein Fortschritt mehr ⇒ Job endet
 
 ## 5. Teststatus
 
-Vor P3: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest` → **510 passed**, 1 bekannte
+Aktuell: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest` → **529 passed**, 1 bekannte
 Starlette-Deprecation-Warnung. `ruff` grün. `npm run build` grün.
 
 ## 6. Bekannte Grenzen

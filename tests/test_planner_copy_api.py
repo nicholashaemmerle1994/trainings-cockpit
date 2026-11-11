@@ -316,6 +316,31 @@ def test_advance_legt_sequentiell_an_und_zielplant_bestaetigt(
     assert _count("event") == 4
 
 
+def test_zwei_wochen_werden_als_ein_block_kopiert(
+    client: TestClient, monkeypatch
+) -> None:
+    gateway = CopyGateway()
+    _use_gateway(monkeypatch, gateway)
+    _store(F01, "2026-11-02")
+    _store({**F01, "id": 9104}, "2026-11-09")
+    preview = _preview(client, weeks=2, target="2026-11-16")
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["source_end"] == "2026-11-15"
+    assert preview.json()["target_end"] == "2026-11-29"
+    assert [item["target_date"] for item in preview.json()["items"]] == [
+        "2026-11-16",
+        "2026-11-23",
+    ]
+    job = _start(client, weeks=2, target="2026-11-16").json()["job"]
+    assert job["weeks"] == 2
+    assert job["total"] == 2
+    for _ in range(2):
+        response = client.post(f"/api/planner/copy/jobs/{job['job_id']}/advance")
+        assert response.status_code == 200
+    assert response.json()["job"]["state"] == "completed"
+    assert response.json()["job"]["created"] == 2
+
+
 def test_doppelter_advance_parallel_ist_nur_einmal_aktiv(client: TestClient, monkeypatch) -> None:
     gateway = CopyGateway()
     gateway.block_create.set()
