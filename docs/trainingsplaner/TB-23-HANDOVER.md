@@ -188,3 +188,18 @@ Starlette-Deprecation-Warnung. `ruff` grün. `npm run build` grün.
 - `event` hat keine Account-/Athleten-Spalten; der Planer-Scope kommt aus den
   Settings, die Vorlagen-/Copy-Tabellen tragen ihn selbst.
 - Kein Live-Rundlauf gegen intervals.icu.
+
+## 7. Abschluss P8
+
+- Regression: **529 passed**, 1 bekannte Starlette-Deprecation-Warnung.
+- Frontend: `npm run build` grün (64 Module).
+- `ruff` auf allen geänderten Python-Dateien grün.
+- Visuell geprüft bei 320, 390, 430 und 1440 px: Planer, PlanSheet,
+  Vorlagenblatt, Vorlagenliste, Kopier-Sheet, Fortschritt und Zielwoche; kein
+  horizontaler Überlauf. Tastatur: Enter öffnet, Escape schließt, Fokus kehrt
+  zum Auslöser zurück.
+- Branch gepusht: `origin/feature/tb-23-trainingsplaner-erweiterung`.
+- Kein Merge, kein Deployment, kein Live-Schreibtest gegen intervals.icu.
+- Ein GitHub-PR konnte in dieser Umgebung nicht automatisch erstellt werden:
+  `gh` und ein API-Token fehlen. Compare-Link:
+  `https://github.com/nicholashaemmerle1994/trainings-cockpit/compare/develop...feature/tb-23-trainingsplaner-erweiterung?expand=1`
