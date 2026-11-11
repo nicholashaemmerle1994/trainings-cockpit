@@ -22,6 +22,8 @@ export interface StoredPlannerDraft {
     date: string;
     name: string;
     template: "simple" | "repeat" | "empty";
+    /** Vollständiger Aufbau, wenn der Entwurf aus einer Vorlage stammt. */
+    nodes?: PlanNode[];
   } | null;
   saved_at: string;
   name: string;

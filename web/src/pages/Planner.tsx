@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { AddWorkoutSheet, type NewPlanConfig } from "../components/AddWorkoutSheet";
+import { CopyWeekSheet } from "../components/CopyWeekSheet";
 import { IconBack, IconDrag, IconForward, IconPlus } from "../components/icons";
 import { PlanSheet } from "../components/PlanSheet";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -175,6 +176,8 @@ export function Planner({
   const { data, loading, stale, error, retrying, reload, invalidate } =
     usePlannerWeek(week, revision);
   const [addDay, setAddDay] = useState<string | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyNote, setCopyNote] = useState<string | null>(null);
   const [newPlan, setNewPlan] = useState<NewPlanConfig | null>(null);
   const [operations, setOperations] = useState<PlannerOperation[]>([]);
   const [reconciling, setReconciling] = useState<string | null>(null);
@@ -436,7 +439,17 @@ export function Planner({
         currentWeek={currentWeek}
         onPrevious={() => onWeekChange(previous)}
         onNext={() => onWeekChange(next)}
+        onCopy={() => {
+          setCopyNote(null);
+          setCopyOpen(true);
+        }}
       />
+
+      {copyNote && (
+        <p className="planner-copy-note" role="status">
+          {copyNote}
+        </p>
+      )}
 
       {error && (
         <div className="planner-state" role="alert">
@@ -639,6 +652,28 @@ export function Planner({
           revision={revision}
         />
       )}
+      {copyOpen && (
+        <CopyWeekSheet
+          week={week}
+          online={online}
+          onClose={() => setCopyOpen(false)}
+          onFinished={(job) => {
+            invalidate([week, job.target_start]);
+            onDataChanged?.();
+            setCopyNote(
+              job.state === "completed"
+                ? `Kopie abgeschlossen: ${job.created} von ${job.total} Einheiten angelegt. Bestehende Planungen blieben unverändert.`
+                : job.state === "partial"
+                  ? `Kopie teilweise abgeschlossen: ${job.created} angelegt, ${job.failed + job.unknown} offen. Nichts wurde zurückgerollt.`
+                  : `Kopie nicht abgeschlossen: ${job.message}`,
+            );
+          }}
+          onOpenWeek={(targetWeek) => {
+            invalidate([week, targetWeek]);
+            onWeekChange(targetWeek);
+          }}
+        />
+      )}
       {addDay != null && (
         <AddWorkoutSheet
           day={addDay}
@@ -660,6 +695,7 @@ function WeekNavigator({
   currentWeek,
   onPrevious,
   onNext,
+  onCopy,
 }: {
   week: string;
   label: string;
@@ -667,6 +703,7 @@ function WeekNavigator({
   currentWeek: string;
   onPrevious: () => void;
   onNext: () => void;
+  onCopy: () => void;
 }) {
   return (
     <div className="planner-weeknav-wrap">
@@ -694,12 +731,17 @@ function WeekNavigator({
           <IconForward size={18} />
         </button>
       </div>
-      {/* Ruhiger Zustandstext: bestätigt nur, dass die aktuelle Woche angezeigt
-          wird. Kein Klickziel, kein Fokus-Ziel. In jeder anderen Woche bleibt
-          das Feld leer: kein Text, kein Knopf, keine Lücke. */}
-      {week === currentWeek && (
-        <span className="planner-week-current">Diese Woche</span>
-      )}
+      <div className="planner-weeknav__actions">
+        {/* Ruhiger Zustandstext: bestätigt nur, dass die aktuelle Woche angezeigt
+            wird. Kein Klickziel, kein Fokus-Ziel. In jeder anderen Woche bleibt
+            das Feld leer: kein Text, kein Knopf, keine Lücke. */}
+        {week === currentWeek && (
+          <span className="planner-week-current">Diese Woche</span>
+        )}
+        <button type="button" className="planner-copy-trigger" onClick={onCopy}>
+          Woche kopieren
+        </button>
+      </div>
     </div>
   );
 }
