@@ -837,6 +837,145 @@ export interface PlannerOperationsResponse {
   items: PlannerOperation[];
 }
 
+export interface TemplateSummary {
+  template_id: string;
+  name: string;
+  sport: string;
+  schema_version: number;
+  updated_at: string;
+  known_seconds: number | null;
+  known_metres: number | null;
+  executions: number | null;
+  has_unknown: boolean;
+  available: boolean;
+  error_code: string | null;
+}
+
+export interface TemplateListResponse {
+  account_id: string;
+  athlete_id: string;
+  items: TemplateSummary[];
+}
+
+export interface TemplateDetail {
+  kind: "template";
+  template_id: string;
+  name: string;
+  sport: string;
+  schema_version: number;
+  created_at: string;
+  updated_at: string;
+  source_event_id: string | null;
+  known: {
+    seconds: number | null;
+    metres: number | null;
+    executions: number;
+    has_unknown: boolean;
+  };
+  nodes: PlanNode[];
+}
+
+export interface TemplateProjection extends PlanDraftProjection {
+  draft_id: string;
+  template: {
+    template_id: string;
+    name: string;
+    sport: string;
+  };
+}
+
+export interface CopyPreviewItem {
+  source_event_id: string;
+  source_date: string;
+  target_date: string;
+  name: string;
+  sport: string;
+  sport_label: string;
+  seconds: number | null;
+  metres: number | null;
+  status: "ready" | "already_copied" | "blocked";
+  reason: string | null;
+}
+
+export interface CopyNotice {
+  code: string;
+  message: string;
+  date: string | null;
+}
+
+export interface CopyPreview {
+  source_start: string;
+  source_end: string;
+  target_start: string;
+  target_end: string;
+  weeks: number;
+  time_zone: string;
+  coverage: { source: string; target: string };
+  blockers: CopyNotice[];
+  warnings: CopyNotice[];
+  existing_target_count: number;
+  items: CopyPreviewItem[];
+  totals: {
+    items: number;
+    seconds: number;
+    metres: number;
+    already_copied: number;
+    blocked: number;
+  };
+}
+
+export interface CopyItem {
+  item_id: string;
+  job_id: string;
+  source_event_id: string;
+  source_date: string;
+  target_date: string;
+  draft_id: string;
+  local_id: string;
+  name: string;
+  sport: string;
+  state:
+    | "pending"
+    | "created"
+    | "saved_unverified"
+    | "unknown"
+    | "failed"
+    | "conflict"
+    | "skipped";
+  operation_id: string | null;
+  remote_id: string | null;
+  message: string | null;
+}
+
+export interface CopyJob {
+  job_id: string;
+  client_request_id: string;
+  state: "queued" | "running" | "completed" | "partial" | "failed";
+  source_start: string;
+  target_start: string;
+  weeks: number;
+  total: number;
+  created: number;
+  failed: number;
+  pending: number;
+  unknown: number;
+  message: string;
+  created_at: string;
+  updated_at: string;
+  can_advance: boolean;
+  next_target_date: string | null;
+}
+
+export interface CopyJobResponse {
+  job: CopyJob;
+  items: CopyItem[];
+  created?: boolean;
+}
+
+export interface CopyJobsResponse {
+  jobs: CopyJob[];
+}
+
 export interface SyncResult {
   activities: number;
   wellness: number;
