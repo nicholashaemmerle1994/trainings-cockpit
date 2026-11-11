@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from . import db, fuel, metrics, plan, streams
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings
+from .planner import copy as planner_copy
 from .planner.dates import (
     local_today,
     parse_week_parameter,
@@ -1144,6 +1145,112 @@ def planner_template_delete(template_id: str) -> dict[str, Any]:
             "template_id": template_id,
             "events_deleted": False,
         }
+
+
+def _copy_http_error(exc: planner_copy.CopyError) -> HTTPException:
+    detail: dict[str, Any] = {
+        "code": exc.code.value,
+        "message": exc.message,
+    }
+    if exc.blockers:
+        detail["blockers"] = exc.blockers
+    return HTTPException(status_code=exc.status, detail=detail)
+
+
+@app.post("/api/planner/copy/preview")
+def planner_copy_preview(body: dict[str, Any]) -> dict[str, Any]:
+    """Rein lesende Vorschau für eine bis vier Wochen."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            return planner_copy.preview_copy(
+                conn,
+                source_start=body.get("source_start"),
+                weeks=body.get("weeks", 1),
+                target_start=body.get("target_start"),
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+            )
+        except planner_copy.CopyError as exc:
+            raise _copy_http_error(exc) from exc
+
+
+@app.post("/api/planner/copy/jobs")
+def planner_copy_start(body: dict[str, Any]) -> dict[str, Any]:
+    """Persistiert Job und Items vor dem ersten Remote-Write."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            payload, created = planner_copy.start_copy_job(
+                conn,
+                source_start=body.get("source_start"),
+                weeks=body.get("weeks", 1),
+                target_start=body.get("target_start"),
+                client_request_id=body.get("client_request_id"),
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+            )
+        except planner_copy.CopyError as exc:
+            raise _copy_http_error(exc) from exc
+        payload["created"] = created
+        return payload
+
+
+@app.get("/api/planner/copy/jobs")
+def planner_copy_jobs(state: str | None = Query(None)) -> dict[str, Any]:
+    """Offene Kopiervorgänge im aktuellen Account-/Athleten-Scope."""
+    if state not in (None, "open"):
+        raise HTTPException(status_code=400, detail="state muss 'open' sein.")
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        return {
+            "jobs": planner_copy.open_copy_jobs(
+                conn, account_id=account_id, athlete_id=athlete_id
+            )
+        }
+
+
+@app.get("/api/planner/copy/jobs/{job_id}")
+def planner_copy_job(job_id: str) -> dict[str, Any]:
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            return planner_copy.get_copy_job(
+                conn, job_id, account_id=account_id, athlete_id=athlete_id
+            )
+        except planner_copy.CopyError as exc:
+            raise _copy_http_error(exc) from exc
+
+
+@app.post("/api/planner/copy/jobs/{job_id}/advance")
+def planner_copy_advance(job_id: str) -> dict[str, Any]:
+    """Verarbeitet genau ein offenes Item über den bestätigten Write-Pfad."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            return planner_copy.advance_copy_job(
+                conn,
+                job_id,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                settings=settings,
+                service_factory=event_write_service,
+            )
+        except planner_copy.CopyError as exc:
+            raise _copy_http_error(exc) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "write_unavailable",
+                    "message": str(exc)[:300],
+                },
+            ) from exc
 
 
 @app.get("/api/session/{event_id}")

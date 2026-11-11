@@ -146,6 +146,62 @@ CREATE TABLE IF NOT EXISTS workout_template (
 );
 CREATE INDEX IF NOT EXISTS idx_workout_template_scope
     ON workout_template(account_id, athlete_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS planner_copy_job (
+    job_id            TEXT PRIMARY KEY,
+    account_id        TEXT NOT NULL,
+    athlete_id        TEXT NOT NULL,
+    client_request_id TEXT NOT NULL,
+    state             TEXT NOT NULL,
+    source_start      TEXT NOT NULL,
+    target_start      TEXT NOT NULL,
+    weeks             INTEGER NOT NULL,
+    time_zone         TEXT NOT NULL,
+    total             INTEGER NOT NULL DEFAULT 0,
+    message           TEXT NOT NULL,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    lease_owner       TEXT,
+    lease_expires_at  TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_planner_copy_job_request
+    ON planner_copy_job(account_id, athlete_id, client_request_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_planner_copy_job_active
+    ON planner_copy_job(account_id, athlete_id)
+    WHERE state IN ('queued', 'running');
+CREATE INDEX IF NOT EXISTS idx_planner_copy_job_scope
+    ON planner_copy_job(account_id, athlete_id, state, updated_at);
+
+CREATE TABLE IF NOT EXISTS planner_copy_item (
+    item_id           TEXT PRIMARY KEY,
+    job_id            TEXT NOT NULL REFERENCES planner_copy_job(job_id) ON DELETE CASCADE,
+    account_id        TEXT NOT NULL,
+    athlete_id        TEXT NOT NULL,
+    ordinal           INTEGER NOT NULL,
+    source_event_id   TEXT NOT NULL,
+    source_date       TEXT NOT NULL,
+    target_date       TEXT NOT NULL,
+    draft_id          TEXT NOT NULL,
+    local_id          TEXT NOT NULL,
+    name              TEXT NOT NULL,
+    sport             TEXT NOT NULL,
+    nodes_json        TEXT NOT NULL,
+    state             TEXT NOT NULL,
+    operation_id      TEXT,
+    remote_id         TEXT,
+    message           TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    UNIQUE(job_id, source_event_id, target_date)
+);
+CREATE INDEX IF NOT EXISTS idx_planner_copy_item_job
+    ON planner_copy_item(job_id, state, ordinal);
+-- Provenienz: eine Quelle/Ziel-Kombination darf nur einmal aktiv oder
+-- bestätigt existieren. `failed` und `skipped` sind abgeschlossen und
+-- blockieren eine bewusste neue Kopie nicht.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_planner_copy_item_provenance
+    ON planner_copy_item(account_id, athlete_id, source_event_id, target_date)
+    WHERE state IN ('pending', 'created', 'saved_unverified', 'unknown', 'conflict');
 """
 
 
