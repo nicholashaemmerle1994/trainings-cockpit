@@ -180,7 +180,7 @@ def _baseline(settings: Settings, args: argparse.Namespace) -> int:
             db.set_wellness_epoch(conn, epoch)
             console.print(
                 f"Referenz beginnt am {epoch.strftime('%d.%m.%Y')}. "
-                f"Die ersten {metrics.REFERENCE_MIN_NIGHTS} Nächte ergeben keinen Wert."
+                f"Ab {metrics.REFERENCE_MIN_NIGHTS} Nächten im 60-Tage-Fenster entsteht ein Wert."
             )
             return 0
 
@@ -189,20 +189,20 @@ def _baseline(settings: Settings, args: argparse.Namespace) -> int:
             console.print("Keine Neustart-Marke gesetzt — Referenz läuft über die ganze Historie.")
             return 0
 
-        nights = conn.execute(
-            "SELECT COUNT(*) FROM wellness WHERE date >= ? "
-            "AND (hrv IS NOT NULL OR rhr IS NOT NULL OR sleep_s IS NOT NULL "
-            "OR respiration IS NOT NULL)",
-            (epoch.isoformat(),),
-        ).fetchone()[0]
+        today = date.today()
+        window_start = max(epoch, today - timedelta(days=metrics.REFERENCE_DAYS - 1))
+        days = metrics.daily_days(
+            db.wellness_between(conn, window_start, today), [], window_start, today
+        )
+        nights = metrics.reference_nights(days, len(days) - 1, epoch)
         state = (
             "Referenz wird aufgebaut"
             if nights < metrics.REFERENCE_MIN_NIGHTS
             else "Referenz steht"
         )
         console.print(
-            f"Seit {epoch.strftime('%d.%m.%Y')}: {nights} Nächte mit Signal, "
-            f"Ziel {metrics.BASELINE_DAYS}. {state}."
+            f"Referenz ab {epoch.strftime('%d.%m.%Y')}: {nights} Nächte mit Signal "
+            f"im {metrics.REFERENCE_DAYS}-Tage-Fenster. {state}."
         )
         return 0
     finally:

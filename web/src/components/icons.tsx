@@ -165,6 +165,20 @@ export function IconPlus({ size = 20, className }: IconProps) {
   );
 }
 
+/** Griff zum Ziehen: sechs Punkte, gleicher Strich wie die übrigen Icons. */
+export function IconDrag({ size = 20, className }: IconProps) {
+  return (
+    <svg {...svgProps(size)} className={className}>
+      <circle cx="9" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="17" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="17" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function IconClose({ size = 20, className }: IconProps) {
   return (
     <svg {...svgProps(size)} className={className}>

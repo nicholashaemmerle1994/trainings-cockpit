@@ -159,25 +159,31 @@ setting(key, value_json)
 
 ### 6.2 Erholung (0–100)
 
-Teilscores 0–100, gewichtetes Mittel, fehlende Werte werden renormiert.
-Skala: `68 + 25·z` (normaler Tag = 68). Die Nacht zählt voll; der Vergleich
-mit dem eigenen Üblichen glättet genug. **Training fließt nicht direkt ein**
-(Bevel-Logik).
+Teilscores 0–100, gewichtetes Mittel **ohne Renormierung**: fehlt ein
+Pflichtsignal, entsteht kein Wert (D-26). Bewertet wird ausschließlich die
+heutige Nacht; ein Wert von gestern oder einem anderen Tag wird nie gezeigt
+(D-91). Die Referenz sind die eigenen letzten **60 Kalendertage** (mindestens 5
+gültige Nächte, D-89). **Training fließt nicht direkt ein** (Bevel-Logik).
 
 | Input | Gewicht | Basis |
 |---|---|---|
-| HRV | 35 % | Tageswert vs. 21-d-Referenz (z-Score) |
-| Ruhepuls | 20 % | dito, invertiert |
-| Schlaf | 30 % | 50 % Dauer gegen 7:30 h, 50 % Schlafscore |
-| Atmung | 5 % | 21-d-Referenz, invertiert |
-| SpO₂ | 5 % | nur Abzug unter 95 % bzw. ≥ 2 Punkte unter Referenz |
-| Temperatur | — | noch keine Daten, wird renormiert |
+| HRV | 35 % | Tageswert gegen den 60-d-Median (Median/MAD, Mindeststreuung) |
+| Ruhepuls | 25 % | dito, invertiert |
+| Schlaf | 30 % | 60 % Dauer gegen Sleep Need/Ziel, 25 % Wachheit, 15 % Phasen; ohne Phasen 70/30 |
+| Atmung | 10 % | 60-d-Median, invertiert |
 
-Anzeige: je Signal **heute / Schnitt / üblich**, plus ein Satz, der den Score
-erklärt. Fachbegriffe (CTL, ATL, TSB, ACWR) erscheinen nicht in der UI.
-| Subjektiv | 10 % | Check-in 1–5 |
+Skala: `80 + 16·z` unter dem Üblichen, `80 + 10·z` darüber, geklemmt auf 0–100.
+Bänder: 85/70/55/40 (provisorisch). Vier Warnregeln senken den Score um
+insgesamt höchstens 15 Punkte (D-90). SpO₂ und Body Battery sind nicht im Score.
+Garmin-Sleep-Score und Schlafkonsistenz zählen nicht.
 
-Ausgabe: Score, Ampel, **Treiber** („HRV −1,2 SD, Schlaf 6:10, TSB −12") und **Konfidenz** (Anzahl verfügbarer Inputs). Unter 3 Inputs: „eingeschränkt".
+Anzeige: je Signal **heute / Schnitt / üblich**, das Datum der heutigen Nacht,
+Referenz x/60, plus ein Satz, der den Score erklärt. Ein Score entsteht nur für
+die heutige Nacht (D-91). Fachbegriffe (CTL, ATL, TSB, ACWR) erscheinen nicht
+in der UI.
+
+Ausgabe: Score, Band, **Treiber** und **Erklärung**; ohne Score die heutigen
+Nachtwerte (D-58/D-91).
 
 ### 6.3 Wirkung und Fortschritt
 

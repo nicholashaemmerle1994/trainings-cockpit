@@ -59,6 +59,7 @@ from .model import (
     WorkoutNode,
     ZoneMetric,
     ZoneTarget,
+    repeat_group_name,
 )
 from .validation import validate_draft, validate_workout
 
@@ -91,7 +92,6 @@ _FORBIDDEN_NAME_TOKENS = (
 _DURATION_TOKEN = re.compile(
     r"(?i)(?:^|\s)\d+(?:[.,]\d+)?\s*(?:h|std|stunden?|m|min|minuten?|s|sek|sekunden?|km|mtr|meter|metres?)(?:\s|$)"
 )
-_REPEAT_SUFFIX = re.compile(r"\s*\d+\s*[x×]\s*$", re.IGNORECASE)
 _ZONE_NUMBER = re.compile(r"-(\d+)$")
 
 
@@ -313,8 +313,9 @@ def _repeat_header(node: RepeatNode) -> str:
     # Ein Gruppenkopf ist keine Prompt-Zeile; Zeit- und Distanzangaben darin
     # werden nicht als Schrittfeld gelesen. Zeilenumbrüche und reservierte
     # Konstrukte bleiben trotzdem gesperrt.
-    name = _safe_name(node.name, kind="Gruppenname", allow_measurements=True)
-    name = _REPEAT_SUFFIX.sub("", name).strip()
+    name = repeat_group_name(
+        _safe_name(node.name, kind="Gruppenname", allow_measurements=True)
+    )
     if not name:
         return f"{node.repetitions}x"
     return f"{name} {node.repetitions}x"

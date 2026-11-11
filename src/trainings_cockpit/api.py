@@ -692,6 +692,27 @@ def plan_save(event_id: int, body: dict[str, Any]) -> dict[str, Any]:
         return _save_response(outcome, time_zone=settings.time_zone, old_week=old_week)
 
 
+@app.post("/api/planner/plan/{event_id}/move")
+def plan_move(event_id: int, body: dict[str, Any]) -> dict[str, Any]:
+    """Verschiebt eine geplante Einheit auf einen anderen Kalendertag.
+
+    Der Zug im Kalender ist ein reiner Terminwechsel. Er geht denselben
+    bestätigten Update-Pfad wie das Speichern aus dem Blatt: die lokale
+    Planung liefert Name und Aufbau unverändert, nur das Datum ist neu. So
+    entstehen weder ein zweiter Schreibweg noch eine Strukturänderung.
+    """
+    raw_date = body.get("date")
+    if not isinstance(raw_date, str) or not raw_date.strip():
+        raise HTTPException(status_code=422, detail="Ein neues Datum ist erforderlich.")
+    detail = plan_detail(event_id)
+    save_body = {
+        "name": detail["name"],
+        "date": raw_date.strip(),
+        "nodes": detail["nodes"],
+    }
+    return plan_save(event_id, save_body)
+
+
 @app.post("/api/planner/draft/save")
 def new_plan_save(body: dict[str, Any]) -> dict[str, Any]:
     """Legt genau eine neue Einheit über den bestätigten Create-Pfad an."""

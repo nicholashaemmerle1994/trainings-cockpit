@@ -40,7 +40,7 @@ const DEMO_RECOVERY: Recovery = {
       average: 47,
       baseline: 49,
       unit: "bpm",
-      weight: 20,
+      weight: 25,
       z: -0.72,
     },
     {
@@ -62,14 +62,17 @@ const DEMO_RECOVERY: Recovery = {
       average: 14,
       baseline: 14.2,
       unit: "1/min",
-      weight: 5,
+      weight: 10,
       z: 0.2,
     },
   ],
   missing: [],
-  reference: { nights: 21, minimum: 21, target: 21, average: 76 },
+  reference: { nights: 21, minimum: 5, target: 60, days: 60, average: 76 },
   explanation:
     "Die HRV liegt über dem Üblichen, der Ruhepuls darunter; die Nacht war mit 6:50 h etwas kurz. Insgesamt eine gute Erholung.",
+  date: null,
+  triggeredRules: [],
+  adjustment: 0,
   vendor_prompt: false,
 };
 

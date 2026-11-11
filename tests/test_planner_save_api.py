@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -175,6 +175,52 @@ def test_terminwechsel_aktualisiert_alte_und_neue_woche(
     assert [entry["name"] for entry in new["entries"]] == [F01["name"]]
 
 
+def test_termin_ziehen_verschiebt_die_einheit_ueber_den_update_pfad(
+    client: TestClient, monkeypatch
+) -> None:
+    _store_event(F01)
+    gateway = SaveGateway({int(F01["id"]): F01})
+    _use_gateway(monkeypatch, gateway)
+
+    response = client.post(
+        "/api/planner/plan/9101/move",
+        json={"date": "2026-11-12"},
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["status"]["state"] == "saved"
+    assert payload["old_week"] == "2026-11-02"
+    assert payload["week"] == "2026-11-09"
+    assert len(gateway.update_calls) == 1
+    remote_id, update = gateway.update_calls[0]
+    assert remote_id == "9101"
+    assert update["start_date_local"].startswith("2026-11-12T00:00:00")
+    assert "description" not in update
+    old = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+    new = client.get("/api/planner", params={"week": "2026-11-09"}).json()
+    assert old["entries"] == []
+    assert [entry["name"] for entry in new["entries"]] == [F01["name"]]
+
+
+def test_termin_ziehen_ohne_gueltiges_datum_schreibt_nicht(
+    client: TestClient, monkeypatch
+) -> None:
+    _store_event(F01)
+    gateway = SaveGateway({int(F01["id"]): F01})
+    _use_gateway(monkeypatch, gateway)
+
+    missing = client.post("/api/planner/plan/9101/move", json={})
+    invalid = client.post(
+        "/api/planner/plan/9101/move",
+        json={"date": "2026-13-01"},
+    )
+
+    assert missing.status_code == 422
+    assert invalid.status_code == 422
+    assert gateway.update_calls == []
+
+
 def test_konflikt_liefert_die_drei_aktionen_und_schreibt_nicht(
     client: TestClient, monkeypatch
 ) -> None:
@@ -245,9 +291,11 @@ def test_aktivitaetssync_zaehlt_neue_aufzeichnung_nur_einmal(
     settings = api.get_settings()
     conn = db.connect(settings.db_path)
     db.init_db(conn)
+    today = date.today()
+    week_start = (today - timedelta(days=today.weekday())).isoformat()
     row = {
         "id": "act-sync-1",
-        "start_date_local": "2026-11-03T07:00:00",
+        "start_date_local": f"{today.isoformat()}T07:00:00",
         "type": "Run",
         "name": "Neue Aufzeichnung",
         "moving_time": 1800,
@@ -259,7 +307,7 @@ def test_aktivitaetssync_zaehlt_neue_aufzeichnung_nur_einmal(
     assert conn.execute("SELECT COUNT(*) FROM activity").fetchone()[0] == 1
     conn.close()
 
-    week = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+    week = client.get("/api/planner", params={"week": week_start}).json()
     assert week["summary"]["recorded"]["seconds"] == 1800
     assert week["summary"]["recorded"]["count"] == 1
     overview = client.get("/api/overview").json()
@@ -273,7 +321,7 @@ def test_aktivitaetssync_zaehlt_neue_aufzeichnung_nur_einmal(
     assert conn.execute("SELECT COUNT(*) FROM activity").fetchone()[0] == 1
     row_id = conn.execute("SELECT id FROM activity").fetchone()[0]
     conn.close()
-    corrected = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+    corrected = client.get("/api/planner", params={"week": week_start}).json()
     assert corrected["summary"]["recorded"]["seconds"] == 2400
     assert corrected["summary"]["recorded"]["count"] == 1
     unit = client.get(f"/api/unit/{row_id}").json()

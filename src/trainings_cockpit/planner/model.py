@@ -18,6 +18,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any, ClassVar
@@ -259,6 +260,20 @@ class StepNode:
             raise ValueError("target muss ein unterstütztes Ziel sein.")
         object.__setattr__(self, "notes", _optional_text(self.notes, "notes"))
         object.__setattr__(self, "source_ref", _optional_text(self.source_ref, "source_ref"))
+
+
+_REPEAT_NAME_SUFFIX = re.compile(r"\s*\d+\s*[x×]\s*$", re.IGNORECASE)
+
+
+def repeat_group_name(name: str) -> str:
+    """Der Gruppenname ohne mitgeschriebene Wiederholungszahl.
+
+    Die Anzahl kommt ausschließlich aus :attr:`RepeatNode.repetitions`; der
+    Serializer schreibt sie selbst und entfernt deshalb eine Zahl im Namen
+    („Hauptteil 4x“ wird mit sechs Wiederholungen zu „Hauptteil 6x“). Für
+    Schreibpfad, Rundlauf und Konfliktvergleich ist derselbe Name maßgeblich.
+    """
+    return _REPEAT_NAME_SUFFIX.sub("", str(name)).strip()
 
 
 @dataclass(frozen=True, slots=True)

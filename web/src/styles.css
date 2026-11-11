@@ -1006,6 +1006,50 @@ h2 {
   color: var(--text-3);
 }
 
+/* Warnregeln der Erholung (D-90): ruhige Liste, der Abzug trägt die
+   Warnfarbe. Kein eigener Kasten, keine zweite Fläche in der Karte. */
+.recovery-warnings {
+  margin-top: var(--space-4);
+}
+
+.recovery-warnings-head {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  color: var(--warning);
+}
+
+.recovery-warnings-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-warnings-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-label);
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.recovery-warnings-penalty {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--warning);
+}
+
+.recovery-warnings-total {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-micro);
+  line-height: 1.4;
+  color: var(--warning);
+  text-align: right;
+}
+
 /* ------------------------------------------------------------------ Diagramm */
 
 
@@ -2592,6 +2636,84 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   padding-top: var(--space-4);
 }
 
+/* Das Ziel liegt als Kontur über dem Tag; nichts verschiebt sich beim Ziehen. */
+.planner-day--drop {
+  border-radius: var(--radius-inner);
+  outline: 1px solid var(--accent-line);
+  outline-offset: var(--space-1);
+}
+
+.planner-entry {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  margin-top: var(--space-2);
+}
+
+.planner-entry > .train-row {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  margin-top: 0;
+  border-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Der Griff ist der einzige Teil mit touch-action: none; die Zeile scrollt. */
+.planner-entry__grip {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  border: 1px solid var(--border-subtle);
+  border-left: 0;
+  border-radius: 0 var(--radius-inner) var(--radius-inner) 0;
+  background: var(--bg-surface-raised);
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.planner-entry__grip:hover {
+  background: var(--bg-surface-interactive);
+  color: var(--text-secondary);
+}
+
+.planner-entry--dragging {
+  opacity: 0.55;
+}
+
+.planner-entry--dragging .planner-entry__grip,
+body.planner-dragging .planner-entry__grip {
+  cursor: grabbing;
+}
+
+body.planner-dragging {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.planner-move-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--accent-line);
+  color: var(--text-secondary);
+  font-size: var(--text-micro);
+  line-height: 1.45;
+}
+
+.planner-move-note--warning {
+  border-left-color: var(--warning);
+}
+
+.planner-move-note--error {
+  border-left-color: var(--negative);
+}
+
 .planner-day__head {
   display: flex;
   align-items: center;
@@ -2982,6 +3104,12 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   opacity: 0.72;
 }
 
+/* Während Speichern oder Sperre bleibt auch der Griff außen vor. */
+.plan-lock:disabled .plan-node__grip {
+  pointer-events: none;
+  cursor: default;
+}
+
 .plan-nodes,
 .plan-node__children {
   list-style: none;
@@ -3006,6 +3134,74 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 
 .plan-node-item {
   min-width: 0;
+  position: relative;
+}
+
+/* Der Griff liegt über der Zeile, damit der Block selbst ein Knopf bleibt. */
+.plan-node-heading {
+  position: relative;
+}
+
+.plan-node-heading > .plan-node {
+  padding-left: 48px;
+}
+
+.plan-node__grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  color: var(--text-muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.plan-node__grip:hover {
+  color: var(--text-secondary);
+}
+
+.plan-node__grip:active,
+body.plan-dragging .plan-node__grip {
+  cursor: grabbing;
+}
+
+body.plan-dragging {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.plan-node-item--dragging > .plan-node-heading > .plan-node {
+  border-color: var(--accent-line);
+  background: var(--bg-surface-interactive);
+  opacity: 0.6;
+}
+
+.plan-node-item--drop-before::before,
+.plan-node-item--drop-after::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.plan-node-item--drop-before::before {
+  top: calc(-1 * var(--space-1) - 1px);
+}
+
+.plan-node-item--drop-after::after {
+  bottom: calc(-1 * var(--space-1) - 1px);
 }
 
 .plan-node {

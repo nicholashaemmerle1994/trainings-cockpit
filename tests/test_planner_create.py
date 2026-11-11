@@ -13,14 +13,17 @@ from trainings_cockpit.planner import (
     EventWriteService,
     GatewayNotFound,
     PaceTarget,
+    PaceUnit,
     PlannedWorkout,
     PowerTarget,
     RepeatNode,
     SaveCoordinator,
     SaveState,
     StepNode,
+    StepRole,
     TimeEnd,
     Value,
+    ValueRange,
     WorkoutDraft,
     ZoneMetric,
     ZoneTarget,
@@ -442,6 +445,145 @@ def test_create_distanzplan_bestaetigt_rundlauf_mit_berechneter_dauer() -> None:
     assert confirmed_node.end == DistanceEnd(10000)
     assert len(gateway.create_calls) == 1
     assert gateway.read_calls == ["145277995"]
+
+
+class RealIntervalsIntervalGateway:
+    """Antwortet auf einen Intervall-Create wie die echte intervals.icu-API.
+
+    Der Gruppenkopf kommt mit der Anzahl zurück, die im Payload stand —
+    hier „Hauptteil 6x“. Lokal trug die Gruppe noch den Vorlagennamen
+    „Hauptteil 4x“, weil die Wiederholungen im Editor von 4 auf 6 geändert
+    wurden. Die Wiederholungszahl im Namen ist kein eigener Inhalt: Der
+    Serializer schreibt immer `repetitions`.
+    """
+
+    def __init__(self, *, event_id: int = 154458829) -> None:
+        self.event_id = event_id
+        self.events: dict[int, dict] = {}
+        self.create_calls: list[dict] = []
+        self.read_calls: list[str] = []
+
+    def create_event(self, payload: dict) -> dict:
+        self.create_calls.append(copy.deepcopy(payload))
+        self.events[self.event_id] = {
+            "id": self.event_id,
+            "category": "WORKOUT",
+            "start_date_local": payload["start_date_local"],
+            "type": payload["type"],
+            "name": payload["name"],
+            "external_id": payload["external_id"],
+            "workout_doc": {
+                "steps": [
+                    {
+                        "text": "Einlaufen",
+                        "distance": 2000,
+                        "hr": {"units": "hr_zone", "value": 2},
+                        "intensity": "rest",
+                    },
+                    {
+                        "text": "Hauptteil 6x",
+                        "reps": 6,
+                        "steps": [
+                            {
+                                "text": "Belastung",
+                                "duration": 240,
+                                "pace": {"units": "secs/km", "start": 334, "end": 345},
+                                "intensity": "active",
+                            },
+                            {
+                                "text": "Erholung",
+                                "duration": 120,
+                                "hr": {"units": "hr_zone", "value": 2},
+                                "intensity": "rest",
+                            },
+                        ],
+                    },
+                    {
+                        "text": "Auslaufen",
+                        "distance": 1000,
+                        "hr": {"units": "hr_zone", "value": 2},
+                        "intensity": "rest",
+                    },
+                ]
+            },
+        }
+        return {"id": self.event_id, "external_id": payload["external_id"]}
+
+    def update_event(self, remote_id: str, payload: dict) -> dict:
+        raise AssertionError("Ein Create darf kein Update auslösen")
+
+    def read_event(self, remote_id: str) -> dict:
+        self.read_calls.append(remote_id)
+        return copy.deepcopy(self.events[int(remote_id)])
+
+
+def _stale_interval_plan() -> PlannedWorkout:
+    zone = ZoneTarget(ZoneMetric.HEART_RATE, "run-hr-2", "run-hr")
+    return replace(
+        _new_plan("Threshold 6x4", "plan:draft:intervall"),
+        nodes=(
+            StepNode(
+                id="node:draft:einlaufen",
+                name="Einlaufen",
+                end=DistanceEnd(2000),
+                role=StepRole.RECOVERY,
+                target=zone,
+            ),
+            RepeatNode(
+                id="node:draft:hauptteil",
+                name="Hauptteil 4x",
+                repetitions=6,
+                children=(
+                    StepNode(
+                        id="node:draft:belastung",
+                        name="Belastung",
+                        end=TimeEnd(240),
+                        role=StepRole.WORK,
+                        target=PaceTarget(
+                            PaceUnit.SECONDS_PER_KM, ValueRange(334, 345)
+                        ),
+                    ),
+                    StepNode(
+                        id="node:draft:erholung",
+                        name="Erholung",
+                        end=TimeEnd(120),
+                        role=StepRole.RECOVERY,
+                        target=zone,
+                    ),
+                ),
+            ),
+            StepNode(
+                id="node:draft:auslaufen",
+                name="Auslaufen",
+                end=DistanceEnd(1000),
+                role=StepRole.RECOVERY,
+                target=zone,
+            ),
+        ),
+    )
+
+
+def test_create_intervallplan_bestaetigt_rundlauf_trotz_veralteter_gruppenzahl() -> None:
+    # TB-21: Der Lauf stand korrekt in intervals, aber der Rundlauf verglich
+    # den lokalen Vorlagennamen „Hauptteil 4x“ mit dem zurückgelesenen
+    # „Hauptteil 6x“. Die tatsächliche Anzahl steht in `repetitions`; der
+    # Write war korrekt und darf nicht als unbestätigt gelten.
+    gateway = RealIntervalsIntervalGateway()
+    service = EventWriteService(gateway)
+
+    outcome = _activate(WorkoutDraft.new(_stale_interval_plan()), service)
+
+    assert outcome.status.state is SaveState.SAVED
+    assert outcome.status.message == "In intervals.icu gespeichert und zurückgelesen."
+    assert outcome.confirmed is not None
+    group = next(
+        node for node in outcome.confirmed.nodes if isinstance(node, RepeatNode)
+    )
+    assert group.name == "Hauptteil 6x"
+    assert group.repetitions == 6
+    assert "Hauptteil 6x" in gateway.create_calls[0]["description"]
+    assert "Hauptteil 4x" not in gateway.create_calls[0]["description"]
+    assert len(gateway.create_calls) == 1
 
 
 def test_neue_plaene_erfinden_keine_aktivitaetsbeziehung() -> None:

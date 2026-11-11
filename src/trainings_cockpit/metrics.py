@@ -5,39 +5,55 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from statistics import mean, pstdev
+from statistics import mean, median, pstdev
 from typing import Any
 
 from . import db, plan
 from .planner.summaries import recorded_seconds
 
 TARGET_SLEEP_H = 7.5
-#: Referenzfenster für „üblich“: die letzten drei Wochen, nicht die letzten drei Monate.
-#: Ein Sommer mit anderem Schlafrhythmus soll einen schlechten Oktober nicht abfedern.
-BASELINE_DAYS = 21
-#: Punkte je Standardabweichung. 20 war zu flach: eine Nacht mit 10 ms HRV-Verlust
-#: bewegte den Score um 5 Punkte.
-SCORE_PER_SD = 25.0
+#: Garmins Sleep Need ist ein Ziel, keine Mindestdauer — unter sieben Stunden
+#: wird es aber nicht als Ziel verwendet (D-89).
+MIN_SLEEP_NEED_H = 7.0
+#: Referenzfenster: 60 Kalendertage. Der Sommer mit anderem Rhythmus soll einen
+#: schlechten Oktober nicht mehr abfedern, aber vier Wochen sind zu wenig, um
+#: die eigene Streuung zu kennen.
+REFERENCE_DAYS = 60
+#: Ab so vielen gültigen Nächten im Fenster entsteht ein Wert (D-89).
+REFERENCE_MIN_NIGHTS = 5
+#: Median/MAD sind robust; der Faktor macht die MAD zur üblichen Streuung.
+MAD_SCALE = 1.4826
+#: Unter dieser Streuung wäre jeder z-Score ein Ausreißer. Die Werte sind
+#: Mindeststreuungen je Signal, keine Normalisierung (D-89).
+MIN_SPREAD = {"hrv": 1.0, "rhr": 1.0, "resp": 0.2}
+#: Asymmetrische Abbildung: unter dem Üblichen zählt jeder z-Punkt 16, darüber
+#: 10 Score-Punkte. Ein normaler Tag liegt bei 80 (D-89).
+SCORE_CENTER = 80.0
+SCORE_PER_SD_BELOW = 16.0
+SCORE_PER_SD_ABOVE = 10.0
 VALID_RANGES = {
     "hrv": (5.0, 200.0),
     "rhr": (30.0, 120.0),
     "sleep_s": (2 * 3600.0, 14 * 3600.0),
     "sleep_score": (0.0, 100.0),
+    "sleep_awake_s": (0.0, 6 * 3600.0),
+    "sleep_deep_s": (0.0, 8 * 3600.0),
+    "sleep_light_s": (0.0, 12 * 3600.0),
+    "sleep_rem_s": (0.0, 8 * 3600.0),
+    "sleep_need_h": (3.0, 12.0),
+    "sleep_goal_h": (3.0, 12.0),
     "respiration": (8.0, 20.0),
     "spo2": (90.0, 100.0),
     "weight_kg": (30.0, 200.0),
 }
-WEIGHTS = {"hrv": 35.0, "rhr": 20.0, "sleep": 30.0, "resp": 5.0, "spo2": 5.0}
+WEIGHTS = {"hrv": 35.0, "rhr": 25.0, "sleep": 30.0, "resp": 10.0}
 #: Ein neuer Sensor misst anders. Nach einem Gerätewechsel beginnt die Referenz
 #: neu, sonst mischt sie zwei Sensoren und zeigt eine Erholung, die es nicht gibt.
-#: Der erste Wert kommt erst, wenn die Referenz vollständig ist (D-51): Mit sieben
-#: Nächten ist der Maßstab um vier Score-Punkte unsicher, mit 21 um zwei — der
-#: Unterschied zwischen "eine Zahl" und "eine belastbare Zahl".
-REFERENCE_MIN_NIGHTS = BASELINE_DAYS
 #: Solange die Referenz entsteht und eine Woche danach, lässt sich der Score der
 #: Vergleichs-App (Bevel) eintragen: erst Paare sammeln, dann vergleichen (D-52).
 VENDOR_COMPARE_DAYS = 7
-#: Ohne diese Signale gibt es keinen Score. SpO2 fehlt hier, weil es nur abzieht.
+#: Ohne diese Signale gibt es keinen Score (D-26). SpO2 ist bewusst nicht dabei:
+#: es fließt seit v2 nicht mehr in den Score ein (D-89).
 REQUIRED_SIGNALS = {
     "hrv": "die HRV",
     "rhr": "der Ruhepuls",
@@ -47,10 +63,12 @@ REQUIRED_SIGNALS = {
 BANDS = (
     (85, "green-top", "Sehr gut erholt"),
     (70, "green", "Gut erholt"),
-    (50, "amber", "Solide"),
-    (35, "orange", "Erholungsbedarf"),
+    (55, "amber", "Solide"),
+    (40, "orange", "Erholungsbedarf"),
     (0, "red", "Ruhetag"),
 )
+#: Gesamtdeckel der Warnregeln (D-90). Nie positiv, nie tiefer als 15 Punkte.
+WARNING_CAP = -15.0
 
 BAND_SENTENCES = {
     "green-top": "Du bist heute sehr gut erholt.",
@@ -71,6 +89,12 @@ class Day:
     rhr: float | None = None
     sleep_h: float | None = None
     sleep_score: float | None = None
+    sleep_awake_h: float | None = None
+    sleep_deep_h: float | None = None
+    sleep_light_h: float | None = None
+    sleep_rem_h: float | None = None
+    sleep_need_h: float | None = None
+    sleep_goal_h: float | None = None
     respiration: float | None = None
     spo2: float | None = None
     tsb: float | None = None
@@ -117,6 +141,20 @@ def daily_days(
             rhr=_num(wellness_row, "rhr", VALID_RANGES["rhr"]),
             sleep_h=_hours(wellness_row, "sleep_s", VALID_RANGES["sleep_s"]),
             sleep_score=_num(wellness_row, "sleep_score", VALID_RANGES["sleep_score"]),
+            sleep_awake_h=_seconds_to_hours(
+                wellness_row, "sleep_awake_s", VALID_RANGES["sleep_awake_s"]
+            ),
+            sleep_deep_h=_seconds_to_hours(
+                wellness_row, "sleep_deep_s", VALID_RANGES["sleep_deep_s"]
+            ),
+            sleep_light_h=_seconds_to_hours(
+                wellness_row, "sleep_light_s", VALID_RANGES["sleep_light_s"]
+            ),
+            sleep_rem_h=_seconds_to_hours(
+                wellness_row, "sleep_rem_s", VALID_RANGES["sleep_rem_s"]
+            ),
+            sleep_need_h=_num(wellness_row, "sleep_need_h", VALID_RANGES["sleep_need_h"]),
+            sleep_goal_h=_num(wellness_row, "sleep_goal_h", VALID_RANGES["sleep_goal_h"]),
             respiration=_num(wellness_row, "respiration", VALID_RANGES["respiration"]),
             spo2=_num(wellness_row, "spo2", VALID_RANGES["spo2"]),
             vendor=_num(wellness_row, "readiness_vendor", (0.0, 100.0)),
@@ -157,69 +195,179 @@ def _hours(
     return round(value / 3600, 2)
 
 
+def _seconds_to_hours(
+    row: dict[str, Any] | None,
+    key: str,
+    bounds: tuple[float, float] | None = None,
+) -> float | None:
+    """Wie `_hours`, aber Null ist ein gültiger Wert (null Minuten wach)."""
+    value = _num(row, key, bounds)
+    if value is None:
+        return None
+    return round(value / 3600, 2)
+
+
 # ----------------------------------------------------------------- Readiness
 
 
-def reference_nights(days: list[Day], index: int, epoch: date | None) -> int | None:
-    """Nächte mit mindestens einem Signal seit dem Sensorwechsel."""
-    if epoch is None:
-        return None
-    return sum(
-        1
-        for d in days[: index + 1]
-        if d.day >= epoch
-        and (d.hrv is not None or d.rhr is not None or d.sleep_h is not None or d.respiration is not None)
+def reference_nights(days: list[Day], index: int, epoch: date | None) -> int:
+    """Gültige Nächte im 60-Tage-Fenster, das mit `index` endet (D-89)."""
+    return len(_reference_window(days, index, epoch))
+
+
+def _reference_window(days: list[Day], index: int, epoch: date | None) -> list[Day]:
+    start = max(0, index - REFERENCE_DAYS + 1)
+    return [
+        day
+        for day in days[start : index + 1]
+        if (epoch is None or day.day >= epoch) and _valid_night(day)
+    ]
+
+
+def _baseline_window(days: list[Day], target: int, epoch: date | None) -> list[Day]:
+    """Alle gültigen Nächte im 60-Tage-Fenster, inklusive der Zielnacht (D-89)."""
+    return _reference_window(days, target, epoch)
+
+
+def _valid_night(day: Day) -> bool:
+    return any(
+        value is not None for value in (day.hrv, day.rhr, day.sleep_h, day.respiration)
+    )
+
+
+def _has_sleep_input(day: Day) -> bool:
+    """Der Schlaf-Score braucht Dauer und Wachheit; Phasen sind optional."""
+    return day.sleep_h is not None and day.sleep_awake_h is not None
+
+
+def _complete_night(day: Day) -> bool:
+    return (
+        day.hrv is not None
+        and day.rhr is not None
+        and _has_sleep_input(day)
+        and day.respiration is not None
+    )
+
+
+def _missing_signals(days: list[Day], index: int, epoch: date | None) -> list[str]:
+    """Was der heutigen Nacht fehlt — nie die Werte eines anderen Tages (D-26)."""
+    day = days[index]
+    if epoch is not None and day.day < epoch:
+        return list(REQUIRED_SIGNALS.values())
+
+    missing: list[str] = []
+    for key, name in REQUIRED_SIGNALS.items():
+        if key == "sleep":
+            if day.sleep_h is None:
+                missing.append(name)
+            elif not _has_sleep_input(day):
+                missing.append("die Wachzeit")
+        elif getattr(day, "respiration" if key == "resp" else key) is None:
+            missing.append(name)
+    return missing
+
+
+def _reference_payload(
+    days: list[Day], index: int, epoch: date | None
+) -> dict[str, Any]:
+    return {
+        "nights": reference_nights(days, index, epoch),
+        "minimum": REFERENCE_MIN_NIGHTS,
+        "target": REFERENCE_DAYS,
+        "days": REFERENCE_DAYS,
+        "average": None,
+    }
+
+
+def _no_recovery(
+    label: str,
+    reference: dict[str, Any],
+    explanation: str,
+    missing: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "score": None,
+        "band": "unknown",
+        "label": label,
+        "confidence": 0.0,
+        "components": [],
+        "missing": missing or [],
+        "reference": reference,
+        "explanation": explanation,
+        "date": None,
+        "triggeredRules": [],
+        "adjustment": 0,
+    }
+
+
+def _reference_building(reference: dict[str, Any]) -> dict[str, Any]:
+    return _no_recovery(
+        "Referenz wird aufgebaut",
+        reference,
+        (
+            f"Für die Referenz fehlen noch Nächte: {reference['nights']} von "
+            f"{REFERENCE_MIN_NIGHTS} sind da. Ein Erholungswert entsteht, sobald "
+            f"genug Nächte im 60-Tage-Fenster liegen."
+        ),
     )
 
 
 def compute_recovery(
     days: list[Day], index: int, epoch: date | None = None
 ) -> dict[str, Any]:
-    """Erholung nach Nachtsignalen.
+    """Erholung nach Nachtsignalen im 60-Tage-Fenster (D-89).
 
-    HRV und Ruhepuls gegen die eigene 21-Tage-Referenz, Schlaf aus Dauer und
-    Score, Atmung leichtgewichtig, SpO2 nur als Abzug. Training zählt nicht
-    direkt. Die Nacht zählt voll – der Vergleich mit dem eigenen Üblichen glättet
-    genug, eine zweite Glättung über den Wochenschnitt hat den Score zu träge
-    gemacht.
+    HRV, Ruhepuls und Atmung werden gegen den persönlichen Median derselben
+    Nächte bewertet (Median/MAD, Mindeststreuung), der Schlaf gegen das
+    Garmin-Schlafziel. Gewichte: HRV 35, Ruhepuls 25, Schlaf 30, Atmung 10.
+    Es gibt keinen Teilwert: fehlt ein Pflichtsignal, entsteht kein Score
+    (D-26). Der Score gehört ausschließlich zur heutigen Nacht. Fehlt sie ganz
+    oder teilweise, gibt es „Keine Daten“ — nie einen Wert von gestern oder
+    einem anderen Tag.
     """
-    window = days[max(0, index - 6) : index + 1]
     current = days[index]
+    reference = _reference_payload(days, index, epoch)
+    if reference["nights"] < REFERENCE_MIN_NIGHTS:
+        return _reference_building(reference)
+
+    if not _complete_night(current):
+        missing = _missing_signals(days, index, epoch)
+        if len(missing) == 1:
+            text = f"Für die heutige Nacht fehlt noch {missing[0]}."
+        else:
+            text = (
+                f"Für die heutige Nacht fehlen noch {', '.join(missing[:-1])} "
+                f"und {missing[-1]}."
+            )
+        return _no_recovery(
+            "Keine Daten",
+            reference,
+            f"{text} Ein Erholungswert entsteht erst, wenn alle Werte da sind.",
+            missing=missing,
+        )
+
+    window = _reference_window(days, index, epoch)
+    baseline_days = _baseline_window(days, index, epoch)
+
+    def baseline(field: str) -> list[float]:
+        return [
+            value
+            for day in baseline_days
+            if (value := getattr(day, field)) is not None
+        ]
+
     components: list[dict[str, Any]] = []
-
-    nights = reference_nights(days, index, epoch)
-    if nights is not None and nights < REFERENCE_MIN_NIGHTS:
-        fehlt = REFERENCE_MIN_NIGHTS - nights
-        return {
-            "score": None,
-            "band": "unknown",
-            "label": "Referenz wird aufgebaut",
-            "confidence": 0.0,
-            "components": [],
-            "missing": [],
-            "reference": {
-                "nights": nights,
-                "minimum": REFERENCE_MIN_NIGHTS,
-                "target": BASELINE_DAYS,
-                "average": None,
-            },
-            "explanation": (
-                f"Neuer Sensor: die Referenz beginnt neu. "
-                f"{nights} von {REFERENCE_MIN_NIGHTS} Nächten sind da, "
-                f"noch {fehlt} bis zum ersten Wert."
-            ),
-        }
-
 
     hrv = _component(
         key="hrv",
         label="HRV",
         unit="ms",
         today=current.hrv,
-        window=[d.hrv for d in window],
-        baseline=_baseline(days, index, "hrv", epoch),
+        values=[day.hrv for day in window if day.hrv is not None],
+        baseline=baseline("hrv"),
         invert=False,
         weight=WEIGHTS["hrv"],
+        value_date=current.day.isoformat(),
     )
     if hrv:
         components.append(hrv)
@@ -229,100 +377,71 @@ def compute_recovery(
         label="Ruhepuls",
         unit="bpm",
         today=current.rhr,
-        window=[d.rhr for d in window],
-        baseline=_baseline(days, index, "rhr", epoch),
+        values=[day.rhr for day in window if day.rhr is not None],
+        baseline=baseline("rhr"),
         invert=True,
         weight=WEIGHTS["rhr"],
+        value_date=current.day.isoformat(),
     )
     if rhr:
         components.append(rhr)
 
-    sleep_values = [d.sleep_h for d in window if d.sleep_h is not None]
-    if current.sleep_h is not None and sleep_values:
-        today_sleep = current.sleep_h
-        average_sleep = mean(sleep_values)
-        blend = today_sleep
-        debt = sum(max(0.0, TARGET_SLEEP_H - h) for h in sleep_values)
-        duration_score = max(
-            0.0, min(100.0, 100 * blend / TARGET_SLEEP_H - min(25.0, debt * 4))
-        )
-        vendor = current.sleep_score
-        score = 0.5 * duration_score + 0.5 * vendor if vendor is not None else duration_score
-        components.append(
-            {
-                "key": "sleep",
-                "label": "Schlaf",
-                "score": round(score),
-                "today": round(today_sleep, 2),
-                "average": round(average_sleep, 2),
-                "baseline": TARGET_SLEEP_H,
-                "unit": "h",
-                "weight": WEIGHTS["sleep"],
-                "date": current.day.isoformat(),
-                "z": None,
-                "vendor": vendor,
-            }
-        )
+    sleep = _sleep_component(current, window)
+    if sleep:
+        components.append(sleep)
 
     respiration = _component(
         key="resp",
         label="Atmung",
         unit="/min",
         today=current.respiration,
-        window=[d.respiration for d in window],
-        baseline=_baseline(days, index, "respiration", epoch),
-        invert=True,
+        values=[day.respiration for day in window if day.respiration is not None],
+        baseline=baseline("respiration"),
+        invert=True,  # niedriger ist besser
         weight=WEIGHTS["resp"],
+        value_date=current.day.isoformat(),
     )
     if respiration:
         components.append(respiration)
 
-    spo2 = _spo2_component(days, index, window, epoch)
-    if spo2:
-        components.append(spo2)
-
-    # Ein Score entsteht nur, wenn alle gewichteten Signale von heute vorliegen.
-    # Ein halber Wert wäre eine Zahl, die mehr weiß, als die Daten hergeben.
     fehlend = [
         name for key, name in REQUIRED_SIGNALS.items() if key not in {c["key"] for c in components}
     ]
     if fehlend:
+        # Die Zielnacht war vollständig, aber ein Signal hat keine belastbare
+        # Referenz (zu wenige Werte). Auch dann gibt es keinen Teilwert.
         if len(fehlend) == 1:
-            text = f"Für heute fehlt noch {fehlend[0]}."
+            text = f"Für die heutige Nacht fehlt noch {fehlend[0]}."
         else:
-            text = f"Für heute fehlen noch {', '.join(fehlend[:-1])} und {fehlend[-1]}."
-        return {
-            "score": None,
-            "band": "unknown",
-            "label": "Keine Daten",
-            "confidence": 0.0,
-            "components": [],
-            "missing": fehlend,
-            "explanation": f"{text} Ein Erholungswert entsteht erst, wenn alle Werte da sind.",
-        }
+            text = (
+                f"Für die heutige Nacht fehlen noch {', '.join(fehlend[:-1])} "
+                f"und {fehlend[-1]}."
+            )
+        return _no_recovery(
+            "Keine Daten",
+            reference,
+            f"{text} Ein Erholungswert entsteht erst, wenn alle Werte da sind.",
+            missing=fehlend,
+        )
 
     total_weight = sum(component["weight"] for component in components)
-    score = sum(c["score"] * c["weight"] for c in components) / total_weight
-    displayed, band, label = _score_band(score)
+    raw_score = sum(c["score"] * c["weight"] for c in components) / total_weight
+    rules, rule_sum = _warning_rules(components)
+    adjustment = _capped_adjustment(rule_sum)
+    displayed, band, label = _score_band(raw_score + adjustment)
 
     return {
         "score": displayed,
         "band": band,
         "label": label,
-        # Alle Pflichtsignale sind da, sonst gäbe es diesen Zweig nicht.
         "confidence": 1.0,
         "components": components,
-        "reference": (
-            None
-            if nights is None
-            else {
-                "nights": nights,
-                "minimum": REFERENCE_MIN_NIGHTS,
-                "target": BASELINE_DAYS,
-                "average": None,
-            }
-        ),
-        "explanation": _explanation(band, components, current.day),
+        "missing": [],
+        "reference": reference,
+        "explanation": _explanation(band, components, rules, rule_sum, adjustment),
+        "date": current.day.isoformat(),
+        "triggeredRules": rules,
+        "adjustment": round(adjustment),
     }
 
 
@@ -332,35 +451,34 @@ def _component(
     label: str,
     unit: str,
     today: float | None,
-    window: list[float | None],
-    baseline: list[float] | None,
+    values: list[float],
+    baseline: list[float],
     invert: bool,
     weight: float,
     value_date: str | None = None,
 ) -> dict[str, Any] | None:
-    values = [v for v in window if v is not None]
-    if not values or not baseline or len(baseline) < 7:
+    """Ein Signal als persönlicher z-Score (Median/MAD), auf 0–100 abgebildet."""
+    if today is None or not baseline or len(baseline) < REFERENCE_MIN_NIGHTS:
         return None
 
-    if today is None:
-        # Nur die Nacht von heute zählt. Fehlt sie, fehlt das Signal – lieber
-        # eine Lücke als ein Wert von gestern, der wie heute aussieht.
-        return None
-    average = mean(values)
-    base = mean(baseline)
-    spread = max(pstdev(baseline), 1.0)
+    base = median(baseline)
+    mad = median([abs(value - base) for value in baseline])
+    spread = max(MAD_SCALE * mad, MIN_SPREAD[key])
     z = (today - base) / spread
     if invert:
         z = -z
-    z = max(-2.5, min(2.5, z))
-    score = max(0.0, min(100.0, 68 + SCORE_PER_SD * z))
+    mapped = SCORE_CENTER + (
+        SCORE_PER_SD_ABOVE if z >= 0 else SCORE_PER_SD_BELOW
+    ) * z
+    score = max(0.0, min(100.0, mapped))
 
+    recent = values[-7:] if values else [today]
     return {
         "key": key,
         "label": label,
         "score": round(score),
         "today": round(today, 1),
-        "average": round(average, 1),
+        "average": round(mean(recent), 1),
         "baseline": round(base, 1),
         "unit": unit,
         "weight": weight,
@@ -369,31 +487,132 @@ def _component(
     }
 
 
-def _spo2_component(
-    days: list[Day], index: int, window: list[Day], epoch: date | None = None
-) -> dict[str, Any] | None:
-    """SpO2 zählt nur als Abzug, nie als Bonus."""
-    today = days[index].spo2
-    baseline = _baseline(days, index, "spo2", epoch)
-    if today is None or not baseline:
-        return None
-    base = mean(baseline)
-    if today >= 95 and today > base - 2:
+def _sleep_target(day: Day) -> float:
+    """Garmin Sleep Need, sonst Garmin-Schlafziel, sonst lokal 7:30 (D-89)."""
+    if day.sleep_need_h is not None:
+        return max(day.sleep_need_h, MIN_SLEEP_NEED_H)
+    if day.sleep_goal_h is not None:
+        return day.sleep_goal_h
+    return TARGET_SLEEP_H
+
+
+def _sleep_component(day: Day, window: list[Day]) -> dict[str, Any] | None:
+    """Schlaf aus Dauer, Wachheit und — falls vorhanden — Phasen.
+
+    Mit Phasen: 60 % Dauer, 25 % Wachheit, 15 % Phasen. Ohne Phasen: 70/30.
+    Der Garmin-Sleep-Score wird nicht verwendet (D-89).
+    """
+    if day.sleep_h is None or day.sleep_awake_h is None:
         return None
 
-    values = [d.spo2 for d in window if d.spo2 is not None]
-    penalty = 100 - (95 - today) * 8 - max(0.0, base - today) * 4
+    target = _sleep_target(day)
+    duration_score = max(0.0, min(100.0, 100 * day.sleep_h / target))
+
+    in_bed = day.sleep_h + day.sleep_awake_h
+    efficiency = day.sleep_h / in_bed if in_bed > 0 else 0.0
+    # 95 % Schlafeffizienz und besser = volle Punktzahl, 70 % = 0.
+    wake_score = max(0.0, min(100.0, (efficiency - 0.70) / 0.25 * 100))
+
+    deep = day.sleep_deep_h
+    rem = day.sleep_rem_h
+    has_phases = deep is not None and rem is not None and day.sleep_h > 0
+    phase_score: float | None = None
+    if has_phases:
+        deep_score = 100 * min(1.0, (deep / day.sleep_h) / 0.18)
+        rem_score = 100 * min(1.0, (rem / day.sleep_h) / 0.22)
+        phase_score = (deep_score + rem_score) / 2
+        score = 0.60 * duration_score + 0.25 * wake_score + 0.15 * phase_score
+    else:
+        score = 0.70 * duration_score + 0.30 * wake_score
+
+    sleep_values = [entry.sleep_h for entry in window if entry.sleep_h is not None]
     return {
-        "key": "spo2",
-        "label": "SpO₂",
-        "score": round(max(0.0, min(100.0, penalty))),
-        "today": round(today),
-        "average": round(mean(values)) if values else round(today),
-        "baseline": round(base),
-        "unit": "%",
-        "weight": WEIGHTS["spo2"],
+        "key": "sleep",
+        "label": "Schlaf",
+        "score": round(score),
+        "today": round(day.sleep_h, 2),
+        "average": round(mean(sleep_values[-7:]), 2) if sleep_values else round(day.sleep_h, 2),
+        "baseline": round(target, 2),
+        "unit": "h",
+        "weight": WEIGHTS["sleep"],
+        "date": day.day.isoformat(),
         "z": None,
+        "target": round(target, 2),
+        "awake": round(day.sleep_awake_h, 2),
+        "deep": round(deep, 2) if deep is not None else None,
+        "rem": round(rem, 2) if rem is not None else None,
+        "efficiency": round(efficiency, 3),
+        "duration_score": round(duration_score),
+        "wake_score": round(wake_score),
+        "phase_score": round(phase_score) if phase_score is not None else None,
     }
+
+
+def _warning_rules(
+    components: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], float]:
+    """Die vier Warnregeln mit festen Schwellen (D-90).
+
+    Sie prüfen bewusst die Abweichung, nicht den z-Score: die Schwellen sind
+    fachlich (10 %, 5 bpm, Schlafscore 60) und bleiben auch dann gleich, wenn
+    sich die Streuung der Referenz ändert.
+    """
+    by_key = {component["key"]: component for component in components}
+    if not {"hrv", "rhr", "sleep"} <= by_key.keys():
+        return [], 0.0
+
+    hrv = by_key["hrv"]
+    rhr = by_key["rhr"]
+    sleep = by_key["sleep"]
+    hrv_deviation = (
+        (hrv["today"] - hrv["baseline"]) / hrv["baseline"] * 100
+        if hrv["baseline"]
+        else 0.0
+    )
+    rhr_deviation = rhr["today"] - rhr["baseline"]
+    hrv_score = hrv["score"]
+    rhr_score = rhr["score"]
+    sleep_score = sleep["score"]
+
+    rules: list[dict[str, Any]] = []
+    if hrv_deviation <= -10 and rhr_deviation >= 5:
+        rules.append(
+            {
+                "id": "hrv_rhr",
+                "label": "HRV mindestens 10 % unter Referenz und Ruhepuls mindestens 5 bpm darüber",
+                "adjustment": -10,
+            }
+        )
+    if hrv_deviation <= -10 and sleep_score < 60:
+        rules.append(
+            {
+                "id": "hrv_sleep",
+                "label": "HRV mindestens 10 % unter Referenz und Schlafscore unter 60",
+                "adjustment": -8,
+            }
+        )
+    if rhr_deviation >= 5 and sleep_score < 60:
+        rules.append(
+            {
+                "id": "rhr_sleep",
+                "label": "Ruhepuls mindestens 5 bpm über Referenz und Schlafscore unter 60",
+                "adjustment": -8,
+            }
+        )
+    if hrv_score < 50 and rhr_score < 50 and sleep_score < 60:
+        rules.append(
+            {
+                "id": "triple_low",
+                "label": "HRV, Ruhepuls und Schlaf liegen alle deutlich unter der Referenz",
+                "adjustment": -5,
+            }
+        )
+    return rules, float(sum(rule["adjustment"] for rule in rules))
+
+
+def _capped_adjustment(rule_sum: float) -> float:
+    """Der Gesamtdeckel der Warnregeln: nie positiv, nie tiefer als −15 (D-90)."""
+    return max(WARNING_CAP, rule_sum) if rule_sum < 0 else 0.0
 
 
 def _baseline(
@@ -401,10 +620,10 @@ def _baseline(
 ) -> list[float] | None:
     values = [
         getattr(d, field)
-        for d in days[max(0, index - BASELINE_DAYS) : index]
+        for d in days[max(0, index - REFERENCE_DAYS) : index]
         if getattr(d, field) is not None and (epoch is None or d.day >= epoch)
     ]
-    return values if len(values) >= 7 else None
+    return values if len(values) >= REFERENCE_MIN_NIGHTS else None
 
 
 def _band(score: float) -> tuple[str, str]:
@@ -422,42 +641,52 @@ def _score_band(score: float) -> tuple[int, str, str]:
 
 
 def _explanation(
-    band: str, components: list[dict[str, Any]], day: date | None = None
+    band: str,
+    components: list[dict[str, Any]],
+    rules: list[dict[str, Any]] | None = None,
+    rule_sum: float = 0.0,
+    adjustment: float = 0.0,
 ) -> str:
     by_key = {component["key"]: component for component in components}
     sentences: list[str] = [BAND_SENTENCES.get(band, "")]
 
     hrv = by_key.get("hrv")
     if hrv:
-        direction = "über" if hrv["today"] >= hrv["average"] else "unter"
+        direction = "über" if hrv["today"] >= hrv["baseline"] else "unter"
         sentences.append(
-            f"Deine HRV liegt mit {_de(hrv['today'])} ms {direction} deinem Schnitt "
-            f"von {_de(hrv['average'])} ms (üblich {_de(hrv['baseline'])})."
+            f"Deine HRV liegt mit {_de(hrv['today'])} ms {direction} deinem üblichen "
+            f"Wert von {_de(hrv['baseline'])} ms."
         )
 
     rhr = by_key.get("rhr")
     if rhr:
-        direction = "über" if rhr["today"] > rhr["average"] else "unter"
+        direction = "über" if rhr["today"] > rhr["baseline"] else "unter"
         sentences.append(
             f"Der Ruhepuls liegt mit {_de(rhr['today'])} bpm {direction} deinem "
-            f"Schnitt von {_de(rhr['average'])} bpm."
+            f"üblichen Wert von {_de(rhr['baseline'])} bpm."
         )
 
     sleep = by_key.get("sleep")
     if sleep:
-        vendor = sleep.get("vendor")
-        score_text = f" (Schlafscore {_de(vendor)})" if vendor is not None else ""
-        sentences.append(f"Du hast {_duration(sleep['today'])} geschlafen{score_text}.")
+        sentences.append(
+            f"Du hast {_duration(sleep['today'])} geschlafen; das Ziel lag bei "
+            f"{_duration(sleep['baseline'])}."
+        )
 
     # Atmung fließt in den Score, wird aber nicht mehr erzählt: der Athlet
     # will sie nicht in der Oberfläche sehen.
 
-    spo2 = by_key.get("spo2")
-    if spo2:
-        sentences.append(
-            f"Die Sauerstoffsättigung lag mit {_de(spo2['today'])} % unter deinem "
-            f"üblichen Wert von {_de(spo2['baseline'])} %."
-        )
+    if rules:
+        if rule_sum < WARNING_CAP:
+            sentences.append(
+                f"Die Warnregeln greifen; der Abzug ist bei {abs(round(adjustment))} "
+                f"Punkten gedeckelt."
+            )
+        else:
+            sentences.append(
+                f"Die Warnregeln greifen; der Score wurde um {abs(round(adjustment))} "
+                f"Punkte reduziert."
+            )
 
     return " ".join(sentence for sentence in sentences if sentence)
 
@@ -479,10 +708,14 @@ def _duration(hours: float) -> str:
     return f"{total // 60}:{total % 60:02d} h"
 
 
-def recovery_series(days: list[Day]) -> list[dict[str, Any]]:
+def recovery_series(days: list[Day], epoch: date | None = None) -> list[dict[str, Any]]:
+    """Je Tag ein Punkt, wenn für genau diesen Tag ein Score entsteht.
+
+    Es gibt keinen Tages-Fallback: eine Nacht gehört zu ihrem eigenen Tag.
+    """
     out: list[dict[str, Any]] = []
     for index in range(len(days)):
-        result = compute_recovery(days, index)
+        result = compute_recovery(days, index, epoch)
         if result["score"] is None:
             continue
         out.append(
@@ -721,7 +954,17 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
     # Die Nachtsignale kommen mit dem Sync des Tages. Liegt für heute noch nichts
     # vor, zeigen die Karten den letzten Stand statt "—" – sonst steht jeden
     # Morgen vor dem Sync ein leerer Bildschirm neben einem vollen Ring.
-    latest = current
+    latest = next(
+        (
+            d
+            for d in reversed(series_days)
+            if any(
+                value is not None
+                for value in (d.hrv, d.rhr, d.sleep_h, d.respiration)
+            )
+        ),
+        current,
+    )
 
     window_start = today - timedelta(days=days - 1)
     load_series = [
@@ -759,16 +1002,18 @@ def build_overview(conn: Any, today: date | None = None, days: int = 90) -> dict
     ]
 
     recovery_points = [
-        p for p in recovery_series(series_days) if p["date"] >= window_start.isoformat()
+        p
+        for p in recovery_series(series_days, epoch)
+        if p["date"] >= window_start.isoformat()
     ]
 
-    # 21-Tage-Schnitt der Scores – nach einem Sensorwechsel nur die Nächte
+    # 60-Tage-Schnitt der Scores – nach einem Sensorwechsel nur die Nächte
     # seit dem Wechsel, sonst stünde der neue Wert neben einem alten Maßstab.
     if (recovery.get("reference") or {}).get("nights", 0) >= REFERENCE_MIN_NIGHTS:
         since = epoch.isoformat() if epoch else None
         recent = [
             point["score"]
-            for point in recovery_points[-BASELINE_DAYS:]
+            for point in recovery_points[-REFERENCE_DAYS:]
             if point.get("score") is not None and (since is None or point["date"] >= since)
         ]
         recovery["reference"]["average"] = round(mean(recent)) if recent else None
@@ -893,7 +1138,7 @@ def _sleep_debt(days: list[Day]) -> float:
 
 def _today_baseline(days: list[Day], field: str) -> float | None:
     baseline = _baseline(days, len(days) - 1, field)
-    return round(mean(baseline), 0) if baseline else None
+    return round(median(baseline), 0) if baseline else None
 
 
 def _hrv_status(days: list[Day]) -> str:

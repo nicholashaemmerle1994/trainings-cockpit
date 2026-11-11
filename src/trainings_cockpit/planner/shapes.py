@@ -24,6 +24,7 @@ from .model import (
     Value,
     WorkoutNode,
     ZoneTarget,
+    repeat_group_name,
 )
 
 
@@ -73,7 +74,7 @@ def _node_shape(node: WorkoutNode) -> tuple[Any, ...]:
     if isinstance(node, RepeatNode):
         return (
             "repeat",
-            node.name,
+            repeat_group_name(node.name),
             node.repetitions,
             node.skip_final_recovery,
             tuple(_node_shape(child) for child in node.children),

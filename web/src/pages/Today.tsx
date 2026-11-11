@@ -100,32 +100,40 @@ export function Today({ data }: { data: Overview }) {
   const hrv = componentFor("hrv");
   const rhr = componentFor("rhr");
   const sleep = componentFor("sleep");
+  // Mit Score zeigen die Nachtwerte dieselbe Nacht wie der Score (recovery.date).
+  // Ohne Score bleiben die Werte der letzten Nacht sichtbar (D-58); die dürfen
+  // nicht mit einer älteren Score-Nacht gemischt werden.
+  const hrvValue = hasScore ? (hrv?.today ?? null) : today.hrv.value;
+  const rhrValue = hasScore ? (rhr?.today ?? null) : today.rhr.value;
+  const sleepValue = hasScore ? (sleep?.today ?? null) : today.sleep.hours;
   const nightly = [
     {
       key: "hrv",
       label: "HRV",
-      value: today.hrv.value,
+      value: hrvValue,
       unit: "ms",
-      delta: deltaPercent(today.hrv.value, hrv?.baseline, hrv?.average),
+      delta: deltaPercent(hrvValue, hrv?.baseline, hrv?.average),
     },
     {
       key: "rhr",
       label: "Ruhepuls",
-      value: today.rhr.value,
+      value: rhrValue,
       unit: "bpm",
-      delta: deltaNumber(today.rhr.value, rhr?.baseline, rhr?.average, "bpm", false),
+      delta: deltaNumber(rhrValue, rhr?.baseline, rhr?.average, "bpm", false),
     },
     {
       key: "sleep",
       label: "Schlaf",
-      value: today.sleep.hours,
+      value: sleepValue,
       unit: "h",
-      delta: deltaNumber(today.sleep.hours, sleep?.baseline, sleep?.average, "min", true, 60),
+      delta: deltaNumber(sleepValue, sleep?.baseline, sleep?.average, "min", true, 60),
     },
   ];
+  const nightIsToday = hasScore || today.as_of === today.date;
   const showNightly =
-    nightly.some((row) => row.value != null) && (hasScore || drivers.length === 0);
-  const nightText = `Nacht vom ${fmtDate(today.as_of ?? today.date, {
+    nightIsToday && nightly.some((row) => row.value != null) && (hasScore || drivers.length === 0);
+  const nightDate = recovery.date ?? today.date;
+  const nightText = `Nacht vom ${fmtDate(nightDate, {
     day: "numeric",
     month: "long",
   })}`;
@@ -136,7 +144,8 @@ export function Today({ data }: { data: Overview }) {
         ? "Wartet auf die Nacht"
         : nightText;
   const reference = recovery.reference ?? null;
-  const recentScores = data.series.recovery.slice(-21);
+  const referenceTarget = reference?.target ?? 60;
+  const recentScores = data.series.recovery.slice(-referenceTarget);
   const seriesAverage =
     recentScores.length > 0
       ? Math.round(recentScores.reduce((sum, entry) => sum + entry.score, 0) / recentScores.length)
@@ -147,12 +156,13 @@ export function Today({ data }: { data: Overview }) {
   const referenceText = reference
     ? reference.nights < reference.minimum
       ? `${reference.nights} von ${reference.minimum} Nächten`
-      : referenceScore == null
-        ? `Referenz ${reference.nights} von ${reference.target} Nächten`
-        : `${reference.nights} von ${reference.target} Nächten · Schnitt ${referenceScore}`
+      : hasScore && referenceScore != null
+        ? `${reference.nights} von ${reference.target} Nächten · Schnitt ${referenceScore}`
+        : `${reference.nights} von ${reference.target} Nächten`
     : referenceScore == null
-      ? "21-Tage-Schnitt —"
-      : `21-Tage-Schnitt ${referenceScore}`;
+      ? "60-Tage-Schnitt —"
+      : `60-Tage-Schnitt ${referenceScore}`;
+  const warnings = recovery.triggeredRules ?? [];
   const syncTime = new Date(data.generated_at).toLocaleTimeString("de-AT", {
     hour: "2-digit",
     minute: "2-digit",
@@ -275,6 +285,25 @@ export function Today({ data }: { data: Overview }) {
           )}
 
           <p className="note">{recovery.explanation}</p>
+
+          {warnings.length > 0 && (
+            <div className="recovery-warnings">
+              <p className="recovery-warnings-head">Warnregeln</p>
+              <ul className="recovery-warnings-list">
+                {warnings.map((rule) => (
+                  <li key={rule.id}>
+                    <span>{rule.label}</span>
+                    <span className="recovery-warnings-penalty">{fmtSigned(rule.adjustment)}</span>
+                  </li>
+                ))}
+              </ul>
+              {recovery.adjustment != null && recovery.adjustment < 0 && (
+                <p className="recovery-warnings-total">
+                  Abzug {fmtSigned(recovery.adjustment)} Punkte
+                </p>
+              )}
+            </div>
+          )}
 
           {recovery.vendor_prompt && (
             <VendorScore day={today.date} initial={today.vendor} score={recovery.score} />
