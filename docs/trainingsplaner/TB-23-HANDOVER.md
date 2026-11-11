@@ -30,7 +30,9 @@ separat.
 ### P3–P7 — Oberfläche und Kopie
 - `d9552f3` Backend: persistente Copy-Jobs, Vorschau, sequentieller Advance,
   Provenienz, Lease, lesender Abgleich; Tests und Copy-Doku.
-- Frontend (Commit folgt): Vorlage speichern/verwenden, Wochen-/Blockkopie.
+- `1864962` Frontend: Vorlage speichern/verwenden, Wochen-/Blockkopie.
+- `5ebc18d`/`d32a5d8` Doku: Bedienungsanleitung, Copy-Vertrag,
+  Planer-Index und Handover.
 
 ### P2 — Vorlagen-API
 `2d98b7f`
@@ -137,9 +139,7 @@ auf denselben Job = `409 copy_busy`. Kein Fortschritt mehr ⇒ Job endet
 
 ## 4. Nächste Schritte
 
-1. Frontend P3–P7 committen.
-2. P8: Doku (Bedienungsanleitung, Entscheidungen), Regression, Build,
-   visuelle Prüfung, Push, PR gegen `develop`.
+1. P8: Regression, Build, visuelle Prüfung, Push, PR gegen `develop`.
 
 ## 4a. Umgesetzt (P3–P7)
 
@@ -175,7 +175,7 @@ auf denselben Job = `409 copy_busy`. Kein Fortschritt mehr ⇒ Job endet
 
 ## 5. Teststatus
 
-Aktuell: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest` → **529 passed**, 1 bekannte
+Aktuell: `UV_CACHE_DIR=$PWD/.uv-cache uv run pytest` → **529 passed** (17 Copy-API-, 2 Copy-Schema-Tests), 1 bekannte
 Starlette-Deprecation-Warnung. `ruff` grün. `npm run build` grün.
 
 ## 6. Bekannte Grenzen
