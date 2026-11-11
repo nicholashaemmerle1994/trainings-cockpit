@@ -155,17 +155,20 @@ function PlanDragProvider({
     document.body.classList.add("plan-dragging");
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // Das Blatt schließt bei Escape selbst. Während eines Zuges bricht die
+      // Taste nur den Zug ab, sonst verliert man mit dem Griff das ganze Blatt.
       event.preventDefault();
+      event.stopImmediatePropagation();
       dragRef.current = null;
       setDrag(null);
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     const timer = window.setInterval(() => {
       if (point.current) scrollSheetNearPointer(point.current.y);
     }, 40);
     return () => {
       document.body.classList.remove("plan-dragging");
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       window.clearInterval(timer);
       point.current = null;
     };

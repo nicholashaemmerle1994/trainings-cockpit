@@ -3104,6 +3104,12 @@ body.planner-dragging {
   opacity: 0.72;
 }
 
+/* Während Speichern oder Sperre bleibt auch der Griff außen vor. */
+.plan-lock:disabled .plan-node__grip {
+  pointer-events: none;
+  cursor: default;
+}
+
 .plan-nodes,
 .plan-node__children {
   list-style: none;
