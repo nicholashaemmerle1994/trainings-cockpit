@@ -10,7 +10,7 @@ Ausprobieren: das, was ein Ticket gebaut hat, soll dort landen, bevor es nach
 | Verzeichnis | `~/docker/compose/cockpit` | `~/docker/compose/cockpit-exp` |
 | Compose-Projekt | `cockpit` | `cockpit-exp` |
 | Image | `trainings-cockpit:latest` | `trainings-cockpit:develop` |
-| Port | 8100 | 8101 und zusätzlich 8081 |
+| Port | 8100 | 8101 |
 | Datenbank | `data/cockpit.db` | eigene Kopie in `data/` |
 
 ## Erreichbarkeit
@@ -19,8 +19,6 @@ Die Vorschau hängt nur im Tailnet, erreichbar über die Adresse des Servers:
 
 ```
 http://100.92.2.97:8101
-
-Zusätzlich ist dieselbe Vorschau unter `http://100.92.2.97:8081` erreichbar.
 ```
 
 Bewusst **ohne** den `*.ts.net`-Namen und ohne HTTPS: dieser Name löst im
@@ -63,9 +61,6 @@ Arbeitsbaum. Das ist Absicht: während ein Ticket-Agent auf seinem
 Feature-Branch arbeitet, darf dessen Zwischenstand nicht auf dem Server
 landen. Das Skript nimmt `git archive`, überträgt per `ssh` und baut neu.
 `--no-build` überträgt nur.
-
-Die Vorschau wird über `TC_PORT` (Standard 8101) und zusätzlich über
-`TC_ALT_PORT` (Standard 8081) veröffentlicht. Beide zeigen dieselbe Instanz.
 
 Danach auf dem Server neu bauen (siehe oben). `data/`, `.env` und `.venv`
 bleiben dabei unangetastet, weil sie nicht im Archiv liegen.
