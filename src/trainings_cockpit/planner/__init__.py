@@ -7,6 +7,12 @@ Mengen und die getrennten Ist-/Plan-Summen. Es gibt hier keinen Netzwerkaufruf
 und keinen Produkt-Schreibpfad.
 """
 
+from .clone import (
+    CloneCode,
+    CloneError,
+    clone_for_new_plan,
+    rekey_nodes,
+)
 from .conflicts import (
     CONFLICT_ACTIONS,
     ConflictAssessment,
@@ -106,6 +112,8 @@ from .model import (
 )
 from .operations import (
     SqliteOperationStore,
+    nodes_from_json,
+    nodes_to_json,
     plan_from_json,
     plan_to_json,
     retention_cutoff,
@@ -182,6 +190,20 @@ from .summaries import (
     recorded_totals,
     relationship_actuals,
 )
+from .templates import (
+    TEMPLATE_NAME_MAX,
+    TEMPLATE_SCHEMA_VERSION,
+    TemplateCode,
+    TemplateError,
+    TemplateNotFound,
+    TemplateSummary,
+    WorkoutTemplate,
+    delete_template,
+    get_template,
+    instantiate,
+    list_templates,
+    save_from_plan,
+)
 from .validation import (
     Execution,
     ExecutionCompression,
@@ -226,6 +248,10 @@ __all__ = [
     "ConflictKind",
     "CONTROLLED_REMOTE_FIELDS",
     "CREATE_ONLY_REMOTE_FIELDS",
+    "CloneCode",
+    "CloneError",
+    "clone_for_new_plan",
+    "rekey_nodes",
     "DeleteGateway",
     "DeleteOutcome",
     "EventDeleteService",
@@ -317,6 +343,8 @@ __all__ = [
     "SaveRunner",
     "SaveSnapshot",
     "SqliteOperationStore",
+    "nodes_from_json",
+    "nodes_to_json",
     "plan_from_json",
     "plan_to_json",
     "retention_cutoff",
@@ -334,6 +362,12 @@ __all__ = [
     "StepNode",
     "StepRole",
     "StepTarget",
+    "TEMPLATE_NAME_MAX",
+    "TEMPLATE_SCHEMA_VERSION",
+    "TemplateCode",
+    "TemplateError",
+    "TemplateNotFound",
+    "TemplateSummary",
     "TimeEnd",
     "TrainingListEntry",
     "TrainingRange",
@@ -346,6 +380,7 @@ __all__ = [
     "week_label",
     "WorkoutDraft",
     "WorkoutNode",
+    "WorkoutTemplate",
     "WriteBoundaryError",
     "WriteCoordinator",
     "ZoneMetric",
@@ -379,7 +414,12 @@ __all__ = [
     "build_week_summary",
     "build_workout_profile_data",
     "calculate_known_totals",
+    "delete_template",
     "derive_execution_sequence",
+    "get_template",
+    "instantiate",
+    "list_templates",
+    "save_from_plan",
     "execution_count",
     "format_distance",
     "format_duration",

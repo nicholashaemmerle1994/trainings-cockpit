@@ -131,6 +131,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_link_event_unique
     ON plan_link(event_id) WHERE state = 'linked';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_link_activity_unique
     ON plan_link(activity_id) WHERE state = 'linked';
+
+CREATE TABLE IF NOT EXISTS workout_template (
+    template_id     TEXT PRIMARY KEY,
+    account_id      TEXT NOT NULL,
+    athlete_id      TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    sport           TEXT NOT NULL,
+    schema_version  INTEGER NOT NULL,
+    nodes_json      TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    source_event_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_workout_template_scope
+    ON workout_template(account_id, athlete_id, updated_at);
 """
 
 
@@ -578,7 +593,8 @@ def recent_activities(conn: sqlite3.Connection, limit: int = 20) -> list[dict[st
 def events_on(conn: sqlite3.Connection, day: date) -> list[dict[str, Any]]:
     """Geplante Einheiten eines Tages, nach Startzeit und Anlage sortiert."""
     rows = conn.execute(
-        "SELECT * FROM event WHERE date = ? AND COALESCE(category, 'WORKOUT') = 'WORKOUT' ORDER BY id",
+        "SELECT * FROM event WHERE date = ? "
+        "AND COALESCE(category, 'WORKOUT') = 'WORKOUT' ORDER BY id",
         (day.isoformat(),),
     ).fetchall()
     return [dict(r) for r in rows]
@@ -659,7 +675,8 @@ def streams_between(conn: sqlite3.Connection, start: date, end: date) -> set[int
 
 def events_between(conn: sqlite3.Connection, start: date, end: date) -> list[dict[str, Any]]:
     rows = conn.execute(
-        "SELECT * FROM event WHERE date BETWEEN ? AND ? AND COALESCE(category, 'WORKOUT') = 'WORKOUT' ORDER BY date, id",
+        "SELECT * FROM event WHERE date BETWEEN ? AND ? "
+        "AND COALESCE(category, 'WORKOUT') = 'WORKOUT' ORDER BY date, id",
         (start.isoformat(), end.isoformat()),
     ).fetchall()
     return [dict(r) for r in rows]
