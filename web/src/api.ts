@@ -54,6 +54,12 @@ export const api = {
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+  movePlan: (eventId: number, date: string) =>
+    request<PlannerSaveResponse>(`/api/planner/plan/${eventId}/move`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    }),
   saveNewPlan: (body: unknown) =>
     request<PlannerSaveResponse>("/api/planner/draft/save", {
       method: "POST",
