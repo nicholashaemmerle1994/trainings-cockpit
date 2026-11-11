@@ -23,6 +23,7 @@ from trainings_cockpit.planner import (
     StepNode,
     TemplateCode,
     TemplateError,
+    TimeEnd,
     UnsupportedNode,
     Value,
     ZoneMetric,
@@ -268,6 +269,33 @@ def test_measurement_in_step_name_is_rejected_with_concrete_code(tmp_path) -> No
     assert info.value.code is TemplateCode.SOURCE_NOT_CLONEABLE
     assert info.value.clone_code is CloneCode.SERIALIZATION_FAILED
     assert _count(conn, "workout_template") == 0
+
+
+def test_instantiate_rejects_foreign_template(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    saved = _save(conn, account="a", athlete="x")
+
+    for account, athlete in (("b", "x"), ("a", "y"), (" ", " ")):
+        with pytest.raises(TemplateError) as info:
+            instantiate(
+                saved,
+                target_date="2026-11-17",
+                time_zone="Europe/Vienna",
+                account_id=account,
+                athlete_id=athlete,
+            )
+        assert info.value.code is TemplateCode.SCOPE_MISMATCH
+
+    plan, draft = instantiate(
+        saved,
+        target_date="2026-11-17",
+        time_zone="Europe/Vienna",
+        account_id="a",
+        athlete_id="x",
+    )
+    assert plan.date == "2026-11-17"
+    assert draft.current == plan
+    assert _count(conn, "workout_template") == 1
 
 
 def test_clone_keeps_date_and_optionally_time() -> None:
@@ -557,6 +585,75 @@ def test_corrupt_and_unknown_schema_rows_are_visible(tmp_path) -> None:
         by_id[unknown.template_id].error_code
         == TemplateCode.SCHEMA_UNSUPPORTED.value
     )
+
+
+def _step(node_id: str, name: str, seconds: int = 600) -> StepNode:
+    return StepNode(id=NodeId(node_id), name=name, end=TimeEnd(seconds))
+
+
+def _set_nodes(conn, template_id: str, nodes) -> None:
+    conn.execute(
+        "UPDATE workout_template SET nodes_json = ? WHERE template_id = ?",
+        (json.dumps(nodes_to_json(nodes)), template_id),
+    )
+    conn.commit()
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        (),
+        (_step("node:dup", "Erster"), _step("node:dup", "Zweiter")),
+        (
+            StepNode(
+                id=NodeId("node:open"),
+                name="Offen",
+                end=OpenEnd(),
+            ),
+        ),
+        (
+            UnsupportedNode(
+                id=NodeId("node:special"),
+                label="Spezial",
+                reason="Nicht abbildbar",
+                source_ref="/special",
+            ),
+        ),
+    ],
+    ids=["leer", "doppelte-id", "offenes-ende", "unbekannter-knoten"],
+)
+def test_semantically_broken_nodes_are_corrupt(tmp_path, nodes) -> None:
+    conn = _conn(tmp_path)
+    saved = _save(conn)
+    _set_nodes(conn, saved.template_id, nodes)
+
+    with pytest.raises(TemplateError) as info:
+        get_template(conn, saved.template_id, account_id="a", athlete_id="x")
+    assert info.value.code is TemplateCode.CORRUPT
+
+    summaries = list_templates(conn, account_id="a", athlete_id="x")
+    assert len(summaries) == 1
+    assert summaries[0].available is False
+    assert summaries[0].error_code == TemplateCode.CORRUPT.value
+
+
+def test_unsupported_sport_in_stored_template_is_corrupt(tmp_path) -> None:
+    conn = _conn(tmp_path)
+    saved = _save(conn)
+    conn.execute(
+        "UPDATE workout_template SET sport = ? WHERE template_id = ?",
+        ("Other", saved.template_id),
+    )
+    conn.commit()
+
+    with pytest.raises(TemplateError) as info:
+        get_template(conn, saved.template_id, account_id="a", athlete_id="x")
+    assert info.value.code is TemplateCode.CORRUPT
+
+    summaries = list_templates(conn, account_id="a", athlete_id="x")
+    assert len(summaries) == 1
+    assert summaries[0].available is False
+    assert summaries[0].error_code == TemplateCode.CORRUPT.value
 
 
 def test_delete_template_leaves_events_alone(tmp_path) -> None:

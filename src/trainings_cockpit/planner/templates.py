@@ -36,6 +36,7 @@ class TemplateCode(StrEnum):
     NAME_TOO_LONG = "name_too_long"
     NAME_INVALID = "name_invalid"
     INVALID_SCOPE = "invalid_scope"
+    SCOPE_MISMATCH = "scope_mismatch"
     SPORT_UNSUPPORTED = "sport_unsupported"
     SOURCE_NOT_CLONEABLE = "source_not_cloneable"
     SCHEMA_UNSUPPORTED = "schema_unsupported"
@@ -168,7 +169,7 @@ def _row_to_template(row: Mapping[str, Any]) -> WorkoutTemplate:
             TemplateCode.CORRUPT,
             "Der gespeicherte Vorlagenaufbau ist nicht lesbar.",
         ) from exc
-    return WorkoutTemplate(
+    template = WorkoutTemplate(
         template_id=str(row["template_id"]),
         account_id=str(row["account_id"]),
         athlete_id=str(row["athlete_id"]),
@@ -182,6 +183,59 @@ def _row_to_template(row: Mapping[str, Any]) -> WorkoutTemplate:
             None if row["source_event_id"] is None else str(row["source_event_id"])
         ),
     )
+    _validate_stored_template(template)
+    return template
+
+
+def _validate_stored_template(template: WorkoutTemplate) -> None:
+    """Prüft mehr als JSON-Lesbarkeit: den fachlich klonbaren Knotenbaum.
+
+    Dieselbe Grenze wie beim Speichern und Instanziieren wird hier lesend
+    angewendet. Eine beschädigte Zeile wird damit nie als gültige Vorlage
+    zurückgegeben; doppelte IDs, leere/offene Strukturen, unbekannte Inhalte
+    und nicht unterstützte Sportarten enden als :attr:`TemplateCode.CORRUPT`.
+    """
+    if template.sport not in SUPPORTED_NEW_SPORTS:
+        raise TemplateError(
+            TemplateCode.CORRUPT,
+            f"Die Vorlage trägt die nicht unterstützte Sportart {template.sport!r}.",
+        )
+    if not str(template.name or "").strip():
+        raise TemplateError(
+            TemplateCode.CORRUPT,
+            "Die Vorlage trägt keinen Namen.",
+        )
+    try:
+        source = PlannedWorkout(
+            local_id=PlanId(f"template-source:{template.template_id}"),
+            name=template.name,
+            sport=template.sport,
+            date="2000-01-01",
+            time_zone="UTC",
+            nodes=template.nodes,
+            notes=None,
+            editability=Editability.FULL,
+        )
+    except (TypeError, ValueError) as exc:
+        raise TemplateError(
+            TemplateCode.CORRUPT,
+            "Der gespeicherte Knotenbaum ist fachlich ungültig.",
+        ) from exc
+    try:
+        clone_for_new_plan(
+            source,
+            target_date="2000-01-01",
+            time_zone="UTC",
+            account_id=template.account_id,
+            athlete_id=template.athlete_id,
+            keep_time=False,
+        )
+    except CloneError as exc:
+        raise TemplateError(
+            TemplateCode.CORRUPT,
+            "Die gespeicherte Vorlage ist nicht klonbar.",
+            clone_code=exc.code,
+        ) from exc
 
 
 def _summary(template: WorkoutTemplate) -> TemplateSummary:
@@ -393,6 +447,18 @@ def instantiate(
     """
     if not isinstance(template, WorkoutTemplate):
         raise TypeError("template muss eine WorkoutTemplate sein.")
+    account = str(account_id or "").strip()
+    athlete = str(athlete_id or "").strip()
+    if (
+        not account
+        or not athlete
+        or template.account_id != account
+        or template.athlete_id != athlete
+    ):
+        raise TemplateError(
+            TemplateCode.SCOPE_MISMATCH,
+            "Die Vorlage gehört zu einem anderen Account oder Athleten.",
+        )
     source = PlannedWorkout(
         local_id=PlanId.new(),
         remote_id=None,
@@ -410,8 +476,8 @@ def instantiate(
             source,
             target_date=target_date,
             time_zone=time_zone,
-            account_id=account_id,
-            athlete_id=athlete_id,
+            account_id=account,
+            athlete_id=athlete,
             keep_time=False,
             draft_id=draft_id,
         )
