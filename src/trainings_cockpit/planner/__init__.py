@@ -102,6 +102,7 @@ from .model import (
     content_hash,
     field_buffer_key,
     iter_nodes,
+    repeat_group_name,
 )
 from .operations import (
     SqliteOperationStore,
@@ -291,6 +292,7 @@ __all__ = [
     "SerializationBoundaryError",
     "SerializationError",
     "RepeatNode",
+    "repeat_group_name",
     "require_planned_draft",
     "reschedule_plan",
     "RestrictionCode",
