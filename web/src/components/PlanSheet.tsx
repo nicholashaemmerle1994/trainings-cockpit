@@ -12,6 +12,7 @@ import {
   newDraftRequest,
   insertChild,
   moveNodeInLevel,
+  moveNodeToIndex,
   nodeById,
   nodeTitle,
   normalizeSkipFinalRecovery,
@@ -1131,6 +1132,14 @@ export function PlanSheet({
     setSelected(nodeId);
   };
 
+  const moveToIndex = (nodeId: string, targetIndex: number) => {
+    setUndo(null);
+    setNodes((currentNodes) =>
+      normalizeSkipFinalRecovery(moveNodeToIndex(currentNodes, nodeId, targetIndex)),
+    );
+    setSelected(nodeId);
+  };
+
   const dissolve = (groupId: string) => {
     const result = dissolveRepeat(nodes, groupId);
     if (!result) return;
@@ -1215,6 +1224,7 @@ export function PlanSheet({
           onTargetUnitChange={onTargetUnitChange}
           onTargetModeChange={onTargetModeChange}
           onMove={move}
+          onMoveToIndex={moveToIndex}
           onRemove={remove}
           onAddRoot={addRoot}
           onAddChild={addChild}
@@ -1290,6 +1300,7 @@ function PlanBody({
   onTargetUnitChange,
   onTargetModeChange,
   onMove,
+  onMoveToIndex,
   onRemove,
   onAddRoot,
   onAddChild,
@@ -1360,6 +1371,7 @@ function PlanBody({
   onTargetUnitChange: (nodeId: string, unit: TargetEditorUnit) => void;
   onTargetModeChange: (nodeId: string, mode: "value" | "range") => void;
   onMove: (nodeId: string, delta: -1 | 1) => void;
+  onMoveToIndex: (nodeId: string, targetIndex: number) => void;
   onRemove: (nodeId: string) => void;
   onAddRoot: (kind: "step" | "repeat") => void;
   onAddChild: (groupId: string) => void;
@@ -1574,6 +1586,12 @@ function PlanBody({
 
       <section className="sheet-sec plan-structure" aria-label="Aufbau der Planung">
         <h2>Aufbau</h2>
+        {editing && data.rights.can_edit_structure && (
+          <p className="plan-note plan-note--muted">
+            Griff ziehen verschiebt einen Block innerhalb seiner Ebene. Die
+            Pfeiltasten bleiben für Tastatur und Feinschliff.
+          </p>
+        )}
         {nodes.length === 0 && (
           <p className="plan-note">
             {editing
@@ -1619,6 +1637,7 @@ function PlanBody({
               onTargetUnitChange={onTargetUnitChange}
               onTargetModeChange={onTargetModeChange}
               onMove={onMove}
+              onMoveToIndex={onMoveToIndex}
               onRemove={onRemove}
               onAddChild={onAddChild}
               onDissolve={onDissolve}

@@ -1,6 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { AddWorkoutSheet, type NewPlanConfig } from "../components/AddWorkoutSheet";
-import { IconBack, IconForward, IconPlus } from "../components/icons";
+import { IconBack, IconDrag, IconForward, IconPlus } from "../components/icons";
 import { PlanSheet } from "../components/PlanSheet";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { StatusBadge } from "../components/ui";
@@ -112,6 +118,25 @@ function emptyDayText(data: PlannerWeekResponse): string {
   return "Planungen: keine · Aufzeichnungen für diesen Zeitraum nicht verfügbar.";
 }
 
+interface MoveDragState {
+  planId: number;
+  fromDate: string;
+  overDate: string | null;
+  name: string;
+}
+
+function plannerDayFromPoint(x: number, y: number): string | null {
+  const target = document.elementFromPoint(x, y);
+  const day = target?.closest<HTMLElement>("[data-planner-day]");
+  return day?.dataset.plannerDay ?? null;
+}
+
+function scrollPageNearPointer(y: number): void {
+  const edge = 64;
+  if (y < edge) window.scrollBy(0, -12);
+  else if (y > window.innerHeight - edge) window.scrollBy(0, 12);
+}
+
 export function Planner({
   week,
   timeZone,
@@ -158,6 +183,35 @@ export function Planner({
     text: string;
   } | null>(null);
   const [recoverNew, setRecoverNew] = useState<StoredPlannerDraft | null>(null);
+  const [moveDrag, setMoveDrag] = useState<MoveDragState | null>(null);
+  const moveDragRef = useRef<MoveDragState | null>(null);
+  const movePoint = useRef<{ x: number; y: number } | null>(null);
+  const [movingPlan, setMovingPlan] = useState<number | null>(null);
+  const [moveNote, setMoveNote] = useState<{
+    kind: "info" | "warning" | "error";
+    text: string;
+  } | null>(null);
+  const calendarDragging = moveDrag != null;
+  useEffect(() => {
+    if (!calendarDragging) return;
+    document.body.classList.add("planner-dragging");
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      moveDragRef.current = null;
+      setMoveDrag(null);
+    };
+    window.addEventListener("keydown", onKey);
+    const timer = window.setInterval(() => {
+      if (movePoint.current) scrollPageNearPointer(movePoint.current.y);
+    }, 40);
+    return () => {
+      document.body.classList.remove("planner-dragging");
+      window.removeEventListener("keydown", onKey);
+      window.clearInterval(timer);
+      movePoint.current = null;
+    };
+  }, [calendarDragging]);
 
   useEffect(() => {
     let alive = true;
@@ -254,6 +308,94 @@ export function Planner({
     }
   };
 
+  const movePlanToDay = async (drag: MoveDragState) => {
+    const targetDate = drag.overDate;
+    if (!targetDate) return;
+    setMovingPlan(drag.planId);
+    setMoveNote(null);
+    try {
+      const result = await api.movePlan(drag.planId, targetDate);
+      const state = result.status.state;
+      const moved = state === "saved" || state === "clean";
+      setMoveNote({
+        kind:
+          moved
+            ? "info"
+            : state === "failed" || state === "conflict"
+              ? "error"
+              : "warning",
+        text: moved
+          ? `„${drag.name}“ steht jetzt am ${fmtDateLong(targetDate)}.`
+          : result.status.message || "Die Einheit konnte nicht verschoben werden.",
+      });
+      onDataChanged?.();
+      if (result.week && result.week !== week) {
+        invalidate([week, result.week]);
+        onWeekChange(result.week);
+      } else {
+        reload();
+      }
+    } catch (error) {
+      setMoveNote({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? `Verschieben fehlgeschlagen: ${error.message}`
+            : "Die Einheit konnte nicht verschoben werden.",
+      });
+    } finally {
+      setMovingPlan(null);
+    }
+  };
+
+  const startMove = (entry: PlannerEntry, event: ReactPointerEvent<HTMLElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (entry.plan_id == null || movingPlan != null) return;
+    if (!online) {
+      setMoveNote({
+        kind: "error",
+        text: "Offline – eine Einheit lässt sich erst mit Verbindung verschieben.",
+      });
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    movePoint.current = { x: event.clientX, y: event.clientY };
+    setMoveNote(null);
+    const next: MoveDragState = {
+      planId: entry.plan_id,
+      fromDate: entry.date,
+      overDate: null,
+      name: entryName(entry),
+    };
+    moveDragRef.current = next;
+    setMoveDrag(next);
+  };
+
+  const movePointer = (event: ReactPointerEvent<HTMLElement>) => {
+    const current = moveDragRef.current;
+    if (!current) return;
+    movePoint.current = { x: event.clientX, y: event.clientY };
+    const overDate = plannerDayFromPoint(event.clientX, event.clientY);
+    if (overDate === current.overDate) return;
+    const next = { ...current, overDate };
+    moveDragRef.current = next;
+    setMoveDrag(next);
+  };
+
+  const endMove = () => {
+    const drag = moveDragRef.current;
+    moveDragRef.current = null;
+    setMoveDrag(null);
+    if (!drag || drag.overDate == null || drag.overDate === drag.fromDate) return;
+    void movePlanToDay(drag);
+  };
+
+  const cancelMove = () => {
+    moveDragRef.current = null;
+    setMoveDrag(null);
+  };
+
   const currentWeek = useMemo(
     () => currentPlannerWeek(new Date(), timeZone),
     [timeZone],
@@ -342,6 +484,15 @@ export function Planner({
           role={reconcileNote.kind === "error" ? "alert" : "status"}
         >
           {reconcileNote.text}
+        </p>
+      )}
+
+      {moveNote && (
+        <p
+          className={`planner-move-note planner-move-note--${moveNote.kind}`}
+          role={moveNote.kind === "error" ? "alert" : "status"}
+        >
+          {moveNote.text}
         </p>
       )}
 
@@ -435,6 +586,13 @@ export function Planner({
                 onOpenPlan={onOpenPlan}
                 onOpenUnit={onOpenUnit}
                 onAdd={setAddDay}
+                draggingPlanId={moveDrag?.planId ?? null}
+                draggingFromDate={moveDrag?.fromDate ?? null}
+                dropDate={moveDrag?.overDate ?? null}
+                onStartMove={startMove}
+                onMovePointer={movePointer}
+                onEndMove={endMove}
+                onCancelMove={cancelMove}
               />))}
           </div>
 
@@ -576,22 +734,47 @@ function PlannerSummary({ data }: { data: PlannerWeekResponse }) {
   );
 }
 
+interface EntryMoveProps {
+  draggingPlanId: number | null;
+  onStartMove: (entry: PlannerEntry, event: ReactPointerEvent<HTMLElement>) => void;
+  onMovePointer: (event: ReactPointerEvent<HTMLElement>) => void;
+  onEndMove: () => void;
+  onCancelMove: () => void;
+}
+
 function PlannerDaySection({
   day,
   data,
   onOpenPlan,
   onOpenUnit,
   onAdd,
+  draggingPlanId,
+  draggingFromDate,
+  dropDate,
+  onStartMove,
+  onMovePointer,
+  onEndMove,
+  onCancelMove,
 }: {
   day: PlannerDay;
   data: PlannerWeekResponse;
   onOpenPlan: (planId: number) => void;
   onOpenUnit: (rowId: number) => void;
   onAdd: (day: string) => void;
-}) {
+  draggingFromDate: string | null;
+  dropDate: string | null;
+} & EntryMoveProps) {
   const headingId = `planner-day-${day.date}`;
+  const isDropTarget =
+    dropDate === day.date &&
+    draggingPlanId != null &&
+    dropDate !== draggingFromDate;
   return (
-    <section className="planner-day" aria-labelledby={headingId}>
+    <section
+      className={`planner-day${isDropTarget ? " planner-day--drop" : ""}`}
+      aria-labelledby={headingId}
+      data-planner-day={day.date}
+    >
       <div className="planner-day__head">
         <h2 id={headingId} className={day.is_today ? "planner-day__today" : ""}>
           {day.weekday}, {day.label}
@@ -617,6 +800,11 @@ function PlannerDaySection({
           entry={entry}
           onOpenPlan={onOpenPlan}
           onOpenUnit={onOpenUnit}
+          draggingPlanId={draggingPlanId}
+          onStartMove={onStartMove}
+          onMovePointer={onMovePointer}
+          onEndMove={onEndMove}
+          onCancelMove={onCancelMove}
         />
       ))}
     </section>
@@ -627,11 +815,16 @@ function EntryRows({
   entry,
   onOpenPlan,
   onOpenUnit,
+  draggingPlanId,
+  onStartMove,
+  onMovePointer,
+  onEndMove,
+  onCancelMove,
 }: {
   entry: PlannerEntry;
   onOpenPlan: (planId: number) => void;
   onOpenUnit: (rowId: number) => void;
-}) {
+} & EntryMoveProps) {
   if (entry.kind === "completionReference") {
     return (
       <WorkoutPreview
@@ -673,7 +866,7 @@ function EntryRows({
   }
 
   if (entry.kind === "planned") {
-    return (
+    const row = (
       <WorkoutPreview
         sport={entrySport(entry)}
         name={entryName(entry)}
@@ -683,6 +876,26 @@ function EntryRows({
         }}
         trailing={<StatusBadge>Geplant</StatusBadge>}
       />
+    );
+    if (entry.plan_id == null) return row;
+    const dragging = draggingPlanId === entry.plan_id;
+    return (
+      <div
+        className={`planner-entry${dragging ? " planner-entry--dragging" : ""}`}
+      >
+        {row}
+        <span
+          className="planner-entry__grip"
+          aria-hidden="true"
+          title="Ziehen, um die Einheit auf einen anderen Tag zu legen"
+          onPointerDown={(event) => onStartMove(entry, event)}
+          onPointerMove={onMovePointer}
+          onPointerUp={onEndMove}
+          onPointerCancel={onCancelMove}
+        >
+          <IconDrag size={16} />
+        </span>
+      </div>
     );
   }
 

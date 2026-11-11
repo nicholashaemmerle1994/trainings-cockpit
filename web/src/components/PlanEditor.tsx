@@ -1,10 +1,19 @@
-import { useRef, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import type {
   PlanDetail,
   PlanDraftProjection,
   PlanNode,
   PlanZoneOption,
 } from "../types";
+import { IconDrag } from "./icons";
 import {
   endSeed,
   fieldKey,
@@ -73,6 +82,157 @@ export function planFieldElementId(
   if (fieldPath === "target.min") return fieldId(nodeId, "target-min");
   if (fieldPath === "target.max") return fieldId(nodeId, "target-max");
   return fieldId(nodeId, "name");
+}
+
+interface PlanDragState {
+  nodeId: string;
+  parentKey: string;
+  fromIndex: number;
+  targetIndex: number;
+  targetNodeId: string | null;
+  atEnd: boolean;
+}
+
+interface PlanDragApi {
+  drag: PlanDragState | null;
+  start: (
+    nodeId: string,
+    parentId: string | null,
+    fromIndex: number,
+    event: ReactPointerEvent<HTMLElement>,
+  ) => void;
+  move: (event: ReactPointerEvent<HTMLElement>) => void;
+  end: () => void;
+  cancel: () => void;
+  markerFor: (nodeId: string, parentKey: string) => "before" | "after" | null;
+}
+
+const PlanDragContext = createContext<PlanDragApi | null>(null);
+
+function planListItems(parentKey: string): HTMLElement[] {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>("[data-plan-node-id]"),
+  ).filter((element) => element.dataset.planDragParent === parentKey);
+}
+
+function insertionIndex(items: HTMLElement[], y: number): number {
+  for (let index = 0; index < items.length; index += 1) {
+    const rect = items[index].getBoundingClientRect();
+    if (y < rect.top + rect.height / 2) return index;
+  }
+  return items.length;
+}
+
+/** Hält den Griff am Rand des Blattes am Scrollen, ohne die Seite zu bewegen. */
+function scrollSheetNearPointer(y: number): void {
+  const sheet = document.querySelector<HTMLElement>(".sheet");
+  if (!sheet) return;
+  const rect = sheet.getBoundingClientRect();
+  const edge = 72;
+  if (y < rect.top + edge) sheet.scrollBy({ top: -12 });
+  else if (y > rect.bottom - edge) sheet.scrollBy({ top: 12 });
+}
+
+function PlanDragProvider({
+  onMoveToIndex,
+  children,
+}: {
+  onMoveToIndex: (nodeId: string, targetIndex: number) => void;
+  children: ReactNode;
+}) {
+  const [drag, setDrag] = useState<PlanDragState | null>(null);
+  const dragRef = useRef<PlanDragState | null>(null);
+  const point = useRef<{ x: number; y: number } | null>(null);
+  const active = drag != null;
+
+  const applyDrag = (next: PlanDragState | null) => {
+    dragRef.current = next;
+    setDrag(next);
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    document.body.classList.add("plan-dragging");
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      dragRef.current = null;
+      setDrag(null);
+    };
+    window.addEventListener("keydown", onKey);
+    const timer = window.setInterval(() => {
+      if (point.current) scrollSheetNearPointer(point.current.y);
+    }, 40);
+    return () => {
+      document.body.classList.remove("plan-dragging");
+      window.removeEventListener("keydown", onKey);
+      window.clearInterval(timer);
+      point.current = null;
+    };
+  }, [active]);
+
+  const start: PlanDragApi["start"] = (nodeId, parentId, fromIndex, event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    point.current = { x: event.clientX, y: event.clientY };
+    applyDrag({
+      nodeId,
+      parentKey: parentId ?? "root",
+      fromIndex,
+      targetIndex: fromIndex,
+      targetNodeId: null,
+      atEnd: false,
+    });
+  };
+
+  const move: PlanDragApi["move"] = (event) => {
+    const current = dragRef.current;
+    if (!current) return;
+    point.current = { x: event.clientX, y: event.clientY };
+    const remaining = planListItems(current.parentKey).filter(
+      (element) => element.dataset.planNodeId !== current.nodeId,
+    );
+    const targetIndex = insertionIndex(remaining, event.clientY);
+    const atEnd = targetIndex >= remaining.length;
+    const targetNodeId = atEnd
+      ? remaining[remaining.length - 1]?.dataset.planNodeId ?? null
+      : remaining[targetIndex]?.dataset.planNodeId ?? null;
+    applyDrag({ ...current, targetIndex, targetNodeId, atEnd });
+  };
+
+  const end: PlanDragApi["end"] = () => {
+    const current = dragRef.current;
+    dragRef.current = null;
+    setDrag(null);
+    if (
+      current &&
+      current.targetIndex !== current.fromIndex &&
+      current.targetNodeId != null
+    ) {
+      onMoveToIndex(current.nodeId, current.targetIndex);
+    }
+  };
+
+  const cancel = () => applyDrag(null);
+
+  const markerFor: PlanDragApi["markerFor"] = (nodeId, parentKey) => {
+    if (!drag || drag.parentKey !== parentKey) return null;
+    if (drag.targetNodeId !== nodeId) return null;
+    return drag.atEnd ? "after" : "before";
+  };
+
+  return (
+    <PlanDragContext.Provider value={{ drag, start, move, end, cancel, markerFor }}>
+      {children}
+    </PlanDragContext.Provider>
+  );
+}
+
+function usePlanDrag(): PlanDragApi {
+  const value = useContext(PlanDragContext);
+  if (!value) throw new Error("Der Ziehgriff braucht den Plan-Editor-Kontext.");
+  return value;
 }
 
 function targetFieldKind(editor: TargetEditor): DraftFieldKind {
@@ -150,6 +310,7 @@ export function PlanEditor({
   onTargetUnitChange,
   onTargetModeChange,
   onMove,
+  onMoveToIndex,
   onRemove,
   onAddChild,
   onDissolve,
@@ -181,43 +342,46 @@ export function PlanEditor({
   onTargetUnitChange: (nodeId: string, unit: TargetEditorUnit) => void;
   onTargetModeChange: (nodeId: string, mode: "value" | "range") => void;
   onMove: (nodeId: string, delta: -1 | 1) => void;
+  onMoveToIndex: (nodeId: string, targetIndex: number) => void;
   onRemove: (nodeId: string) => void;
   onAddChild: (groupId: string) => void;
   onDissolve: (groupId: string) => void;
   registerHead: (nodeId: string, element: HTMLButtonElement | null) => void;
 }) {
   return (
-    <ol className="plan-nodes">
-      {nodes.map((node, index) => (
-        <PlanNodeBranch
-          key={node.node_id}
-          node={node}
-          index={index + 1}
-          siblingCount={nodes.length}
-          parentId={null}
-          parentRepetitions={undefined}
-          detail={detail}
-          projection={projection}
-          buffers={buffers}
-          endKinds={endKinds}
-          targetEditors={targetEditors}
-          selectedNodeId={selectedNodeId}
-          expandedNodeId={expandedNodeId}
-          onToggle={onToggle}
-          onBuffer={onBuffer}
-          onPatchNode={onPatchNode}
-          onEndKindChange={onEndKindChange}
-          onTargetKindChange={onTargetKindChange}
-          onTargetUnitChange={onTargetUnitChange}
-          onTargetModeChange={onTargetModeChange}
-          onMove={onMove}
-          onRemove={onRemove}
-          onAddChild={onAddChild}
-          onDissolve={onDissolve}
-          registerHead={registerHead}
-        />
-      ))}
-    </ol>
+    <PlanDragProvider onMoveToIndex={onMoveToIndex}>
+      <ol className="plan-nodes">
+        {nodes.map((node, index) => (
+          <PlanNodeBranch
+            key={node.node_id}
+            node={node}
+            index={index + 1}
+            siblingCount={nodes.length}
+            parentId={null}
+            parentRepetitions={undefined}
+            detail={detail}
+            projection={projection}
+            buffers={buffers}
+            endKinds={endKinds}
+            targetEditors={targetEditors}
+            selectedNodeId={selectedNodeId}
+            expandedNodeId={expandedNodeId}
+            onToggle={onToggle}
+            onBuffer={onBuffer}
+            onPatchNode={onPatchNode}
+            onEndKindChange={onEndKindChange}
+            onTargetKindChange={onTargetKindChange}
+            onTargetUnitChange={onTargetUnitChange}
+            onTargetModeChange={onTargetModeChange}
+            onMove={onMove}
+            onRemove={onRemove}
+            onAddChild={onAddChild}
+            onDissolve={onDissolve}
+            registerHead={registerHead}
+          />
+        ))}
+      </ol>
+    </PlanDragProvider>
   );
 }
 
@@ -282,10 +446,14 @@ function PlanNodeBranch({
   onDissolve: (groupId: string) => void;
   registerHead: (nodeId: string, element: HTMLButtonElement | null) => void;
 }) {
+  const planDrag = usePlanDrag();
   const selected = selectedNodeId === node.node_id;
   const open = expandedNodeId === node.node_id;
   const region = editorId(node.node_id);
   const editor = targetEditors[node.node_id] ?? { kind: "none", mode: "value" };
+  const parentKey = parentId ?? "root";
+  const marker = planDrag.markerFor(node.node_id, parentKey);
+  const dragging = planDrag.drag?.nodeId === node.node_id;
   const actions = (
     <NodeActions
       node={node}
@@ -324,11 +492,29 @@ function PlanNodeBranch({
         "plan-node-item",
         node.kind === "repeat" ? "plan-node-item--group" : "",
         selected ? "plan-node-item--selected" : "",
+        dragging ? "plan-node-item--dragging" : "",
+        marker === "before" ? "plan-node-item--drop-before" : "",
+        marker === "after" ? "plan-node-item--drop-after" : "",
       ]
         .filter(Boolean)
         .join(" ")}
+      data-plan-node-id={node.node_id}
+      data-plan-drag-parent={parentKey}
     >
       <Heading className="plan-node-heading">
+        <span
+          className="plan-node__grip"
+          aria-hidden="true"
+          title="Ziehen, um den Block zu verschieben"
+          onPointerDown={(event) =>
+            planDrag.start(node.node_id, parentId, index - 1, event)
+          }
+          onPointerMove={planDrag.move}
+          onPointerUp={planDrag.end}
+          onPointerCancel={planDrag.cancel}
+        >
+          <IconDrag size={18} />
+        </span>
         <button
           type="button"
           id={headingId(node.node_id)}

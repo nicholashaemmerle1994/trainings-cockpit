@@ -175,6 +175,52 @@ def test_terminwechsel_aktualisiert_alte_und_neue_woche(
     assert [entry["name"] for entry in new["entries"]] == [F01["name"]]
 
 
+def test_termin_ziehen_verschiebt_die_einheit_ueber_den_update_pfad(
+    client: TestClient, monkeypatch
+) -> None:
+    _store_event(F01)
+    gateway = SaveGateway({int(F01["id"]): F01})
+    _use_gateway(monkeypatch, gateway)
+
+    response = client.post(
+        "/api/planner/plan/9101/move",
+        json={"date": "2026-11-12"},
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["status"]["state"] == "saved"
+    assert payload["old_week"] == "2026-11-02"
+    assert payload["week"] == "2026-11-09"
+    assert len(gateway.update_calls) == 1
+    remote_id, update = gateway.update_calls[0]
+    assert remote_id == "9101"
+    assert update["start_date_local"].startswith("2026-11-12T00:00:00")
+    assert "description" not in update
+    old = client.get("/api/planner", params={"week": "2026-11-02"}).json()
+    new = client.get("/api/planner", params={"week": "2026-11-09"}).json()
+    assert old["entries"] == []
+    assert [entry["name"] for entry in new["entries"]] == [F01["name"]]
+
+
+def test_termin_ziehen_ohne_gueltiges_datum_schreibt_nicht(
+    client: TestClient, monkeypatch
+) -> None:
+    _store_event(F01)
+    gateway = SaveGateway({int(F01["id"]): F01})
+    _use_gateway(monkeypatch, gateway)
+
+    missing = client.post("/api/planner/plan/9101/move", json={})
+    invalid = client.post(
+        "/api/planner/plan/9101/move",
+        json={"date": "2026-13-01"},
+    )
+
+    assert missing.status_code == 422
+    assert invalid.status_code == 422
+    assert gateway.update_calls == []
+
+
 def test_konflikt_liefert_die_drei_aktionen_und_schreibt_nicht(
     client: TestClient, monkeypatch
 ) -> None:

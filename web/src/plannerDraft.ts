@@ -358,6 +358,28 @@ export function moveNodeInLevel(
   });
 }
 
+/** Setzt einen Block an eine Zielposition innerhalb seiner eigenen Ebene. */
+export function moveNodeToIndex(
+  nodes: PlanNode[],
+  nodeId: string,
+  targetIndex: number,
+): PlanNode[] {
+  const index = nodes.findIndex((node) => node.node_id === nodeId);
+  if (index >= 0) {
+    const target = Math.max(0, Math.min(nodes.length - 1, targetIndex));
+    if (target === index) return nodes;
+    const next = [...nodes];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved);
+    return next;
+  }
+  return nodes.map((node) => {
+    if (node.kind !== "repeat") return node;
+    const children = moveNodeToIndex(node.children ?? [], nodeId, targetIndex);
+    return children === node.children ? node : { ...node, children };
+  });
+}
+
 export function finalRecoveryChild(node: PlanNode): PlanNode | null {
   if (node.kind !== "repeat") return null;
   const children = node.children ?? [];
