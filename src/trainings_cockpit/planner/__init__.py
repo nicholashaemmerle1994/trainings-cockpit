@@ -41,7 +41,12 @@ from .dates import (
     week_label,
 )
 from .delete import DeleteGateway, DeleteOutcome, EventDeleteService
-from .details import build_local_plan_payload, build_plan_detail
+from .details import (
+    build_local_plan_payload,
+    build_plan_detail,
+    plan_nodes_payload,
+    read_plan_row,
+)
 from .drafts import (
     START_TEMPLATES,
     SUPPORTED_NEW_SPORTS,
@@ -408,6 +413,8 @@ __all__ = [
     "build_draft_projection",
     "build_write_payload",
     "build_local_plan_payload",
+    "plan_nodes_payload",
+    "read_plan_row",
     "build_new_draft_projection",
     "build_plan_detail",
     "build_week_projection",
