@@ -11,7 +11,7 @@ weder Event noch Entwurf.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -33,7 +33,7 @@ from .model import (
     ZoneTarget,
 )
 from .profile import build_workout_profile_data, heart_rate_zone_options
-from .remote import read_remote_event
+from .remote import RemoteWorkout, read_remote_event
 from .validation import (
     calculate_known_totals,
     format_distance,
@@ -167,6 +167,16 @@ def _node_data(node: WorkoutNode) -> dict[str, Any]:
         "reason": node.reason,
         "source_ref": node.source_ref,
     }
+
+
+def plan_nodes_payload(nodes: Iterable[WorkoutNode]) -> list[dict[str, Any]]:
+    """Die vorhandene API-Knotenform (``node_id``) für Projektionen.
+
+    Die gespeicherte Vorlagenform bleibt der kanonische Codec aus
+    :mod:`operations`; dieser Leser erzeugt daraus dieselbe Darstellung wie
+    die Planungsdetails, ohne einen dritten Knotenvertrag.
+    """
+    return [_node_data(node) for node in nodes]
 
 
 def _rights(plan: PlannedWorkout) -> dict[str, Any]:
@@ -349,7 +359,7 @@ def _plan_payload(
         "notes": _notes(plan, event),
         "rights": _rights(plan),
         "known": _known_summary(plan),
-        "nodes": [_node_data(node) for node in plan.nodes],
+        "nodes": plan_nodes_payload(plan.nodes),
         "graph": graph,
         "zone_options": heart_rate_zone_options(plan.sport, zone_profiles),
         "capabilities": _capabilities(plan),
@@ -412,6 +422,30 @@ def build_local_plan_payload(
     )
 
 
+def read_plan_row(
+    row: Mapping[str, Any],
+    *,
+    time_zone: str,
+    account_id: str = "default",
+    athlete_id: str = "default",
+    now: str | None = None,
+) -> RemoteWorkout:
+    """Eine lokal gespeicherte Event-Zeile als Planungsmodell lesen.
+
+    Der Leser arbeitet ausschließlich auf der vorhandenen Zeile und dem
+    bereits gespeicherten Rohinhalt. Es gibt keinen Netzwerkzugriff; die
+    Rückgabe enthält den Plan und den unveränderten Herkunftssnapshot.
+    """
+    fetched_at = now or datetime.now().astimezone().isoformat(timespec="seconds")
+    return read_remote_event(
+        _event_from_row(row),
+        fetched_at=fetched_at,
+        time_zone=time_zone,
+        account_id=account_id,
+        athlete_id=athlete_id,
+    )
+
+
 def build_plan_detail(
     row: Mapping[str, Any],
     *,
@@ -423,13 +457,12 @@ def build_plan_detail(
 ) -> dict[str, Any]:
     """Eine planungsseitige Detailantwort ohne Schreibzugriff."""
     event = _event_from_row(row)
-    fetched_at = now or datetime.now().astimezone().isoformat(timespec="seconds")
-    remote = read_remote_event(
-        event,
-        fetched_at=fetched_at,
+    remote = read_plan_row(
+        row,
         time_zone=time_zone,
         account_id=account_id,
         athlete_id=athlete_id,
+        now=now,
     )
     return build_plan_payload(
         remote.plan,
@@ -448,4 +481,10 @@ def _sport_label(sport: str | None) -> str:
     return SPORT_LABELS.get(sport or "", sport or "Andere Sportart")
 
 
-__all__ = ["build_local_plan_payload", "build_plan_detail", "build_plan_payload"]
+__all__ = [
+    "build_local_plan_payload",
+    "build_plan_detail",
+    "build_plan_payload",
+    "plan_nodes_payload",
+    "read_plan_row",
+]

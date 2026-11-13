@@ -19,12 +19,14 @@ from .model import (
     PowerTarget,
     RepeatNode,
     StepNode,
+    StepRole,
     TimeEnd,
     UnsupportedNode,
     Value,
     WorkoutNode,
     ZoneTarget,
     repeat_group_name,
+    role_from_name,
 )
 
 
@@ -63,10 +65,13 @@ def _node_shape(node: WorkoutNode) -> tuple[Any, ...]:
             end_shape = ("distance", _num(end.metres))
         else:
             end_shape = ("open",)
+        role = node.role
+        if role is StepRole.STEADY:
+            role = role_from_name(node.name)
         return (
             "step",
             node.name,
-            node.role.value,
+            role.value,
             end_shape,
             _target_shape(node.target),
             node.notes,

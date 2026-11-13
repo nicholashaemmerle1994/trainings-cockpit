@@ -37,3 +37,12 @@ Dashboard-Volumen und Datenverfügbarkeit in `UEBERGABE.md`, der vollständige
 Arbeitsnachweis in `../training-planner-progress.md`. Ein Live-Rundlauf gegen
 intervals.icu, eine Geräteübertragung und ein Release wurden nicht
 durchgeführt.
+
+## TB-23 — Vorlagen und Wochenkopie
+
+- `TB-23-P1.md` — lokales Vorlagenmodell und Klon-Dienst.
+- `TB-23-P3-P4.md` — „Als Vorlage speichern“ und „Aus Vorlage erstellen“.
+- `TB-23-COPY.md` — API, Schema und Sicherheitsgrenzen der Wochen-/Blockkopie.
+- `TB-23-BEDIENUNG.md` — kurze Bedienungsanleitung für alle drei Kernfunktionen.
+- `TB-23-HANDOVER.md` — fortgeschriebener Arbeitsstand, Commits und offene
+  Punkte.

@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from . import db, fuel, metrics, plan, streams
 from . import sync as sync_mod
 from .config import PROJECT_ROOT, Settings
+from .planner import copy as planner_copy
 from .planner.dates import (
     local_today,
     parse_week_parameter,
@@ -27,7 +28,7 @@ from .planner.dates import (
     rolling_dashboard_range,
     start_of_planner_week,
 )
-from .planner.details import build_plan_detail
+from .planner.details import build_plan_detail, plan_nodes_payload, read_plan_row
 from .planner.drafts import (
     DraftProjectionError,
     build_draft,
@@ -50,6 +51,7 @@ from .planner.operations import (
     plan_to_json,
     retention_cutoff,
 )
+from .planner.remote import NotAPlannedWorkout
 from .planner.save import SaveCoordinator, SaveErrorKind, SaveOutcome, SaveState
 from .planner.service import (
     event_delete_service,
@@ -58,6 +60,18 @@ from .planner.service import (
 )
 from .planner.summaries import recorded_seconds
 from .planner.syncmerge import merge_confirmed_event
+from .planner.templates import (
+    TemplateCode,
+    TemplateError,
+    TemplateSummary,
+    WorkoutTemplate,
+    delete_template,
+    get_template,
+    instantiate,
+    list_templates,
+    save_from_plan,
+)
+from .planner.validation import calculate_known_totals
 from .planner.week import (
     SOURCE_COMPLETE,
     SOURCE_EMPTY,
@@ -864,6 +878,379 @@ def plan_draft(
             raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+
+
+def _template_http_error(exc: TemplateError) -> HTTPException:
+    """Stabile Fehlercodes der Vorlagen-/Klon-Grenze unverändert weitergeben."""
+    detail: dict[str, Any] = {
+        "code": exc.code.value,
+        "message": exc.reason,
+    }
+    if exc.clone_code is not None:
+        detail["clone_code"] = exc.clone_code.value
+    if exc.code is TemplateCode.NOT_FOUND:
+        return HTTPException(status_code=404, detail=detail)
+    return HTTPException(status_code=422, detail=detail)
+
+
+def _template_request_error(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=422,
+        detail={"code": code, "message": message},
+    )
+
+
+def _scoped_template(
+    conn: sqlite3.Connection,
+    template_id: str,
+    *,
+    account_id: str,
+    athlete_id: str,
+) -> WorkoutTemplate:
+    """Eine Vorlage im aktuellen Scope; fremde und unbekannte IDs sind 404."""
+    try:
+        template = get_template(
+            conn,
+            template_id,
+            account_id=account_id,
+            athlete_id=athlete_id,
+        )
+    except TemplateError as exc:
+        raise _template_http_error(exc) from exc
+    if template is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": TemplateCode.NOT_FOUND.value,
+                "message": "Vorlage nicht gefunden.",
+            },
+        )
+    return template
+
+
+def _template_summary_payload(summary: TemplateSummary) -> dict[str, Any]:
+    return {
+        "template_id": summary.template_id,
+        "name": summary.name,
+        "sport": summary.sport,
+        "schema_version": summary.schema_version,
+        "updated_at": summary.updated_at,
+        "known_seconds": summary.known_seconds,
+        "known_metres": summary.known_metres,
+        "executions": summary.executions,
+        "has_unknown": summary.has_unknown,
+        "available": summary.available,
+        "error_code": summary.error_code,
+    }
+
+
+def _template_detail_payload(
+    template: WorkoutTemplate,
+    *,
+    account_id: str,
+    athlete_id: str,
+) -> dict[str, Any]:
+    totals = calculate_known_totals(template.nodes)
+    return {
+        "kind": "template",
+        "template_id": template.template_id,
+        "name": template.name,
+        "sport": template.sport,
+        "schema_version": template.schema_version,
+        "created_at": template.created_at,
+        "updated_at": template.updated_at,
+        "source_event_id": template.source_event_id,
+        "known": {
+            "seconds": totals.duration_seconds,
+            "metres": totals.distance_metres,
+            "executions": totals.executions,
+            "has_unknown": totals.has_unknown,
+        },
+        "nodes": plan_nodes_payload(template.nodes),
+        "account_id": account_id,
+        "athlete_id": athlete_id,
+    }
+
+
+@app.get("/api/planner/templates")
+def planner_templates() -> dict[str, Any]:
+    """Leichte, scope-gebundene Vorlagenliste ohne Knoten."""
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        items = list_templates(conn, account_id=account_id, athlete_id=athlete_id)
+        return {
+            "account_id": account_id,
+            "athlete_id": athlete_id,
+            "items": [_template_summary_payload(item) for item in items],
+        }
+
+
+@app.post("/api/planner/templates/from-plan/{event_id}", status_code=201)
+def planner_template_from_plan(event_id: int, body: dict[str, Any]) -> dict[str, Any]:
+    """Speichert die lokal gespeicherte Planung als Vorlage; rein lokal.
+
+    Gelesen wird ausschließlich die vorhandene ``event``-Zeile. Aus dem Body
+    zählt allein ``name``: Knoten, Sport oder Datum des Clients können den
+    gespeicherten Aufbau nicht beeinflussen. Es gibt keinen Remote-Aufruf.
+    """
+    settings = get_settings()
+    with connection() as conn:
+        row = db.event_by_id(conn, event_id)
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": TemplateCode.NOT_FOUND.value,
+                    "message": "Planung nicht gefunden.",
+                },
+            )
+        account_id, athlete_id = account_context(conn)
+        try:
+            remote = read_plan_row(
+                row,
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+            )
+        except NotAPlannedWorkout as exc:
+            raise _template_request_error(
+                TemplateCode.SOURCE_NOT_CLONEABLE.value,
+                "Die Quelle ist keine geplante Einheit.",
+            ) from exc
+        except ValueError as exc:
+            raise _template_request_error(
+                TemplateCode.SOURCE_NOT_CLONEABLE.value,
+                "Die gespeicherte Planung ist nicht lesbar.",
+            ) from exc
+        try:
+            template = save_from_plan(
+                conn,
+                remote.plan,
+                name=body.get("name"),
+                account_id=account_id,
+                athlete_id=athlete_id,
+                source_event_id=event_id,
+            )
+        except TemplateError as exc:
+            raise _template_http_error(exc) from exc
+        return _template_detail_payload(
+            template,
+            account_id=account_id,
+            athlete_id=athlete_id,
+        )
+
+
+@app.get("/api/planner/templates/{template_id}")
+def planner_template_detail(template_id: str) -> dict[str, Any]:
+    """Eine gültige Vorlage im aktuellen Scope; beschädigte Zeilen sind 422."""
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        template = _scoped_template(
+            conn,
+            template_id,
+            account_id=account_id,
+            athlete_id=athlete_id,
+        )
+        return _template_detail_payload(
+            template,
+            account_id=account_id,
+            athlete_id=athlete_id,
+        )
+
+
+@app.post("/api/planner/templates/{template_id}/project")
+def planner_template_project(template_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Projiziert eine Vorlage als neuen lokalen Entwurf; kein Event-Write.
+
+    Der Entwurf entsteht über ``instantiate`` (neue Knoten-, Plan- und
+    Entwurfs-IDs) und dieselbe Projektion wie ``/api/planner/draft/new``.
+    ``new_plan_save`` und der Event-Write-Service werden nicht aufgerufen.
+    """
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        template = _scoped_template(
+            conn,
+            template_id,
+            account_id=account_id,
+            athlete_id=athlete_id,
+        )
+        draft_id = body.get("draft_id")
+        if not isinstance(draft_id, str) or not draft_id.strip():
+            raise _template_request_error(
+                "invalid_draft_id",
+                "Ein neuer Entwurf braucht eine stabile draft_id.",
+            )
+        stable_draft_id = draft_id.strip()
+        try:
+            cloned_plan, _draft = instantiate(
+                template,
+                target_date=body.get("date"),
+                time_zone=settings.time_zone,
+                draft_id=stable_draft_id,
+                account_id=account_id,
+                athlete_id=athlete_id,
+            )
+        except TemplateError as exc:
+            raise _template_http_error(exc) from exc
+        try:
+            projection = build_new_draft_projection(
+                {
+                    "draft_id": stable_draft_id,
+                    "sport": cloned_plan.sport,
+                    "date": cloned_plan.date,
+                    "name": cloned_plan.name,
+                    "nodes": plan_nodes_payload(cloned_plan.nodes),
+                },
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                zone_profiles=plan.sport_profiles(conn),
+            )
+        except (DraftProjectionError, ValueError) as exc:
+            raise _template_request_error(
+                "projection_failed",
+                str(exc)[:300],
+            ) from exc
+        projection["draft_id"] = stable_draft_id
+        projection["template"] = {
+            "template_id": template.template_id,
+            "name": template.name,
+            "sport": template.sport,
+        }
+        return projection
+
+
+@app.delete("/api/planner/templates/{template_id}")
+def planner_template_delete(template_id: str) -> dict[str, Any]:
+    """Entfernt ausschließlich die lokale Vorlage; Events bleiben bestehen."""
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        deleted = delete_template(
+            conn,
+            template_id,
+            account_id=account_id,
+            athlete_id=athlete_id,
+        )
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": TemplateCode.NOT_FOUND.value,
+                    "message": "Vorlage nicht gefunden.",
+                },
+            )
+        return {
+            "deleted": True,
+            "template_id": template_id,
+            "events_deleted": False,
+        }
+
+
+def _copy_http_error(exc: planner_copy.CopyError) -> HTTPException:
+    detail: dict[str, Any] = {
+        "code": exc.code.value,
+        "message": exc.message,
+    }
+    if exc.blockers:
+        detail["blockers"] = exc.blockers
+    return HTTPException(status_code=exc.status, detail=detail)
+
+
+@app.post("/api/planner/copy/preview")
+def planner_copy_preview(body: dict[str, Any]) -> dict[str, Any]:
+    """Rein lesende Vorschau für eine bis vier Wochen."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            return planner_copy.preview_copy(
+                conn,
+                source_start=body.get("source_start"),
+                weeks=body.get("weeks", 1),
+                target_start=body.get("target_start"),
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+            )
+        except planner_copy.CopyError as exc:
+            raise _copy_http_error(exc) from exc
+
+
+@app.post("/api/planner/copy/jobs")
+def planner_copy_start(body: dict[str, Any]) -> dict[str, Any]:
+    """Persistiert Job und Items vor dem ersten Remote-Write."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            payload, created = planner_copy.start_copy_job(
+                conn,
+                source_start=body.get("source_start"),
+                weeks=body.get("weeks", 1),
+                target_start=body.get("target_start"),
+                client_request_id=body.get("client_request_id"),
+                time_zone=settings.time_zone,
+                account_id=account_id,
+                athlete_id=athlete_id,
+            )
+        except planner_copy.CopyError as exc:
+            raise _copy_http_error(exc) from exc
+        payload["created"] = created
+        return payload
+
+
+@app.get("/api/planner/copy/jobs")
+def planner_copy_jobs(state: str | None = Query(None)) -> dict[str, Any]:
+    """Offene Kopiervorgänge im aktuellen Account-/Athleten-Scope."""
+    if state not in (None, "open"):
+        raise HTTPException(status_code=400, detail="state muss 'open' sein.")
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        return {
+            "jobs": planner_copy.open_copy_jobs(
+                conn, account_id=account_id, athlete_id=athlete_id
+            )
+        }
+
+
+@app.get("/api/planner/copy/jobs/{job_id}")
+def planner_copy_job(job_id: str) -> dict[str, Any]:
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            return planner_copy.get_copy_job(
+                conn, job_id, account_id=account_id, athlete_id=athlete_id
+            )
+        except planner_copy.CopyError as exc:
+            raise _copy_http_error(exc) from exc
+
+
+@app.post("/api/planner/copy/jobs/{job_id}/advance")
+def planner_copy_advance(job_id: str) -> dict[str, Any]:
+    """Verarbeitet genau ein offenes Item über den bestätigten Write-Pfad."""
+    settings = get_settings()
+    with connection() as conn:
+        account_id, athlete_id = account_context(conn)
+        try:
+            return planner_copy.advance_copy_job(
+                conn,
+                job_id,
+                account_id=account_id,
+                athlete_id=athlete_id,
+                settings=settings,
+                service_factory=event_write_service,
+            )
+        except planner_copy.CopyError as exc:
+            raise _copy_http_error(exc) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "write_unavailable",
+                    "message": str(exc)[:300],
+                },
+            ) from exc
 
 
 @app.get("/api/session/{event_id}")

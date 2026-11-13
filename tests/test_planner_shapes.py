@@ -27,6 +27,7 @@ from trainings_cockpit.planner import (
     changed_content_fields,
     plan_shape,
     repeat_group_name,
+    role_from_name,
     verify_roundtrip,
 )
 
@@ -131,3 +132,52 @@ def test_gruppenname_ohne_wiederholungszahl_leer_bleibt_leer() -> None:
     assert repeat_group_name("Hauptteil 6×") == "Hauptteil"
     assert repeat_group_name("6x") == ""
     assert repeat_group_name("Hauptteil") == "Hauptteil"
+
+
+
+def _with_cooldown(role: StepRole) -> PlannedWorkout:
+    plan = _plan("Hauptteil 6x")
+    return replace(
+        plan,
+        nodes=(
+            *plan.nodes,
+            StepNode(
+                id="node:draft:cooldown",
+                name="Cooldown",
+                end=DistanceEnd(300),
+                role=role,
+            ),
+        ),
+    )
+
+
+def test_rolle_aus_dem_namen_ist_kein_rundlaufunterschied() -> None:
+    # D-98: Für `steady` schreibt der Serializer keinen `intensity`-Tag.
+    # intervals und der Leseadapter leiten die Rolle deshalb aus dem Namen ab
+    # („Cooldown“). Der Rundlauf darf daraus keine Abweichung machen.
+    intended = _with_cooldown(StepRole.STEADY)
+    actual = _with_cooldown(StepRole.COOLDOWN)
+
+    check = verify_roundtrip(intended, actual)
+
+    assert check.valid is True, check.reason
+    assert plan_shape(intended)["nodes"] == plan_shape(actual)["nodes"]
+
+
+def test_explizite_rolle_bleibt_eine_rundlaufabweichung() -> None:
+    intended = _with_cooldown(StepRole.STEADY)
+    actual = _with_cooldown(StepRole.WORK)
+
+    check = verify_roundtrip(intended, actual)
+
+    assert check.valid is False
+    assert "Aufbau" in str(check.reason)
+
+
+def test_rollenname_wird_gemeinsam_gelesen() -> None:
+    assert role_from_name("Cooldown") is StepRole.COOLDOWN
+    assert role_from_name("Auslaufen") is StepRole.COOLDOWN
+    assert role_from_name("Belastung") is StepRole.WORK
+    assert role_from_name("Erholung") is StepRole.RECOVERY
+    assert role_from_name("Einschwimmen") is StepRole.STEADY
+    assert role_from_name(None) is StepRole.STEADY

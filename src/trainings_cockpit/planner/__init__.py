@@ -7,6 +7,12 @@ Mengen und die getrennten Ist-/Plan-Summen. Es gibt hier keinen Netzwerkaufruf
 und keinen Produkt-Schreibpfad.
 """
 
+from .clone import (
+    CloneCode,
+    CloneError,
+    clone_for_new_plan,
+    rekey_nodes,
+)
 from .conflicts import (
     CONFLICT_ACTIONS,
     ConflictAssessment,
@@ -35,7 +41,12 @@ from .dates import (
     week_label,
 )
 from .delete import DeleteGateway, DeleteOutcome, EventDeleteService
-from .details import build_local_plan_payload, build_plan_detail
+from .details import (
+    build_local_plan_payload,
+    build_plan_detail,
+    plan_nodes_payload,
+    read_plan_row,
+)
 from .drafts import (
     START_TEMPLATES,
     SUPPORTED_NEW_SPORTS,
@@ -103,9 +114,12 @@ from .model import (
     field_buffer_key,
     iter_nodes,
     repeat_group_name,
+    role_from_name,
 )
 from .operations import (
     SqliteOperationStore,
+    nodes_from_json,
+    nodes_to_json,
     plan_from_json,
     plan_to_json,
     retention_cutoff,
@@ -182,6 +196,20 @@ from .summaries import (
     recorded_totals,
     relationship_actuals,
 )
+from .templates import (
+    TEMPLATE_NAME_MAX,
+    TEMPLATE_SCHEMA_VERSION,
+    TemplateCode,
+    TemplateError,
+    TemplateNotFound,
+    TemplateSummary,
+    WorkoutTemplate,
+    delete_template,
+    get_template,
+    instantiate,
+    list_templates,
+    save_from_plan,
+)
 from .validation import (
     Execution,
     ExecutionCompression,
@@ -226,6 +254,10 @@ __all__ = [
     "ConflictKind",
     "CONTROLLED_REMOTE_FIELDS",
     "CREATE_ONLY_REMOTE_FIELDS",
+    "CloneCode",
+    "CloneError",
+    "clone_for_new_plan",
+    "rekey_nodes",
     "DeleteGateway",
     "DeleteOutcome",
     "EventDeleteService",
@@ -293,6 +325,7 @@ __all__ = [
     "SerializationError",
     "RepeatNode",
     "repeat_group_name",
+    "role_from_name",
     "require_planned_draft",
     "reschedule_plan",
     "RestrictionCode",
@@ -317,6 +350,8 @@ __all__ = [
     "SaveRunner",
     "SaveSnapshot",
     "SqliteOperationStore",
+    "nodes_from_json",
+    "nodes_to_json",
     "plan_from_json",
     "plan_to_json",
     "retention_cutoff",
@@ -334,6 +369,12 @@ __all__ = [
     "StepNode",
     "StepRole",
     "StepTarget",
+    "TEMPLATE_NAME_MAX",
+    "TEMPLATE_SCHEMA_VERSION",
+    "TemplateCode",
+    "TemplateError",
+    "TemplateNotFound",
+    "TemplateSummary",
     "TimeEnd",
     "TrainingListEntry",
     "TrainingRange",
@@ -346,6 +387,7 @@ __all__ = [
     "week_label",
     "WorkoutDraft",
     "WorkoutNode",
+    "WorkoutTemplate",
     "WriteBoundaryError",
     "WriteCoordinator",
     "ZoneMetric",
@@ -373,13 +415,20 @@ __all__ = [
     "build_draft_projection",
     "build_write_payload",
     "build_local_plan_payload",
+    "plan_nodes_payload",
+    "read_plan_row",
     "build_new_draft_projection",
     "build_plan_detail",
     "build_week_projection",
     "build_week_summary",
     "build_workout_profile_data",
     "calculate_known_totals",
+    "delete_template",
     "derive_execution_sequence",
+    "get_template",
+    "instantiate",
+    "list_templates",
+    "save_from_plan",
     "execution_count",
     "format_distance",
     "format_duration",

@@ -54,6 +54,7 @@ from .model import (
     ValueRange,
     ZoneMetric,
     ZoneTarget,
+    role_from_name,
 )
 from .primitives import LocalDate, require_local_date, require_text, require_time_zone
 from .projections import RecordedListEntry
@@ -107,14 +108,6 @@ _SPORT_FAMILY = {
     "Swim": "swim",
     "OpenWaterSwim": "swim",
 }
-
-_ROLE_WORDS = (
-    (("einlauf", "einroll", "warmup", "warm up", "aufwärm"), StepRole.WARMUP),
-    (("auslauf", "ausroll", "cooldown", "cool down"), StepRole.COOLDOWN),
-    (("erhol", "pause", "recovery", "rest"), StepRole.RECOVERY),
-    (("belast", "arbeit", "interval", "work"), StepRole.WORK),
-)
-
 
 class NotAPlannedWorkout(ValueError):
     """Der Datensatz ist kein geplantes Workout und darf keines werden."""
@@ -722,11 +715,7 @@ def _role(raw: Mapping[str, Any]) -> StepRole:
         return StepRole.WARMUP
     if _truthy(raw.get("cooldown")):
         return StepRole.COOLDOWN
-    text = str(raw.get("text") or raw.get("name") or "").lower()
-    for words, role in _ROLE_WORDS:
-        if any(word in text for word in words):
-            return role
-    return StepRole.STEADY
+    return role_from_name(raw.get("text") or raw.get("name"))
 
 
 def _node_id(remote_id: RemoteEventId, path: str) -> NodeId:

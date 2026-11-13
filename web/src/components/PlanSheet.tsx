@@ -59,6 +59,7 @@ import {
   type StoredPlannerDraft,
 } from "../plannerDraftStore";
 import { Sheet } from "./Sheet";
+import { TemplateSaveSheet } from "./TemplateSaveSheet";
 import { StatusBadge } from "./ui";
 
 function firstEditableNode(nodes: PlanNode[]): PlanNode | null {
@@ -177,6 +178,8 @@ export function PlanSheet({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templateMessage, setTemplateMessage] = useState<string | null>(null);
   const [recovery, setRecovery] = useState<StoredPlannerDraft | null>(null);
   const draftActive = useRef(false);
   const requestSeq = useRef(0);
@@ -238,6 +241,8 @@ export function PlanSheet({
     setDeleteOpen(false);
     setDeleting(false);
     setDeleteError(null);
+    setTemplateOpen(false);
+    setTemplateMessage(null);
     setRecovery(null);
     editingRef.current = false;
 
@@ -252,6 +257,7 @@ export function PlanSheet({
             date: newPlan.date,
             name: newPlan.name,
             template: newPlan.template,
+            nodes: newPlan.nodes,
           }),
         )
         .then((next) => {
@@ -438,6 +444,7 @@ export function PlanSheet({
     setTargetEditors(targetEditorsFromNodes(data.nodes));
     setUndo(null);
     setAddOpen(false);
+    setTemplateOpen(false);
     const first = data.rights.can_edit_structure
       ? firstEditableNode(data.nodes)
       : null;
@@ -580,6 +587,7 @@ export function PlanSheet({
               date: newPlan.date,
               name: newPlan.name,
               template: newPlan.template,
+              nodes: newPlan.nodes,
             }
           : null,
         saved_at: new Date().toISOString(),
@@ -1174,17 +1182,19 @@ export function PlanSheet({
   };
 
   return (
-    <Sheet
-      crumb={
-        isNew
-          ? "Neue Einheit"
-          : editing
-            ? "Einheit bearbeiten"
-            : "Geplante Einheit"
-      }
-      label={current ? planName || current.sport_label : "Geplante Einheit"}
-      onClose={onClose}
-    >
+    <>
+      <Sheet
+        crumb={
+          isNew
+            ? "Neue Einheit"
+            : editing
+              ? "Einheit bearbeiten"
+              : "Geplante Einheit"
+        }
+        label={current ? planName || current.sport_label : "Geplante Einheit"}
+        onClose={onClose}
+        top={!templateOpen}
+      >
       {error && <p className="sheet-error">{error}</p>}
       {!data && !error && <div className="sheet-loading" />}
       {data && current && (
@@ -1264,9 +1274,27 @@ export function PlanSheet({
             setRemoteOpen(false);
           }}
           onAdoptRemote={() => void adoptRemote()}
+          templateMessage={templateMessage}
+          onOpenTemplate={() => {
+            setTemplateMessage(null);
+            setTemplateOpen(true);
+          }}
         />
       )}
-    </Sheet>
+      </Sheet>
+      {templateOpen && eventId != null && (
+        <TemplateSaveSheet
+          eventId={eventId}
+          defaultName={planName || data?.name || ""}
+          sportLabel={data?.sport_label ?? ""}
+          knownText={data?.known.text ?? "Aufbau gespeichert"}
+          onClose={() => setTemplateOpen(false)}
+          onSaved={(template) =>
+            setTemplateMessage(`Vorlage „${template.name}“ gespeichert.`)
+          }
+        />
+      )}
+    </>
   );
 }
 
@@ -1331,6 +1359,8 @@ function PlanBody({
   onViewRemote,
   onReturnToDraft,
   onAdoptRemote,
+  templateMessage,
+  onOpenTemplate,
 }: {
   data: PlanDetail;
   editing: boolean;
@@ -1402,6 +1432,8 @@ function PlanBody({
   onViewRemote: () => void;
   onReturnToDraft: () => void;
   onAdoptRemote: () => void;
+  templateMessage: string | null;
+  onOpenTemplate: () => void;
 }) {
   const date = fmtDateLong(planDate || data.date);
   const repetitions = data.graph.repetition_groups.reduce(
@@ -1768,6 +1800,46 @@ function PlanBody({
           bleiben in der bestehenden Aktivitätsansicht.
         </p>
       </section>
+
+      {!isNew && (
+        <section className="plan-template" aria-labelledby="plan-template-title">
+          <div className="plan-template__row">
+            <div>
+              <h2 id="plan-template-title">Als Vorlage speichern</h2>
+              <p>
+                Übernimmt den gespeicherten Aufbau als lokale Vorlage. Es wird
+                kein Training an intervals.icu gesendet.
+              </p>
+              {editing && (
+                <p className="plan-template__hint" role="status">
+                  Dieser Entwurf ist noch nicht gespeichert. Eine Vorlage würde
+                  den zuletzt gespeicherten Stand übernehmen — speichere oder
+                  verwirf den Entwurf zuerst.
+                </p>
+              )}
+              {!online && (
+                <p className="plan-template__hint" role="status">
+                  Offline — die Vorlage kann erst mit Verbindung gespeichert
+                  werden.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={onOpenTemplate}
+              disabled={editing || !online}
+            >
+              Als Vorlage speichern
+            </button>
+          </div>
+          {templateMessage && (
+            <p className="plan-template__success" role="status">
+              {templateMessage}
+            </p>
+          )}
+        </section>
+      )}
 
       {!editing && !isNew && (
         <section className="plan-delete" aria-labelledby="plan-delete-title">

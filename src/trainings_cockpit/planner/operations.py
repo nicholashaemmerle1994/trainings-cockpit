@@ -13,7 +13,7 @@ Aufrufer sie tatsächlich braucht. Sie bleibt bis zu einem bestätigten Rundlauf
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
@@ -38,6 +38,7 @@ from .model import (
     UnsupportedNode,
     Value,
     ValueRange,
+    WorkoutNode,
     ZoneMetric,
     ZoneTarget,
 )
@@ -214,6 +215,16 @@ def _node_from_json(raw: Mapping[str, Any]) -> Any:
             source_ref=raw["source_ref"],
         )
     raise ValueError(f"Unbekannter Knoten: {kind!r}")
+
+
+def nodes_to_json(nodes: Iterable[WorkoutNode]) -> list[dict[str, Any]]:
+    """Kanonische Knotenform für lokale Vorlagen; derselbe Codec wie Vorgänge."""
+    return [_node_to_json(node) for node in nodes]
+
+
+def nodes_from_json(raw: Iterable[Mapping[str, Any]]) -> tuple[WorkoutNode, ...]:
+    """Rekonstruiert Knoten aus der kanonischen Form, ohne Netzwerk oder DB."""
+    return tuple(_node_from_json(node) for node in raw)
 
 
 def plan_to_json(plan: PlannedWorkout) -> dict[str, Any]:
@@ -452,6 +463,8 @@ __all__ = [
     "SqliteOperationStore",
     "StoredOperation",
     "TERMINAL_STATES",
+    "nodes_from_json",
+    "nodes_to_json",
     "plan_from_json",
     "plan_to_json",
     "retention_cutoff",
