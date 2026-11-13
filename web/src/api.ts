@@ -10,7 +10,6 @@ import type {
   PlannerOperationsResponse,
   PlannerSaveResponse,
   PlannerWeekResponse,
-  SessionDetail,
   SyncResult,
   TemplateDetail,
   TemplateListResponse,
@@ -67,7 +66,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   overview: () => request<Overview>("/api/overview?days=90"),
-  session: (id: number) => request<SessionDetail>(`/api/session/${id}`),
   planner: (week?: string) =>
     request<PlannerWeekResponse>(
       `/api/planner${week ? `?week=${encodeURIComponent(week)}` : ""}`,

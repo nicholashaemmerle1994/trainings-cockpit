@@ -2280,29 +2280,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   color: var(--band-bad);
 }
 
-.profile {
-  margin-top: var(--space-4);
-}
-
-.profile svg {
-  display: block;
-  overflow: visible;
-}
-
-.profile-grid {
-  stroke: var(--line);
-}
-
-.profile-base {
-  stroke: var(--line-strong);
-}
-
-.profile-tick {
-  font-family: var(--mono);
-  font-size: 9px;
-  fill: var(--text-3);
-}
-
 .sheet-cells {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2433,46 +2410,6 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   font-size: 12px;
   font-weight: 400;
   color: var(--text-3);
-}
-
-.sheet-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: baseline;
-  gap: var(--space-3);
-  padding: 9px 0;
-  border-top: 1px solid var(--line);
-}
-
-.sheet-row-head {
-  font-size: 11px;
-  color: var(--text-3);
-}
-
-.sheet-row-name {
-  font-size: 13.5px;
-}
-
-.sheet-row-mid,
-.sheet-row-target,
-.sheet-row-actual {
-  font-family: var(--mono);
-  font-size: 12px;
-  text-align: right;
-}
-
-.sheet-row-mid {
-  color: var(--text-2);
-}
-
-.sheet-row-target {
-  min-width: 62px;
-  color: var(--text-3);
-}
-
-.sheet-row-actual {
-  min-width: 62px;
-  color: var(--text);
 }
 
 .sheet-src {
