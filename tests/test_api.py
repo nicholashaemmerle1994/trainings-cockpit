@@ -291,6 +291,9 @@ def test_geplante_einheit_zaehlt_nicht_als_dazugekommen(client: TestClient) -> N
     payload = client.get("/api/overview").json()
     assert payload["unplanned"] == []
     assert payload["sessions"][0]["done"] is True
+    # Die Karte öffnet die Aufzeichnung wie im Planer; dafür braucht sie die
+    # lokale Zeile der erledigten Einheit (TB-24).
+    assert payload["sessions"][0]["row_id"] is not None
 
 
 def test_atemuebung_zaehlt_nicht_als_einheit(client: TestClient) -> None:

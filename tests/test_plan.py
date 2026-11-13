@@ -316,8 +316,38 @@ def test_session_row_ist_die_kurzfassung_fuer_die_karte(tmp_path) -> None:
     assert out["km"] == 40.0
     assert out["estimated"] == "distanz"
     assert out["primary"] == "duration"
+    assert out["row_id"] is None
     assert out["done"] is False
     assert out["load"] == 100.0
+
+
+def test_session_row_nennt_die_aufzeichnung_der_erledigten_einheit(tmp_path) -> None:
+    conn = db.connect(tmp_path / "row-done.db")
+    try:
+        db.init_db(conn)
+        db.upsert_activities(
+            conn,
+            [
+                {
+                    "id": "a1",
+                    "start_date_local": "2026-11-01T08:00:00",
+                    "type": "Ride",
+                    "name": "Testfahrt",
+                    "moving_time": 6000,
+                    "distance": 40000,
+                }
+            ],
+        )
+        event = make_event([watts(60, 100, 10), watts(120, 140, 90)], duration=6000)
+        out = plan.session_row(conn, event, SPEEDS)
+        row = db.activities_between(
+            conn, date.fromisoformat("2026-11-01"), date.fromisoformat("2026-11-01")
+        )[0]
+    finally:
+        conn.close()
+
+    assert out["done"] is True
+    assert out["row_id"] == row["id"]
 
 
 def test_speeds_nimmt_den_median_der_eigenen_fahrten(tmp_path) -> None:

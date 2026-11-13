@@ -156,44 +156,6 @@ export interface UnplannedUnit {
   load: number | null;
 }
 
-export interface SessionStep {
-  label: string;
-  minutes: number;
-  distance_km: number | null;
-  target: string;
-  work: boolean;
-  lo: number | null;
-  hi: number | null;
-}
-
-export interface SessionAxis {
-  from: number;
-  to: number;
-  ticks: number[];
-  unit: string;
-}
-
-export interface SessionFuel {
-  carbs_g: number;
-  rate: number;
-  gels: number;
-  water_ml: number;
-  sodium_mg: number;
-}
-
-export interface SessionActual {
-  row_id: number;
-  activity_id: string;
-  name: string;
-  minutes: number | null;
-  km: number | null;
-  load: number | null;
-  intensity: number | null;
-  hr: number | null;
-  /** Der aufgezeichnete Verlauf, sofern die Quelle Sekundenwerte hat (D-53). */
-  series?: UnitSeries | null;
-}
-
 export interface SessionRow {
   day: "today" | "tomorrow";
   id: number;
@@ -206,26 +168,9 @@ export interface SessionRow {
   estimated: "dauer" | "distanz" | "keine";
   primary: "duration" | "distance" | null;
   load: number | null;
+  /** Lokale Aufzeichnung einer erledigten Einheit; sonst `null`. */
+  row_id: number | null;
   done: boolean;
-}
-
-export interface SessionDetail {
-  id: number;
-  date: string;
-  sport: string;
-  sport_label: string;
-  name: string;
-  load: number | null;
-  intensity: number | null;
-  minutes: number | null;
-  km: number | null;
-  estimated: "dauer" | "distanz" | "keine";
-  primary: "duration" | "distance" | null;
-  axis: SessionAxis | null;
-  steps: SessionStep[];
-  total_minutes: number | null;
-  fuel: SessionFuel | null;
-  actual: SessionActual | null;
 }
 
 /** Gemeinsame Basis der bestehenden Aktivitätsansicht. */

@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { PlanSheet } from "../components/PlanSheet";
 import { RecoveryDial } from "../components/RecoveryDial";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { SessionSheet } from "../components/SessionSheet";
 import { WeekStrip } from "../components/WeekStrip";
 import { UnitSheet } from "../components/UnitSheet";
 import { VendorScore } from "../components/VendorScore";
@@ -86,10 +86,42 @@ function deltaTone(delta: number, higherIsBetter: boolean, suffix: string): Delt
   return { text: `${fmtSigned(delta)}${suffix}`, tone };
 }
 
-export function Today({ data }: { data: Overview }) {
+export function Today({
+  data,
+  accountId,
+  athleteId,
+  online,
+  revision = 0,
+  onDataChanged,
+}: {
+  data: Overview;
+  accountId: string;
+  athleteId: string;
+  online: boolean;
+  revision?: number;
+  onDataChanged?: () => void;
+}) {
   const { today } = data;
-  const [openSession, setOpenSession] = useState<number | null>(null);
+  const [openPlan, setOpenPlan] = useState<number | null>(null);
   const [openUnit, setOpenUnit] = useState<number | null>(null);
+  const [unitPlan, setUnitPlan] = useState<{ id: number; name: string } | null>(null);
+
+  // Dieselbe Zuordnung wie im Planer: eine offene Planung öffnet das
+  // Planungsblatt, eine erledigte Einheit die Aufzeichnung (D-71/D-99).
+  const openSession = (session: SessionRow) => {
+    if (session.done && session.row_id != null) {
+      setUnitPlan({ id: session.id, name: session.name });
+      setOpenUnit(session.row_id);
+      return;
+    }
+    setUnitPlan(null);
+    setOpenPlan(session.id);
+  };
+
+  const openExtraUnit = (rowId: number) => {
+    setUnitPlan(null);
+    setOpenUnit(rowId);
+  };
 
   const recovery = today.recovery;
   const hasScore = recovery.score != null;
@@ -316,8 +348,8 @@ export function Today({ data }: { data: Overview }) {
           sessions={data.sessions}
           unplanned={data.unplanned}
           planSource={data.today.plan_source}
-          onOpen={setOpenSession}
-          onOpenUnit={setOpenUnit}
+          onOpenSession={openSession}
+          onOpenUnit={openExtraUnit}
         />
 
         <DashboardCard as="aside" className="week" title="Letzte 7 Tage" subtitle="Umfang und Plan">
@@ -330,11 +362,42 @@ export function Today({ data }: { data: Overview }) {
         </DashboardCard>
       </section>
 
-      {openSession != null && (
-        <SessionSheet id={openSession} onClose={() => setOpenSession(null)} />
-      )}
       {openUnit != null && (
-        <UnitSheet rowId={openUnit} onClose={() => setOpenUnit(null)} />
+        <UnitSheet
+          rowId={openUnit}
+          onClose={() => {
+            setOpenUnit(null);
+            setUnitPlan(null);
+          }}
+          plan={unitPlan}
+          onOpenPlan={setOpenPlan}
+          top={openPlan == null}
+          revision={revision}
+          linkPlans
+          onLinkChanged={() => {
+            // Nach einer Zuordnungsänderung ist der alte Planbezug nicht mehr
+            // bestätigt (D-85).
+            setUnitPlan(null);
+            onDataChanged?.();
+          }}
+        />
+      )}
+      {openPlan != null && (
+        <PlanSheet
+          eventId={openPlan}
+          accountId={accountId}
+          athleteId={athleteId}
+          online={online}
+          onClose={() => setOpenPlan(null)}
+          onSaved={() => onDataChanged?.()}
+          onDeleted={() => {
+            setOpenPlan(null);
+            setUnitPlan(null);
+            onDataChanged?.();
+          }}
+          onPending={onDataChanged}
+          revision={revision}
+        />
       )}
     </div>
   );
@@ -351,13 +414,13 @@ function TrainingCard({
   sessions,
   unplanned,
   planSource,
-  onOpen,
+  onOpenSession,
   onOpenUnit,
 }: {
   sessions: SessionRow[];
   unplanned: UnplannedUnit[];
   planSource: Overview["today"]["plan_source"];
-  onOpen: (id: number) => void;
+  onOpenSession: (session: SessionRow) => void;
   onOpenUnit: (rowId: number) => void;
 }) {
   const today = sessions.filter((session) => session.day === "today");
@@ -388,7 +451,7 @@ function TrainingCard({
       sport={session.sport}
       name={session.name || session.sport_label}
       meta={sessionMeta(session)}
-      onClick={() => onOpen(session.id)}
+      onClick={() => onOpenSession(session)}
       trailing={
         <StatusBadge tone={session.done ? "positive" : "neutral"}>
           {session.done ? "Erledigt" : "Geplant"}

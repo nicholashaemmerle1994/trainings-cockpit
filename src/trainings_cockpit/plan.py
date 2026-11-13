@@ -638,9 +638,14 @@ def session_row(
     event: dict[str, Any],
     speeds_kmh: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    """Kurzfassung für die Tageskarte."""
+    """Kurzfassung für die Tageskarte.
+
+    `row_id` ist die lokale Aufzeichnung der erledigten Einheit; die Karte
+    öffnet damit dasselbe Einheiten-Blatt wie der Planer.
+    """
     speeds_kmh = speeds_kmh or speeds(conn)
     numbers = planned(event, speeds_kmh)
+    row = matches(conn, event)
     return {
         "id": event["id"],
         "date": event["date"],
@@ -652,5 +657,6 @@ def session_row(
         "estimated": numbers["estimated"],
         "primary": numbers["primary"],
         "load": event.get("load"),
-        "done": matches(conn, event) is not None,
+        "row_id": row["id"] if row else None,
+        "done": row is not None,
     }

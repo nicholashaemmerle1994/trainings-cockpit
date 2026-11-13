@@ -446,7 +446,16 @@ export default function App() {
           </div>
         )}
         {error && <div className="banner">{error}</div>}
-        {route.tab === "today" && <Today data={data} />}
+        {route.tab === "today" && (
+          <Today
+            data={data}
+            accountId={data.account_id ?? "default"}
+            athleteId={data.athlete_id ?? "default"}
+            online={online}
+            revision={revision}
+            onDataChanged={handlePlannerChanged}
+          />
+        )}
         {route.tab === "planner" && (
           <Planner
             key={data.account_id ?? data.athlete.name}
