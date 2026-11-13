@@ -18,7 +18,7 @@ import statistics
 from datetime import date, timedelta
 from typing import Any
 
-from . import db, fuel
+from . import db
 from .planner.summaries import recorded_seconds
 
 #: Sportarten, die sich dieselbe Geschwindigkeit teilen.
@@ -92,19 +92,6 @@ def sport_profiles(conn: Any) -> dict[str, dict[str, Any]]:
     except (TypeError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
-
-
-def _profile_for(profile: dict[str, dict[str, Any]], sport: str | None) -> dict[str, Any] | None:
-    if not profile:
-        return None
-    entry = profile.get(sport or "")
-    if isinstance(entry, dict):
-        return entry
-    family = sport_family(sport)
-    for key, value in profile.items():
-        if sport_family(key) == family and isinstance(value, dict):
-            return value
-    return None
 
 
 def _to_bpm(target: dict[str, Any], entry: dict[str, Any] | None) -> dict[str, Any]:
@@ -526,20 +513,6 @@ def planned(
     }
 
 
-def fuel_for(minutes: float | None) -> dict[str, Any] | None:
-    """Verpflegung für die Einheit — erst ab 60 Minuten."""
-    if not minutes or minutes < 60:
-        return None
-    plan = fuel.plan(minutes, "locker", source="gel")
-    return {
-        "carbs_g": plan["total"]["carbs"],
-        "rate": plan["per_hour"]["carbs"],
-        "gels": (plan["gels"] or {}).get("count") or 0,
-        "water_ml": plan["total"]["water_ml"],
-        "sodium_mg": plan["total"]["sodium_mg"],
-    }
-
-
 def matches(conn: Any, event: dict[str, Any]) -> dict[str, Any] | None:
     """Die Aufzeichnung zu einer geplanten Einheit, wenn es sie gibt.
 
@@ -561,20 +534,6 @@ def matches(conn: Any, event: dict[str, Any]) -> dict[str, Any] | None:
     if target:
         rows.sort(key=lambda row: abs((recorded_seconds(row) / 60) - target))
     return rows[0]
-
-
-def done_payload(row: dict[str, Any]) -> dict[str, Any]:
-    moving = recorded_seconds(row)
-    return {
-        "row_id": row.get("id"),
-        "activity_id": row.get("source_id"),
-        "name": row.get("name") or "",
-        "minutes": round(moving / 60) if moving else None,
-        "km": round((row.get("distance_m") or 0) / 1000, 1) if row.get("distance_m") else None,
-        "load": row.get("load"),
-        "intensity": round(row["intensity"]) if row.get("intensity") else None,
-        "hr": round(row["avg_hr"]) if row.get("avg_hr") else None,
-    }
 
 
 def unplanned(conn: Any, day: date) -> list[dict[str, Any]]:
@@ -607,29 +566,6 @@ def done_row(row: dict[str, Any]) -> dict[str, Any]:
         "minutes": round(moving / 60) if moving else None,
         "km": round((row.get("distance_m") or 0) / 1000, 1) if row.get("distance_m") else None,
         "load": row.get("load"),
-    }
-
-
-def session(
-    conn: Any,
-    event: dict[str, Any],
-    speeds_kmh: dict[str, float] | None = None,
-) -> dict[str, Any]:
-    """Alles, was die Einheit auf dem Bildschirm braucht."""
-    speeds_kmh = speeds_kmh or speeds(conn)
-    numbers = planned(event, speeds_kmh, _profile_for(sport_profiles(conn), event.get("sport")))
-    row = matches(conn, event)
-    return {
-        "id": event["id"],
-        "date": event["date"],
-        "sport": event.get("sport"),
-        "sport_label": SPORT_LABELS.get(event.get("sport") or "", event.get("sport") or ""),
-        "name": event.get("name") or "",
-        "load": event.get("load"),
-        "intensity": round(event["intensity"]) if event.get("intensity") else None,
-        **numbers,
-        "fuel": fuel_for(numbers["minutes"]),
-        "actual": done_payload(row) if row else None,
     }
 
 

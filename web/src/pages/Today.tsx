@@ -93,6 +93,7 @@ export function Today({
   online,
   revision = 0,
   onDataChanged,
+  onGuardNavigation,
 }: {
   data: Overview;
   accountId: string;
@@ -100,6 +101,8 @@ export function Today({
   online: boolean;
   revision?: number;
   onDataChanged?: () => void;
+  /** Wie im Planer: ein offener Entwurf wird vor dem Schließen abgefragt. */
+  onGuardNavigation: (run: () => void) => boolean;
 }) {
   const { today } = data;
   const [openPlan, setOpenPlan] = useState<number | null>(null);
@@ -121,6 +124,15 @@ export function Today({
   const openExtraUnit = (rowId: number) => {
     setUnitPlan(null);
     setOpenUnit(rowId);
+  };
+
+  const closeUnit = () => {
+    setOpenUnit(null);
+    setUnitPlan(null);
+  };
+
+  const closePlan = () => {
+    setOpenPlan(null);
   };
 
   const recovery = today.recovery;
@@ -365,10 +377,7 @@ export function Today({
       {openUnit != null && (
         <UnitSheet
           rowId={openUnit}
-          onClose={() => {
-            setOpenUnit(null);
-            setUnitPlan(null);
-          }}
+          onClose={() => onGuardNavigation(closeUnit)}
           plan={unitPlan}
           onOpenPlan={setOpenPlan}
           top={openPlan == null}
@@ -388,7 +397,7 @@ export function Today({
           accountId={accountId}
           athleteId={athleteId}
           online={online}
-          onClose={() => setOpenPlan(null)}
+          onClose={() => onGuardNavigation(closePlan)}
           onSaved={() => onDataChanged?.()}
           onDeleted={() => {
             setOpenPlan(null);

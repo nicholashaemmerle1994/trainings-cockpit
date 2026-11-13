@@ -454,6 +454,7 @@ export default function App() {
             online={online}
             revision={revision}
             onDataChanged={handlePlannerChanged}
+            onGuardNavigation={requestNavigation}
           />
         )}
         {route.tab === "planner" && (

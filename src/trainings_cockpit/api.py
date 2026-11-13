@@ -1253,27 +1253,6 @@ def planner_copy_advance(job_id: str) -> dict[str, Any]:
             ) from exc
 
 
-@app.get("/api/session/{event_id}")
-def session(event_id: int) -> dict[str, Any]:
-    """Eine geplante Einheit mit Aufbau, Verpflegung und Ist-Abgleich."""
-    with connection() as conn:
-        event = db.event_by_id(conn, event_id)
-        if not event:
-            raise HTTPException(status_code=404, detail="Einheit nicht gefunden")
-        data = plan.session(conn, event)
-        _add_series(conn, data)
-        return data
-
-
-def _add_series(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
-    """Den Verlauf der zugehörigen Aufzeichnung an das Ist hängen (D-53)."""
-    actual = data.get("actual")
-    if not isinstance(actual, dict) or actual.get("row_id") is None:
-        return
-    row = db.activity_by_row_id(conn, int(actual["row_id"]))
-    actual["series"] = streams.payload(conn, row) if row else None
-
-
 @app.get("/api/week")
 def week(
     week: str | None = Query(None, description="Wochenanker, JJJJ-MM-TT"),

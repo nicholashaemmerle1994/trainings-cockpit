@@ -258,49 +258,9 @@ def test_ohne_profil_bleibt_es_bei_prozent() -> None:
     assert out["axis"]["unit"] == "% HF"
 
 
-def test_verpflegung_erst_ab_sechzig_minuten() -> None:
-    assert plan.fuel_for(59) is None
-    assert plan.fuel_for(60) is not None
-
-    fuel = plan.fuel_for(165)
-    assert fuel is not None
-    assert fuel["carbs_g"] > 0
-    assert fuel["rate"] > 0
-    assert fuel["water_ml"] > 0
-
-
 @pytest.mark.parametrize("sport,family", [("Ride", "bike"), ("VirtualRun", "run"), ("OpenWaterSwim", "swim")])
 def test_sportarten_haben_eine_familie(sport: str, family: str) -> None:
     assert plan.sport_family(sport) == family
-
-
-def test_ist_abgleich_findet_die_einheit_am_selben_tag(tmp_path) -> None:
-    conn = db.connect(tmp_path / "plan.db")
-    try:
-        db.init_db(conn)
-        db.upsert_activities(
-            conn,
-            [
-                {
-                    "id": "a1",
-                    "start_date_local": "2026-11-01T08:05:00",
-                    "type": "VirtualRide",
-                    "moving_time": 9796,
-                    "distance": 73652.0,
-                    "icu_training_load": 154,
-                    "icu_intensity": 75.1,
-                }
-            ],
-        )
-        event = make_event([watts(60, 100, 10), watts(120, 140, 150)], duration=9900)
-        out = plan.session(conn, event, SPEEDS)
-    finally:
-        conn.close()
-
-    assert out["actual"] is not None
-    assert out["actual"]["minutes"] == 163
-    assert out["actual"]["km"] == 73.7
-    assert out["actual"]["intensity"] == 75
 
 
 def test_session_row_ist_die_kurzfassung_fuer_die_karte(tmp_path) -> None:
