@@ -23,6 +23,11 @@ Konfliktvergleich und Rundlaufprüfung verwendet. Notizen werden mit den im
 Basissnapshot tatsächlich vorhandenen Remote-Notizen verglichen
 (`SaveSnapshot.base_notes`), nicht mit einer rein lokalen Fixture-Notiz.
 
+Rollen werden so gelesen, wie der Serializer sie schreibt: Ein
+`intensity`-Tag ist maßgeblich; für `steady` leitet `role_from_name` dieselbe
+Rolle aus dem Abschnittsnamen ab, die der Leseadapter sieht (D-98). Namen sind
+damit nur dort Rollenbeleg, wo die Quelle keinen Tag liefert.
+
 ## 2. Vorhandene atomare Vorbedingung
 
 Der vorhandene `IntervalsClient.update_event()` sendet ein normales

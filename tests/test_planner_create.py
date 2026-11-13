@@ -613,3 +613,151 @@ def test_abbrechen_vor_speichern_legt_nichts_an() -> None:
 
     assert gateway.create_calls == []
     assert gateway.events == {}
+
+
+
+class RealIntervalsSwimGateway:
+    """Antwortet auf den Schwimm-Create mit dem echten intervals-Dokument.
+
+    intervals.icu liefert für den Abschnitt „Cooldown“ keinen `intensity`-Tag,
+    weil der Serializer für `steady` bewusst keinen schreibt. Der Leseadapter
+    leitet die Rolle deshalb aus dem Namen ab. Der Rundlauf darf daraus keine
+    Abweichung machen (D-98).
+    """
+
+    def __init__(self, *, event_id: int = 155269681) -> None:
+        self.event_id = event_id
+        self.events: dict[int, dict] = {}
+        self.create_calls: list[dict] = []
+        self.read_calls: list[str] = []
+
+    def create_event(self, payload: dict) -> dict:
+        self.create_calls.append(copy.deepcopy(payload))
+        self.events[self.event_id] = {
+            "id": self.event_id,
+            "category": "WORKOUT",
+            "start_date_local": payload["start_date_local"],
+            "type": payload["type"],
+            "name": payload["name"],
+            "external_id": payload["external_id"],
+            "description": "pool size: 50m\n\n" + payload["description"],
+            "workout_doc": {
+                "steps": [
+                    {"text": "Einschwimmen", "distance": 300, "duration": 108},
+                    {
+                        "reps": 7,
+                        "text": "Hauptteil 7x",
+                        "steps": [
+                            {
+                                "pace": {"units": "secs/100m", "value": 120},
+                                "text": "Belastung",
+                                "distance": 100,
+                                "duration": 120,
+                                "intensity": "active",
+                            },
+                            {
+                                "text": "Erholung",
+                                "duration": 18,
+                                "intensity": "rest",
+                            },
+                        ],
+                        "distance": 700,
+                        "duration": 966,
+                    },
+                    {
+                        "pace": {"units": "secs/100m", "value": 130},
+                        "text": "Ausdauer",
+                        "distance": 1200,
+                        "duration": 1560,
+                    },
+                    {"text": "Cooldown", "distance": 300, "duration": 108},
+                ],
+                "locales": [],
+                "options": {},
+                "distance": 2500,
+                "duration": 2742,
+                "description": "pool size: 50m",
+                "strain_score": None,
+                "average_watts": 0,
+                "normalized_power": 0,
+                "variability_index": None,
+                "polarization_index": None,
+            },
+        }
+        return {"id": self.event_id, "external_id": payload["external_id"]}
+
+    def update_event(self, remote_id: str, payload: dict) -> dict:
+        raise AssertionError("Ein Create darf kein Update auslösen")
+
+    def read_event(self, remote_id: str) -> dict:
+        self.read_calls.append(remote_id)
+        return copy.deepcopy(self.events[int(remote_id)])
+
+
+def _swim_plan() -> PlannedWorkout:
+    return replace(
+        _new_plan("Endurance + Sweetspot", "plan:draft:schwimmen"),
+        sport="Swim",
+        date="2026-11-13",
+        nodes=(
+            StepNode(
+                id="node:draft:einschwimmen",
+                name="Einschwimmen",
+                end=DistanceEnd(300),
+            ),
+            RepeatNode(
+                id="node:draft:hauptteil",
+                name="Hauptteil",
+                repetitions=7,
+                children=(
+                    StepNode(
+                        id="node:draft:belastung",
+                        name="Belastung",
+                        end=DistanceEnd(100),
+                        role=StepRole.WORK,
+                        target=PaceTarget(
+                            PaceUnit.SECONDS_PER_100M, Value(120)
+                        ),
+                    ),
+                    StepNode(
+                        id="node:draft:erholung",
+                        name="Erholung",
+                        end=TimeEnd(18),
+                        role=StepRole.RECOVERY,
+                    ),
+                ),
+            ),
+            StepNode(
+                id="node:draft:ausdauer",
+                name="Ausdauer",
+                end=DistanceEnd(1200),
+                target=PaceTarget(PaceUnit.SECONDS_PER_100M, Value(130)),
+            ),
+            StepNode(
+                id="node:draft:cooldown",
+                name="Cooldown",
+                end=DistanceEnd(300),
+            ),
+        ),
+    )
+
+
+def test_create_schwimmplan_mit_gleichmaessigem_cooldown_bestaetigt_rundlauf() -> None:
+    # Der gemeldete Fall: Der Abschnitt heißt „Cooldown“, ist aber bewusst
+    # `steady`; der Serializer schreibt deshalb keinen `intensity`-Tag.
+    # intervals liest die Rolle aus dem Namen zurück. Der Write ist korrekt und
+    # darf nicht als `savedUnverified` enden.
+    gateway = RealIntervalsSwimGateway()
+    service = EventWriteService(gateway)
+
+    outcome = _activate(WorkoutDraft.new(_swim_plan()), service)
+
+    assert outcome.status.state is SaveState.SAVED
+    assert outcome.status.message == "In intervals.icu gespeichert und zurückgelesen."
+    assert outcome.confirmed is not None
+    cooldown = outcome.confirmed.nodes[-1]
+    assert isinstance(cooldown, StepNode)
+    assert cooldown.name == "Cooldown"
+    assert cooldown.role is StepRole.COOLDOWN
+    assert "intensity=cooldown" not in gateway.create_calls[0]["description"]
+    assert len(gateway.create_calls) == 1

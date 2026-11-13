@@ -114,6 +114,7 @@ from .model import (
     field_buffer_key,
     iter_nodes,
     repeat_group_name,
+    role_from_name,
 )
 from .operations import (
     SqliteOperationStore,
@@ -324,6 +325,7 @@ __all__ = [
     "SerializationError",
     "RepeatNode",
     "repeat_group_name",
+    "role_from_name",
     "require_planned_draft",
     "reschedule_plan",
     "RestrictionCode",

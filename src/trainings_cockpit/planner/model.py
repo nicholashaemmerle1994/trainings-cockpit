@@ -264,6 +264,30 @@ class StepNode:
 
 _REPEAT_NAME_SUFFIX = re.compile(r"\s*\d+\s*[x×]\s*$", re.IGNORECASE)
 
+#: Wörter, die in einem frei gewählten Abschnittsnamen auf eine Rolle deuten.
+#: Das ist ausdrücklich nur eine Lesehilfe für Quellen ohne ``intensity``-
+#: Kennzeichnung; der Schreibpfad markiert Rollen selbst.
+_ROLE_NAME_WORDS = (
+    (("einlauf", "einroll", "warmup", "warm up", "aufwärm"), StepRole.WARMUP),
+    (("auslauf", "ausroll", "cooldown", "cool down"), StepRole.COOLDOWN),
+    (("erhol", "pause", "recovery", "rest"), StepRole.RECOVERY),
+    (("belast", "arbeit", "interval", "work"), StepRole.WORK),
+)
+
+
+def role_from_name(name: str | None) -> StepRole:
+    """Rolle, die der bloße Abschnittsname nahelegt, sonst ``steady``.
+
+    Die Funktion ist die eine gemeinsame Namensnormalisierung für Leseadapter
+    und Rundlauf: Der Serializer schreibt für ``steady`` bewusst keinen Tag,
+    die Quelle kann die Rolle also nur aus dem Namen ableiten.
+    """
+    text = str(name or "").lower()
+    for words, role in _ROLE_NAME_WORDS:
+        if any(word in text for word in words):
+            return role
+    return StepRole.STEADY
+
 
 def repeat_group_name(name: str) -> str:
     """Der Gruppenname ohne mitgeschriebene Wiederholungszahl.
