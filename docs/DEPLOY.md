@@ -57,9 +57,79 @@ data/raw/              Rohdumps (intervals, Garmin, Push-Tests)
 data/reports/          Phase-0-Befunde
 ```
 
-Backup (täglich per cron):
+### Automatisches Main-Backup auf dem Mac
+
+Die Produktivdatenbank wird vom Homeserver über SSH auf diesen Mac geholt:
+
+- **Datei:** `~/Backups/Trainings-Cockpit/main/cockpit-main.db`.
+- **Zeitplan:** täglich 19:00 Uhr, zusätzlich Prüfung beim Anmelden und stündlich.
+  Ein bereits abgedeckter Tageslauf wird ohne SSH-Übertragung übersprungen.
+- **Ruhezustand:** macOS holt den Kalenderlauf beim Aufwachen nach. Nach dem
+  Einschalten läuft die Prüfung beim Anmelden. Ist der Server nicht erreichbar,
+  bleibt die Sicherung fällig und der nächste Stundenlauf versucht es erneut.
+- **Aufbewahrung:** genau eine Datenbank. Die nächste geprüfte Sicherung ersetzt
+  sie atomar; bei Übertragungs- oder Prüfungsfehlern bleibt die letzte erhalten.
+- **Unabhängig von Codex:** ein macOS-LaunchAgent führt das Werkzeug aus.
+  Develop wird nicht gesichert. Die Quelldatenbank wird nur gelesen.
+
+Einrichtung oder Aktualisierung auf dem Mac:
 
 ```bash
+/usr/bin/python3 tools/install-backup-agent.py
+```
+
+Das installiert eine eigene Werkzeugkopie unter
+`~/Library/Application Support/Trainings-Cockpit/Backup/`; spätere Branchwechsel
+oder das Schließen der App unterbrechen den Zeitplan nicht. Voraussetzung ist
+ein eingerichteter, nichtinteraktiver `ssh homeserver`-Zugang und ein angemeldeter
+Mac-Benutzer. Ist der Mac ausgeschaltet, kann er keine Sicherung holen.
+Die Einrichtung übernimmt den vorhandenen SSH-Schlüssel als geschützte Kopie
+in dieses Laufzeitverzeichnis, weil macOS Hintergrundzugriffe auf den ursprünglichen
+Schlüssel im Dokumente-Ordner sperrt. Diese Datei bleibt lokal und wird nicht
+versioniert. Die vorhandene Host-Key-Prüfung bleibt aktiv.
+
+Status und Fehler stehen unter:
+
+```text
+~/Backups/Trainings-Cockpit/main/latest.json
+~/Library/Logs/Trainings-Cockpit/backup.log
+~/Library/Logs/Trainings-Cockpit/backup-error.log
+```
+
+Manuell eine neue Sicherung starten (ersetzt die letzte nach erfolgreicher Prüfung):
+
+```bash
+/usr/bin/python3 "$HOME/Library/Application Support/Trainings-Cockpit/Backup/backup-main.py" \
+  --ssh-config "$HOME/Library/Application Support/Trainings-Cockpit/Backup/ssh-config"
+launchctl print "gui/$(id -u)/com.nicholas.trainings-cockpit.backup"
+```
+
+Die Datei `cockpit-main.db` ist eine eigenständige SQLite-Datei und lässt sich
+zum Beispiel mit DB Browser for SQLite öffnen. Zum Durchsehen eine separate
+Kopie verwenden, damit die Sicherung unverändert bleibt.
+
+**Wiederherstellung bei Serververlust:** Die gesicherte Datei zunächst auf eine
+separate Arbeitskopie kopieren und mit SQLite `PRAGMA integrity_check` prüfen.
+Auf dem Ersatzserver das Cockpit stoppen, eine eventuell vorhandene Datenbank
+einschließlich ihrer WAL-/SHM-Dateien separat aufheben und die geprüfte Kopie als
+`data/cockpit.db` einsetzen. Dateibesitzer und Rechte passend zum Container setzen,
+dann starten und `/api/health` prüfen. Zugangsdaten aus `.env` und der Vault sind
+nicht Bestandteil dieses Datenbank-Backups und müssen separat vorhanden sein.
+
+**Einrichtung geprüft am 14.11.2026:** Der echte LaunchAgent-Lauf endete mit
+Exit-Code 0. Ein zweiter Lauf ersetzte dieselbe Datei; Prüfsumme, SQLite-Integrität
+und Wiederherstellung aus einer separaten Arbeitskopie wurden geprüft. Die sechs
+Backup-Tests und Ruff sind erfolgreich. Die Gesamtsuite ergab 435 erfolgreiche
+Tests und einen bereits auf unverändertem `main` reproduzierten Fehler:
+`test_aktivitaetssync_zaehlt_neue_aufzeichnung_nur_einmal` vergleicht einen festen
+November-Termin mit dem aktuellen rollierenden Sieben-Tage-Fenster.
+
+### Zusätzliche Sicherung direkt auf dem Server
+
+Für eine manuelle lokale Sicherung auf dem Server:
+
+```bash
+mkdir -p backup
 sqlite3 data/cockpit.db ".backup 'backup/cockpit-$(date +%F).db'"
 ```
 

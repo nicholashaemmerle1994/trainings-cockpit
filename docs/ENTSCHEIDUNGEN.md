@@ -586,6 +586,47 @@ Pausen anders ab (23.10.: 2.050 m, 3.024 s gegen 2.542 s). Auch das fiel durch.
 
 ---
 
+## D-89 · Main-Datenbank täglich auf den Mac sichern (14.11.2026)
+
+Die Produktivdatenbank des Homeservers wird täglich um 19:00 Uhr per
+macOS-LaunchAgent auf diesen Mac gesichert. Ein von Codex unabhängiger
+Hintergrunddienst ersetzt den zunächst erwogenen Codex-Zeitplan: die App
+muss nicht geöffnet sein. Der Agent startet zusätzlich beim Anmelden und
+stündlich; ein lokaler Fälligkeitscheck verhindert unnötige Übertragungen.
+Develop ist eine Testinstanz und wird auf ausdrückliche Klarstellung des
+Athleten nicht mitgesichert. Ziel ist `~/Backups/Trainings-Cockpit/main/`,
+außerhalb des Repositories und auf einem anderen Gerät als die Quelle.
+
+Das Werkzeug `tools/backup-main.py` erstellt auf dem Server mit der
+SQLite-Backup-API eine konsistente Momentaufnahme der laufenden Datenbank,
+überträgt sie per SSH und prüft lokal `integrity_check` sowie die Kerntabellen.
+Erst danach ersetzt die temporäre Datei atomar `cockpit-main.db`.
+Der Quellzugriff bleibt lesend; keine API-Synchronisation und kein Kopieren
+einer offenen WAL-Datei. Verzeichnisse erhalten 0700, Dateien 0600.
+
+Auf ausdrücklichen Wunsch bleibt genau eine Sicherung erhalten: der nächste
+erfolgreich geprüfte Lauf überschreibt sie. Während der Übertragung und bei
+Fehlern bleibt der bisherige Stand bestehen; eine Historie wird nicht angelegt.
+`latest.json` dokumentiert nur erfolgreich geprüfte Sicherungen samt Prüfsumme
+und Herkunft. Fehlgeschlagene Läufe werden lokal protokolliert. macOS holt den
+Kalenderlauf nach dem Ruhezustand nach; nach dem Einschalten versucht RunAtLoad
+die fällige Sicherung
+beim Anmelden. Bei unerreichbarem Homeserver folgt spätestens beim nächsten
+stündlichen Lauf ein neuer Versuch. Bei ausgeschaltetem Mac kann keine
+Sicherung stattfinden. Ein erster Lauf und ein Wiederherstellungstest mit einer
+separaten Kopie gehören zur Einrichtung. Die Datenbankkopien enthalten
+Gesundheitsdaten und bleiben lokal.
+
+Der bestehende SSH-Schlüssel liegt im macOS-geschützten Dokumente-Ordner;
+der erste reale LaunchAgent-Lauf konnte ihn deshalb nicht lesen. Die Einrichtung
+legt eine 0600-Kopie desselben Schlüssels und eine eigene SSH-Konfiguration im
+privaten Laufzeitverzeichnis unter `~/Library/Application Support/` ab.
+Host-Key-Prüfung bleibt verpflichtend; der bestehende `known_hosts`-Bestand wird
+weiterverwendet. Es wird kein neuer Serverzugang eingerichtet und keine
+Zugangsdaten werden versioniert.
+
+---
+
 ## 4. Abgeleitete Anforderungen
 
 | ID | Aus | Anforderung | Akzeptanz | Status |
